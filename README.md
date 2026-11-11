@@ -24,12 +24,12 @@ pnpm check
 - `pnpm test:web` runs the jsdom + Testing Library web suite
 - `pnpm build:web` builds `apps/web/dist` for the Gateway static assets
 - `pnpm dev:web` starts the Vite development server with mock data
-- `pnpm dev:live` starts Auth, Laundry, Gateway, and live Vite
+- `pnpm dev:live` starts Auth, Laundry, Gateway, Notifications, and Scheduler, plus live Vite; Calendar starts only when Google credentials are configured
 - `pnpm dev:<worker>` starts one Worker locally on its fixed port
 
 ## Frontend API modes
 
-The web app defaults to the isolated mock adapter so the demo keeps working without a backend. For live data, run the local stack with `pnpm dev:live`; it starts Auth, Laundry, Gateway, and Vite in live mode. See `docs/runbooks/local-development.md` for ports and manual startup.
+The web app defaults to the isolated mock adapter so the demo keeps working without a backend. For live data, run the local stack with `pnpm dev:live`; it starts Auth, Laundry, Gateway, Notifications, and Scheduler, starts Calendar when Google credentials are configured, and runs Vite in live mode. When Google is ready it also triggers an outbox sweep and calendar reconciliation. See `docs/runbooks/local-development.md` for ports and manual startup.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -38,6 +38,22 @@ The web app defaults to the isolated mock adapter so the demo keeps working with
 | `VITE_API_TIMEOUT_MS` | `15000` | Per-request timeout; requests also accept caller aborts. |
 | `VITE_REQUIRE_AUTH` | `false` | Mock mode only: requires the sample login screen before the demo. Live mode always requires a server session. |
 | `VITE_ENABLE_DEMO_FALLBACKS` | `false` | Live mode only: uses clearly labelled sample delivery slots and service names because those read endpoints do not exist yet. |
+| `VITE_GOOGLE_CALENDAR_EMBED_URL` | empty | Full Google Calendar iframe URL. Takes precedence over the calendar ID. |
+| `VITE_GOOGLE_CALENDAR_ID` | committed in `apps/web/.env.development`; built-in production fallback | Builds the Google Calendar embed URL with `Asia/Kolkata`, week view, and title/print/tabs/calendars hidden. Override locally or for production via environment variable. |
+
+Set either Google Calendar variable to show the calendar widget on the Dashboard and Calendar pages. When both are empty or the URL is invalid, the app shows setup guidance instead of an empty or broken iframe.
+
+### Google Calendar delivery events
+
+The dashboard iframe is only a view. Delivery orders are written to Google Calendar by the backend outbox and Calendar consumer, never directly by the browser. The iframe will stay empty until all of the following are true:
+
+1. Enable the Google Calendar API and create a service account with a JSON key.
+2. Set `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY` in `.dev.vars` for local development, or as Wrangler secrets for deployed Workers. Use the full PEM `private_key` from the service-account JSON key, including the BEGIN/END lines; a short placeholder or slug will leave Calendar sync disabled.
+3. Share the target calendar with the service account as **Make changes to events** (writer).
+4. Set `GOOGLE_CALENDAR_ID` to the same calendar used by the widget.
+5. Run the Calendar Worker and Scheduler, or let `pnpm dev:live` start them when credentials are ready.
+
+New orders enqueue calendar events after commit. Existing orders may need the reconciliation/backfill run; `pnpm dev:live` triggers it when Google is ready. The calendar must also be publicly embeddable for the dashboard iframe.
 
 Live mode authenticates through `POST /auth/login`, bootstraps with `GET /auth/session`, sends `x-csrf-token` on writes, and logs out through `POST /auth/logout`. Roles always come from the server session; the mock role switch is hidden in live mode.
 

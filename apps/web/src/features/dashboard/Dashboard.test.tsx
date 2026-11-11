@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -18,16 +18,27 @@ describe("Dashboard", () => {
     );
   });
 
-  it("shows today's summary, recent orders and a saved state", async () => {
+  it("shows today's summary and a saved state", async () => {
     renderDashboard(
       <Dashboard api={createMockApi({ latencyMs: 0, syncIssues: false })} />,
     );
 
-    expect(await screen.findByText("Anita Rao")).toBeInTheDocument();
-    expect(screen.getByText("Orders today")).toBeInTheDocument();
+    expect(await screen.findByText("Orders today")).toBeInTheDocument();
     expect(screen.getByText("24")).toBeInTheDocument();
-    expect(screen.getAllByText("Washing").length).toBeGreaterThan(0);
     expect(screen.getByText("Everything is saved.")).toBeInTheDocument();
+  });
+
+  it("does not show recent orders or delivery slots", async () => {
+    renderDashboard(
+      <Dashboard api={createMockApi({ latencyMs: 0, syncIssues: false })} />,
+    );
+
+    await screen.findByRole("heading", { name: "Google Calendar" });
+
+    expect(screen.queryByText("Recent orders")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Today's delivery slots"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows friendly empty states when there is no work", async () => {
@@ -35,7 +46,7 @@ describe("Dashboard", () => {
       <Dashboard api={createMockApi({ latencyMs: 0, empty: true })} />,
     );
 
-    expect(await screen.findByText("No recent orders")).toBeInTheDocument();
+    expect(await screen.findByText("No deliveries today")).toBeInTheDocument();
     expect(screen.getByText("No orders need attention")).toBeInTheDocument();
   });
 
@@ -74,5 +85,29 @@ describe("Dashboard", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Needs review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Pending sync").length).toBeGreaterThan(0);
+  });
+
+  it("shows the Google Calendar and today's deliveries sorted by time", async () => {
+    renderDashboard(
+      <Dashboard api={createMockApi({ latencyMs: 0, syncIssues: false })} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Google Calendar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Google Calendar is not set up"),
+    ).toBeInTheDocument();
+
+    const list = await screen.findByRole("list", {
+      name: /Deliveries on Wednesday, 11 November/,
+    });
+    const items = within(list).getAllByRole("listitem");
+
+    expect(items[0]).toHaveTextContent("Sana Khan");
+    expect(items[0]).toHaveTextContent("Delivered");
+    expect(items[1]).toHaveTextContent("Karan Shah");
+    expect(items[1]).toHaveTextContent("Out for delivery");
+    expect(items[items.length - 1]).toHaveTextContent("Vikram Singh");
   });
 });

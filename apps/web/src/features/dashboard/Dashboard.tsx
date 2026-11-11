@@ -5,7 +5,6 @@ import {
   Button,
   CalendarIcon,
   Card,
-  DataTable,
   EmptyState,
   LoadingState,
   PageContainer,
@@ -14,22 +13,26 @@ import {
   SearchIcon,
   StatusBadge,
   XCircleIcon,
-  type DataTableColumn,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useOptionalApi } from "../../api/context";
 import type { AppApi } from "../../api/types";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
-import { formatDeliveryTime, formatToday } from "../../lib/format";
+import {
+  formatDeliveryTime,
+  formatToday,
+  localDateKey,
+} from "../../lib/format";
+import { listOrdersForDate } from "../../lib/orders-for-date";
 import { createMockApi } from "../../mocks/api";
 import type {
   AttentionItem,
   DashboardData,
-  DashboardOrder,
   DashboardSummary,
-  DeliverySlotSummary,
+  MockOrderSummary,
 } from "../../mocks/types";
+import { GoogleCalendarWidget } from "../calendar/GoogleCalendarWidget";
 import { SyncBanner } from "./SyncBanner";
 
 const defaultApi = createMockApi();
@@ -41,59 +44,14 @@ interface DashboardProps {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "success"; data: DashboardData }
+  | {
+      status: "success";
+      data: DashboardData;
+      today: number;
+      todayOrders: MockOrderSummary[];
+      deliveriesError: boolean;
+    }
   | { status: "error" };
-
-const orderColumns: DataTableColumn<DashboardOrder>[] = [
-  {
-    key: "order",
-    header: "Order",
-    render: (order) => (
-      <div className="min-w-32">
-        <p className="font-semibold text-text">{order.id}</p>
-        <p className="text-xs text-text-muted">{order.serviceType}</p>
-      </div>
-    ),
-  },
-  {
-    key: "customer",
-    header: "Customer",
-    render: (order) => (
-      <div className="min-w-32">
-        <p className="font-medium text-text">{order.customerName}</p>
-        <p className="text-xs text-text-muted">
-          {order.totalItems} item{order.totalItems === 1 ? "" : "s"}
-        </p>
-      </div>
-    ),
-  },
-  {
-    key: "status",
-    header: "Status",
-    render: (order) => <StatusBadge status={order.status} />,
-  },
-  {
-    key: "delivery",
-    header: "Delivery",
-    render: (order) => (
-      <span className="whitespace-nowrap text-sm text-text">
-        {order.deliveryAt ? formatDeliveryTime(order.deliveryAt) : "Not set"}
-      </span>
-    ),
-  },
-  {
-    key: "sync",
-    header: "Saved",
-    render: (order) =>
-      order.syncState === "synced" ? (
-        <Badge tone="success" dot>
-          Saved
-        </Badge>
-      ) : (
-        <StatusBadge status={order.syncState} />
-      ),
-  },
-];
 
 const summaryToneClasses = {
   primary: "bg-primary",
@@ -221,63 +179,50 @@ function AttentionList({ items, onOpen }: AttentionListProps) {
   );
 }
 
-interface DeliverySlotsProps {
-  slots: DeliverySlotSummary[];
-  capacityUsed: number;
-  capacityTotal: number;
-  unavailable?: boolean;
+interface TodayDeliveriesProps {
+  orders: MockOrderSummary[];
+  label: string;
 }
 
-function DeliverySlots({
-  slots,
-  capacityUsed,
-  capacityTotal,
-  unavailable = false,
-}: DeliverySlotsProps) {
-  if (slots.length === 0) {
+function TodayDeliveries({ orders, label }: TodayDeliveriesProps) {
+  if (orders.length === 0) {
     return (
       <EmptyState
-        title="No delivery slots"
-        description={
-          unavailable
-            ? "Delivery times are not available from the server yet."
-            : "Slots will appear when today's schedule is ready."
-        }
+        title="No deliveries today"
+        description="Orders scheduled for today will appear here."
       />
     );
   }
 
   return (
-    <ul className="flex flex-col gap-3">
-      {slots.map((slot) => {
-        const percent = Math.round((slot.booked / slot.capacity) * 100);
-        return (
-          <li key={slot.id}>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="font-medium text-text">{slot.label}</span>
-              <span className="text-xs text-text-muted">
-                {slot.available} of {slot.capacity} free
-              </span>
-            </div>
-            <div
-              role="progressbar"
-              aria-label={`${slot.label} booked`}
-              aria-valuemin={0}
-              aria-valuemax={slot.capacity}
-              aria-valuenow={slot.booked}
-              className="mt-2 h-2 overflow-hidden rounded-full bg-canvas"
+    <ul aria-label={label} className="flex flex-col gap-3">
+      {orders.map((order) => (
+        <li
+          key={order.id}
+          className="rounded-md border border-border p-3"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <Link
+              to={`/orders/${order.id}`}
+              className="font-semibold text-primary-strong underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-          </li>
-        );
-      })}
-      <li className="border-t border-border pt-3 text-xs text-text-muted">
-        {capacityUsed} of {capacityTotal} delivery places booked today.
-      </li>
+              {order.customerName}
+            </Link>
+            <span className="whitespace-nowrap text-xs font-semibold text-text">
+              {order.deliveryAt
+                ? formatDeliveryTime(order.deliveryAt)
+                : "Not set"}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusBadge status={order.status} />
+            {order.syncState !== "synced" ? (
+              <StatusBadge status={order.syncState} />
+            ) : null}
+            <span className="text-xs text-text-muted">{order.serviceType}</span>
+          </div>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -295,11 +240,28 @@ export function Dashboard({ api, online }: DashboardProps) {
     let cancelled = false;
     setState({ status: "loading" });
 
-    client
-      .getDashboardData()
-      .then((data) => {
+    Promise.all([client.getDashboardData(), client.getSession()])
+      .then(async ([data, session]) => {
+        let todayOrders: MockOrderSummary[] = [];
+        let deliveriesError = false;
+
+        try {
+          todayOrders = await listOrdersForDate(
+            client,
+            localDateKey(session.today),
+          );
+        } catch {
+          deliveriesError = true;
+        }
+
         if (!cancelled) {
-          setState({ status: "success", data });
+          setState({
+            status: "success",
+            data,
+            today: session.today,
+            todayOrders,
+            deliveriesError,
+          });
         }
       })
       .catch(() => {
@@ -313,7 +275,12 @@ export function Dashboard({ api, online }: DashboardProps) {
     };
   }, [client, reloadToken]);
 
-  const data = state.status === "success" ? state.data : null;
+  const success = state.status === "success" ? state : null;
+  const data = success?.data ?? null;
+  const todayOrders = success?.todayOrders ?? [];
+  const todayLabel = success
+    ? formatToday(new Date(success.today))
+    : formatToday();
   const pendingCount =
     data?.recentOrders.filter((order) => order.syncState === "pending").length ??
     0;
@@ -371,6 +338,13 @@ export function Dashboard({ api, online }: DashboardProps) {
 
           <SummaryGrid summary={data.summary} />
 
+          <Card
+            title="Google Calendar"
+            description="The hub's shared schedule. Front desk access is view only."
+          >
+            <GoogleCalendarWidget />
+          </Card>
+
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
             <div className="flex min-w-0 flex-col gap-6">
               <Card
@@ -388,37 +362,46 @@ export function Dashboard({ api, online }: DashboardProps) {
                 />
               </Card>
 
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-6">
               <Card
-                title="Recent orders"
-                description="The latest orders from the front desk."
+                title={`Deliveries on ${todayLabel}`}
+                description="Orders due today, earliest first."
                 actions={
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => navigate("/orders")}
+                    onClick={() => navigate("/calendar")}
                   >
-                    View all
+                    Open calendar
                   </Button>
                 }
-                padding="none"
               >
-                <DataTable
-                  caption="Recent orders"
-                  columns={orderColumns}
-                  rows={data.recentOrders}
-                  getRowKey={(order) => order.id}
-                  emptyState={
-                    <EmptyState
-                      title="No recent orders"
-                      description="New orders will appear here as they come in."
-                    />
-                  }
-                  className="rounded-none border-0"
-                />
+                {success?.deliveriesError ? (
+                  <Alert
+                    tone="warning"
+                    title="Deliveries could not load"
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setReloadToken((token) => token + 1)}
+                      >
+                        Try again
+                      </Button>
+                    }
+                  >
+                    The calendar still works. Try again in a moment.
+                  </Alert>
+                ) : (
+                  <TodayDeliveries
+                    orders={todayOrders}
+                    label={`Deliveries on ${todayLabel}`}
+                  />
+                )}
               </Card>
-            </div>
 
-            <div className="flex min-w-0 flex-col gap-6">
               <Card
                 title="Quick actions"
                 description="Start the most common desk tasks."
@@ -450,24 +433,6 @@ export function Dashboard({ api, online }: DashboardProps) {
                 </div>
               </Card>
 
-              <Card
-                title="Today's delivery slots"
-                description="Availability at a glance."
-                actions={
-                  <Badge tone="primary">
-                    {data.summary.capacityUsed} / {data.summary.capacityTotal}
-                  </Badge>
-                }
-              >
-                <DeliverySlots
-                  slots={data.deliverySlots}
-                  capacityUsed={data.summary.capacityUsed}
-                  capacityTotal={data.summary.capacityTotal}
-                  unavailable={
-                    client.capabilities.deliverySlots === "unavailable"
-                  }
-                />
-              </Card>
             </div>
           </div>
         </>

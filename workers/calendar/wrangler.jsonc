@@ -34,6 +34,6 @@
   "vars": {
     "ENVIRONMENT": "development",
     "CALENDAR_HUB_ID": "hub-1",
-    "GOOGLE_CALENDAR_ID": "replace-me"
+    "GOOGLE_CALENDAR_ID": "09a863ccefb782f37206f51916f173b6f7eb50da0da2db4fee503865eb1a3415@group.calendar.google.com"
   }
 }

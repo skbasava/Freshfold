@@ -20,6 +20,7 @@ import { createAppApi, readApiConfig } from "./api/adapters";
 import { ApiProvider, useApi } from "./api/context";
 import type { AppApi } from "./api/types";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { CalendarPage } from "./features/calendar/CalendarPage";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { CustomerDetailPage } from "./features/customers/CustomerDetailPage";
 import { CustomersPage } from "./features/customers/CustomersPage";
@@ -41,6 +42,11 @@ const navigation: SidebarItem[] = [
     icon: <TruckIcon className="h-5 w-5" />,
   },
   {
+    label: "Calendar",
+    href: "/calendar",
+    icon: <CalendarIcon className="h-5 w-5" />,
+  },
+  {
     label: "Customers",
     href: "/customers",
     icon: <UsersIcon className="h-5 w-5" />,
@@ -59,6 +65,9 @@ function pageTitle(pathname: string): string {
   }
   if (pathname.startsWith("/deliveries")) {
     return "Deliveries";
+  }
+  if (pathname.startsWith("/calendar")) {
+    return "Calendar";
   }
   if (pathname.startsWith("/customers/")) {
     return "Customer details";
@@ -241,6 +250,7 @@ function Workspace() {
         <Route path="/orders/new" element={<CreateOrderPage />} />
         <Route path="/orders/:orderId" element={<OrderDetailPage />} />
         <Route path="/deliveries" element={<DeliveriesPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
         <Route

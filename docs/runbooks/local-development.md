@@ -33,7 +33,7 @@ Start the local backend and the live Vite app with one command:
 pnpm dev:live
 ```
 
-The script creates `.dev.vars` if needed, applies the local Auth and Laundry D1 migrations, starts Auth on `8788`, Laundry on `8789`, and Gateway on `8787`, waits for Gateway health, then starts Vite in live mode at `http://localhost:5173`. Press Ctrl-C to stop the stack.
+The script creates `.dev.vars` if needed, applies the local Auth and Laundry D1 migrations, starts Auth on `8788`, Laundry on `8789`, Gateway on `8787`, Notifications on `8791`, and Scheduler on `8792`, waits for Gateway health, then starts Vite in live mode at `http://localhost:5173`. Calendar on `8790` starts only when the Google service-account email and a valid PEM private key are configured. When Google is ready, the script also triggers an outbox sweep and calendar reconciliation, then repeats the sweep every few seconds. Create orders at `http://localhost:5173`; the built Gateway app at `http://localhost:8787` defaults to mock mode. Press Ctrl-C to stop the stack.
 
 To use a built SPA served by the Gateway instead, run `pnpm build:web` and then `pnpm dev:gateway`.
 
@@ -47,6 +47,21 @@ VITE_API_MODE=live pnpm dev:web
 ```
 
 Vite proxies `/auth` and `/api` to the Gateway on port 8787. Set `VITE_API_BASE_URL` when the Gateway is on a different same-site origin. Live mode uses `GET /auth/session` for bootstrap, `POST /auth/login` and `POST /auth/logout` with the CSRF cookie, and shows the login screen when the session is missing. `VITE_REQUIRE_AUTH=true` enables the sample login screen in mock mode. `VITE_ENABLE_DEMO_FALLBACKS=true` uses clearly labelled sample delivery slots because the slot-listing endpoint does not exist yet.
+
+### Google Calendar delivery events
+
+The dashboard calendar is an iframe view only. The backend writes delivery events after the order commits, through the outbox, Scheduler sweep, and Calendar queue consumer.
+
+To enable it locally:
+
+1. Enable the Google Calendar API in a Google Cloud project.
+2. Create a service account and a JSON key.
+3. Put `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY` in `.dev.vars`. Keep the private key out of git; use the full PEM `private_key` from the service-account JSON key, including the BEGIN/END lines. A short placeholder or slug will leave Calendar sync disabled.
+4. Share the target calendar with the service-account email as **Make changes to events** (writer).
+5. Set `GOOGLE_CALENDAR_ID` to the same public calendar used by the frontend widget.
+6. Restart `pnpm dev:live`. The script warns and skips Calendar while either credential is still `replace-me`.
+
+Existing orders may not have events if they were created before Calendar sync was configured. The reconciliation trigger enqueues missing calendar upserts; new orders enqueue events automatically after commit. The Google calendar must also be publicly embeddable for the dashboard iframe to render it.
 
 To build the production files that the Gateway serves:
 

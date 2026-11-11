@@ -21,7 +21,7 @@
     "dev:gateway": "wrangler dev --config workers/gateway/wrangler.jsonc --port 8787 --inspector-port 9230 --local",
     "dev:auth": "wrangler dev --config workers/auth/wrangler.jsonc --port 8788 --inspector-port 9231 --local",
     "dev:laundry": "wrangler dev --config workers/laundry/wrangler.jsonc --port 8789 --inspector-port 9232 --local",
-    "dev:calendar": "wrangler dev --config workers/calendar/wrangler.jsonc --port 8790 --inspector-port 9233 --local",
+    "dev:calendar": "wrangler dev --config workers/calendar/wrangler.jsonc --port 8790 --inspector-port 9233 --test-scheduled --local",
     "dev:notifications": "wrangler dev --config workers/notifications/wrangler.jsonc --port 8791 --inspector-port 9234 --local",
     "dev:scheduler": "wrangler dev --config workers/scheduler/wrangler.jsonc --port 8792 --inspector-port 9235 --test-scheduled --local",
     "db:auth:migrate:local": "wrangler d1 migrations apply laundry-auth --local --config workers/auth/wrangler.jsonc",
@@ -41,6 +41,9 @@
     "wrangler": "4.160.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "workerd"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
   }
 }

@@ -6,6 +6,7 @@ coverage/
 .dev.vars
 .env
 .env.*
+!apps/web/.env.development
 !.dev.vars.example
 *.log
 .DS_Store
