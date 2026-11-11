@@ -99,6 +99,7 @@ export interface MockOrderDetail extends MockOrderSummary {
   customer: CustomerSummary;
   items: MockOrderItem[];
   deliverySlot: MockDeliverySlot | null;
+  customerCreated?: boolean;
 }
 
 export type OrderSort = "newest" | "oldest" | "delivery";
@@ -125,12 +126,18 @@ export interface CreateOrderItemInput {
   quantity: number;
 }
 
-export interface CreateOrderInput {
-  customerId: string;
+export interface CreateOrderBaseInput {
   serviceType: string;
   deliverySlotId: string;
   items: CreateOrderItemInput[];
 }
+
+export type CreateOrderInput =
+  | (CreateOrderBaseInput & { customerId: string })
+  | (CreateOrderBaseInput & {
+      customerName: string;
+      customerPhone: string;
+    });
 
 export interface CreateOrderOptions {
   customers: CustomerSummary[];

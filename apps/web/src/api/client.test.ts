@@ -89,7 +89,7 @@ describe("gateway client authentication", () => {
         });
       }
       if (String(input) === "/api/orders/apply-change") {
-        return jsonResponse({ order, replayed: false });
+        return jsonResponse({ order, replayed: false, customerCreated: false });
       }
       return jsonResponse({ error: "not_found" }, 404);
     });

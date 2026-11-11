@@ -19,6 +19,7 @@ export interface OfflineCreateOrderInput {
   customerId: string;
   customerName: string;
   customerPhone: string;
+  createWithPhone?: boolean;
   serviceType: string;
   deliverySlotId: string;
   deliveryAt?: number | null;
@@ -43,8 +44,14 @@ export async function createOfflineOrder(
   queue: MutationQueue,
   input: OfflineCreateOrderInput,
 ): Promise<OfflineWriteResult> {
+  const identity = input.createWithPhone
+    ? {
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+      }
+    : { customerId: input.customerId };
   const payload = createOrderPayloadSchema.safeParse({
-    customerId: input.customerId,
+    ...identity,
     serviceType: input.serviceType,
     deliverySlotId: input.deliverySlotId,
     items: input.items,

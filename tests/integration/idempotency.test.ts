@@ -77,7 +77,8 @@ function reorderedCreateInput(): Extract<
       items: input.payload.items,
       deliverySlotId: input.payload.deliverySlotId,
       serviceType: input.payload.serviceType,
-      customerId: input.payload.customerId,
+      customerId:
+        "customerId" in input.payload ? input.payload.customerId : "cust-1",
     },
     intent: input.intent,
     orderId: input.orderId,

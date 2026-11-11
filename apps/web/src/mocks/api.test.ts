@@ -40,7 +40,8 @@ describe("mock order mutations", () => {
 
     await expect(
       api.createOrder({
-        customerId: "",
+        customerName: "",
+        customerPhone: "",
         serviceType: "",
         deliverySlotId: "",
         items: [],
@@ -49,7 +50,8 @@ describe("mock order mutations", () => {
 
     await expect(
       api.createOrder({
-        customerId: "C-238",
+        customerName: "Rahul Mehta",
+        customerPhone: "0000000001",
         serviceType: "Wash and fold",
         deliverySlotId: "slot-1200",
         items: [{ description: "Shirt", quantity: 1 }],
@@ -57,7 +59,8 @@ describe("mock order mutations", () => {
     ).rejects.toMatchObject({ status: 422, code: "SLOT_FULL" });
 
     const created = await api.createOrder({
-      customerId: "C-238",
+      customerName: "Rahul Mehta",
+      customerPhone: "0000000001",
       serviceType: "Wash and fold",
       deliverySlotId: "slot-1400",
       items: [{ description: "Shirt", quantity: 2 }],
@@ -66,7 +69,57 @@ describe("mock order mutations", () => {
     expect(created.id).toMatch(/^ORD-/);
     expect(created.status).toBe("confirmed");
     expect(created.version).toBe(1);
+    expect(created.customerCreated).toBe(false);
+    expect(created.customer.name).toBe("Rahul Mehta");
     expect((await api.listOrders()).total).toBe(7);
+  });
+
+  it("adds a new customer by phone and reuses it for the next order", async () => {
+    const api = managerApi();
+
+    const first = await api.createOrder({
+      customerName: "Asha Verma",
+      customerPhone: "98765 43210",
+      serviceType: "Wash and fold",
+      deliverySlotId: "slot-1400",
+      items: [{ description: "Shirt", quantity: 1 }],
+    });
+
+    expect(first.customerCreated).toBe(true);
+    expect(first.customer.name).toBe("Asha Verma");
+    expect(first.customer.phone).toBe("+919876543210");
+    expect((await api.listCustomers()).total).toBe(7);
+
+    const second = await api.createOrder({
+      customerName: "Someone Else",
+      customerPhone: "9876543210",
+      serviceType: "Wash and fold",
+      deliverySlotId: "slot-1600",
+      items: [{ description: "Trousers", quantity: 1 }],
+    });
+
+    expect(second.customerCreated).toBe(false);
+    expect(second.customerId).toBe(first.customerId);
+    expect(second.customer.name).toBe("Asha Verma");
+    expect((await api.listCustomers()).total).toBe(7);
+  });
+
+  it("rejects a customer with an invalid phone number", async () => {
+    const api = managerApi();
+
+    await expect(
+      api.createOrder({
+        customerName: "Asha Verma",
+        customerPhone: "call me now",
+        serviceType: "Wash and fold",
+        deliverySlotId: "slot-1400",
+        items: [{ description: "Shirt", quantity: 1 }],
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "VALIDATION_ERROR",
+      fieldErrors: { customerPhone: "Enter a valid phone number." },
+    });
   });
 
   it("denies manager-only reschedule and cancel to the front desk", async () => {

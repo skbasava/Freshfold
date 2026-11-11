@@ -21,6 +21,7 @@ export type MutationTransportResult =
       kind: "accepted";
       order: OrderDetail;
       replayed: boolean;
+      customerCreated?: boolean;
     }
   | {
       kind: "version_conflict";
@@ -113,6 +114,7 @@ export function createHttpMutationTransport(
           kind: "accepted",
           order: parsed.data.order,
           replayed: parsed.data.replayed,
+          customerCreated: parsed.data.customerCreated,
         };
       }
 

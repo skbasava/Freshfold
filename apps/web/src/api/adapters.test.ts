@@ -103,7 +103,7 @@ function liveFetch(): {
       return jsonResponse(detail.customer);
     }
     if (path === "/api/orders/apply-change") {
-      return jsonResponse({ order: detail, replayed: false });
+      return jsonResponse({ order: detail, replayed: false, customerCreated: false });
     }
     return jsonResponse({ error: "not_found" }, 404);
   };
@@ -227,6 +227,85 @@ describe("live adapter reads", () => {
       0,
     );
     expect(fallback.capabilities.deliverySlots).toBe("demo-fallback");
+  });
+});
+
+describe("live adapter customer creation", () => {
+  it("sends customer name and phone and surfaces customerCreated", async () => {
+    let applyBody: Record<string, unknown> | null = null;
+    const newCustomer = {
+      ...detail.customer,
+      id: "cust-new",
+      name: "Asha Verma",
+      phone: "+919876543210",
+    };
+    const fetchImpl: FetchLike = async (input, init) => {
+      const path = String(input);
+      if (path === "/auth/session") {
+        return jsonResponse(session);
+      }
+      if (path.startsWith("/api/customers")) {
+        return jsonResponse({ items: [detail.customer], nextCursor: null });
+      }
+      if (path.startsWith("/api/orders?") || path === "/api/orders") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      if (path === "/api/orders/apply-change") {
+        applyBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        const orderId = String(applyBody.orderId);
+        return jsonResponse({
+          order: {
+            ...detail,
+            id: orderId,
+            customerId: newCustomer.id,
+            customerName: newCustomer.name,
+            customerPhone: newCustomer.phone,
+            customer: newCustomer,
+          },
+          replayed: false,
+          customerCreated: true,
+        });
+      }
+      if (path.startsWith("/api/orders/")) {
+        const orderId = path.split("/").at(-1) as string;
+        return jsonResponse({
+          ...detail,
+          id: orderId,
+          customerId: newCustomer.id,
+          customerName: newCustomer.name,
+          customerPhone: newCustomer.phone,
+          customer: newCustomer,
+        });
+      }
+      return jsonResponse({ error: "not_found" }, 404);
+    };
+
+    const api = createAppApi(liveConfig({ demoFallbacks: true }), {
+      fetchImpl,
+      backend: createMemoryStorageBackend(),
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+    const options = await api.getCreateOrderOptions();
+    const slot = options.slots.find((entry) => entry.status === "open");
+    expect(slot).toBeDefined();
+
+    const created = await api.createOrder({
+      customerName: "Asha Verma",
+      customerPhone: "98765 43210",
+      serviceType: "Wash and fold",
+      deliverySlotId: slot!.id,
+      items: [{ description: "Shirt", quantity: 1 }],
+    });
+
+    const sent = applyBody as {
+      payload?: Record<string, unknown>;
+    } | null;
+    expect(sent?.payload).toMatchObject({
+      customerName: "Asha Verma",
+      customerPhone: "+919876543210",
+    });
+    expect(sent?.payload?.customerId).toBeUndefined();
+    expect(created.customerCreated).toBe(true);
   });
 });
 

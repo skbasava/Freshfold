@@ -9,10 +9,11 @@ import {
   PageContainer,
   PageHeader,
   StatusBadge,
+  Toast,
   type DataTableColumn,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { formatDateKey, formatDateTime, localDateKey } from "../../lib/format";
 import { isMockApiError } from "../../mocks/errors";
@@ -100,7 +101,18 @@ function savedMessage(
 export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
   const api = useMockApi();
   const navigate = useNavigate();
+  const location = useLocation();
   const { orderId = "" } = useParams();
+  const createdNotice =
+    location.state !== null &&
+    typeof location.state === "object" &&
+    "customerCreated" in location.state &&
+    location.state.customerCreated === true &&
+    "customerName" in location.state &&
+    typeof location.state.customerName === "string"
+      ? location.state.customerName
+      : null;
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   const detectedOnline = useOnlineStatus();
   const isOnline = online ?? detectedOnline;
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -254,6 +266,14 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
           </Button>
         }
       />
+
+      {createdNotice && !noticeDismissed ? (
+        <Toast
+          tone="success"
+          title={`No customer found for this phone. Added ${createdNotice} to the customer list.`}
+          onDismiss={() => setNoticeDismissed(true)}
+        />
+      ) : null}
 
       {successMessage ? (
         <Alert tone="success" title={successMessage} />

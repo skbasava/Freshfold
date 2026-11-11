@@ -1,8 +1,10 @@
-import type {
-  Customer,
-  LoginRequest,
-  OrderDetail,
-  OrderSummary,
+import {
+  deriveCustomerId,
+  normalizePhone,
+  type Customer,
+  type LoginRequest,
+  type OrderDetail,
+  type OrderSummary,
 } from "@laundry/contracts";
 import { createIndexedDbBackend } from "../db/indexeddb";
 import { createMemoryStorageBackend } from "../db/memory";
@@ -233,6 +235,7 @@ function clientTransport(client: GatewayClient): MutationTransport {
           kind: "accepted",
           order: result.order,
           replayed: result.replayed,
+          customerCreated: result.customerCreated,
         };
       } catch (error) {
         if (!isGatewayApiError(error)) {
@@ -343,7 +346,20 @@ function createLiveApi(
   });
   const backend = dependencies.backend ?? defaultBackend();
   const queue = createMutationQueue(backend);
-  const transport = clientTransport(client);
+  const baseTransport = clientTransport(client);
+  const customerCreatedByMutation = new Map<string, boolean>();
+  const transport: MutationTransport = {
+    async send(input) {
+      const result = await baseTransport.send(input);
+      if (result.kind === "accepted") {
+        customerCreatedByMutation.set(
+          input.mutationId,
+          result.customerCreated ?? false,
+        );
+      }
+      return result;
+    },
+  };
   const now = dependencies.now ?? (() => Date.now());
   const details = new Map<string, OrderDetail>();
   const customers = new Map<string, Customer>();
@@ -940,16 +956,53 @@ function createLiveApi(
     ): Promise<MockOrderDetail> {
       const current = await session();
       const options = await api.getCreateOrderOptions();
-      const customer = options.customers.find(
-        (entry) => entry.id === input.customerId,
-      );
-      if (!customer) {
-        throw new MockApiError("Choose a customer.", {
-          status: 422,
-          code: "VALIDATION_ERROR",
-          fieldErrors: { customerId: "Choose a customer." },
-        });
+      const createWithPhone = !("customerId" in input);
+      let customerId: string;
+      let customerName: string;
+      let customerPhone: string;
+
+      if ("customerId" in input) {
+        const customer = options.customers.find(
+          (entry) => entry.id === input.customerId,
+        );
+        if (!customer) {
+          throw new MockApiError("Choose a customer.", {
+            status: 422,
+            code: "VALIDATION_ERROR",
+            fieldErrors: { customerId: "Choose a customer." },
+          });
+        }
+        customerId = customer.id;
+        customerName = customer.name;
+        customerPhone = customer.phone;
+      } else {
+        const name = input.customerName.trim();
+        const normalizedPhone = normalizePhone(input.customerPhone);
+        const fieldErrors: Record<string, string> = {};
+        if (!name) {
+          fieldErrors.customerName = "Enter the customer's name.";
+        }
+        if (!normalizedPhone) {
+          fieldErrors.customerPhone = "Enter a valid phone number.";
+        }
+        if (Object.keys(fieldErrors).length > 0 || !normalizedPhone) {
+          throw new MockApiError("Please check the customer details.", {
+            status: 422,
+            code: "VALIDATION_ERROR",
+            fieldErrors,
+          });
+        }
+
+        const existing = options.customers.find(
+          (entry) => normalizePhone(entry.phone) === normalizedPhone,
+        );
+        customerId =
+          existing?.id ??
+          (await deriveCustomerId(current.hub.id, normalizedPhone));
+        customerName = existing?.name ?? name;
+        customerPhone = existing?.phone ?? normalizedPhone;
       }
+
       const slot = options.slots.find(
         (entry) => entry.id === input.deliverySlotId,
       );
@@ -972,9 +1025,10 @@ function createLiveApi(
 
       const created = await createOfflineOrder(queue, {
         hubId: current.hub.id,
-        customerId: customer.id,
-        customerName: customer.name,
-        customerPhone: customer.phone,
+        customerId,
+        customerName,
+        customerPhone,
+        createWithPhone,
         serviceType: input.serviceType,
         deliverySlotId: slot.id,
         deliveryAt: slot.startsAt,
@@ -985,11 +1039,16 @@ function createLiveApi(
         now: now(),
       });
 
-      return settleMutation(
+      const detail = await settleMutation(
         created.order.id,
         created.mutation.mutationId,
         mutationOptions.online ?? true,
       );
+      return {
+        ...detail,
+        customerCreated:
+          customerCreatedByMutation.get(created.mutation.mutationId) ?? false,
+      };
     },
 
     async applyOrderIntent(

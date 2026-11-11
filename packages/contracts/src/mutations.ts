@@ -29,14 +29,39 @@ const createOrderItemSchema = z
 
 export type CreateOrderItemInput = z.infer<typeof createOrderItemSchema>;
 
-export const createOrderPayloadSchema = z
+const createOrderFields = {
+  serviceType: z.string().min(1).max(100),
+  deliverySlotId: z.string().min(1).max(128),
+  items: z.array(createOrderItemSchema).min(1).max(100),
+} as const;
+
+export const createOrderWithCustomerIdPayloadSchema = z
   .object({
     customerId: z.string().min(1).max(128),
-    serviceType: z.string().min(1).max(100),
-    deliverySlotId: z.string().min(1).max(128),
-    items: z.array(createOrderItemSchema).min(1).max(100),
+    ...createOrderFields,
   })
   .strict();
+
+export const createOrderWithCustomerPayloadSchema = z
+  .object({
+    customerName: z.string().trim().min(1).max(200),
+    customerPhone: z.string().trim().min(8).max(20),
+    ...createOrderFields,
+  })
+  .strict();
+
+export const createOrderPayloadSchema = z.union([
+  createOrderWithCustomerIdPayloadSchema,
+  createOrderWithCustomerPayloadSchema,
+]);
+
+export type CreateOrderWithCustomerIdPayload = z.infer<
+  typeof createOrderWithCustomerIdPayloadSchema
+>;
+export type CreateOrderWithCustomerPayload = z.infer<
+  typeof createOrderWithCustomerPayloadSchema
+>;
+export type CreateOrderPayload = z.infer<typeof createOrderPayloadSchema>;
 
 export const reschedulePayloadSchema = z
   .object({
@@ -106,6 +131,7 @@ export type ApplyChangeInput = z.infer<typeof applyChangeInputSchema>;
 export const applyChangeResultSchema = z.object({
   order: orderDetailSchema,
   replayed: z.boolean(),
+  customerCreated: z.boolean(),
 });
 
 export type ApplyChangeResult = z.infer<typeof applyChangeResultSchema>;

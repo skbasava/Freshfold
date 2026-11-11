@@ -23,6 +23,17 @@ function renderCreateOrder() {
   );
 }
 
+function renderCreateOrderWithDetail() {
+  return renderWithApi(
+    <Routes>
+      <Route path="/orders/new" element={<CreateOrderPage />} />
+      <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+    </Routes>,
+    createMockApi({ latencyMs: 0, syncIssues: false, role: "manager" }),
+    { route: "/orders/new" },
+  );
+}
+
 function renderOfflineCreateOrder() {
   return renderWithApi(
     <Routes>
@@ -49,7 +60,8 @@ describe("CreateOrderPage", () => {
       await screen.findByRole("button", { name: "Create order" }),
     );
 
-    expect(screen.getByText("Choose a customer.")).toBeInTheDocument();
+    expect(screen.getByText("Enter the customer's name.")).toBeInTheDocument();
+    expect(screen.getByText("Enter a valid phone number.")).toBeInTheDocument();
     expect(screen.getByText("Choose a service.")).toBeInTheDocument();
     expect(screen.getByText("Choose a delivery time.")).toBeInTheDocument();
     expect(screen.getByText("Add at least one item.")).toBeInTheDocument();
@@ -60,10 +72,11 @@ describe("CreateOrderPage", () => {
     renderCreateOrder();
 
     await screen.findByRole("heading", { name: "New order" });
-    await user.selectOptions(
-      await screen.findByLabelText(/^Customer/),
-      "C-238",
+    await user.type(
+      await screen.findByLabelText(/^Customer name/),
+      "Rahul Mehta",
     );
+    await user.type(screen.getByLabelText(/^Phone number/), "0000000001");
     await user.selectOptions(
       screen.getByLabelText(/^Service/),
       "Wash and fold",
@@ -89,10 +102,11 @@ describe("CreateOrderPage", () => {
     renderOfflineCreateOrder();
 
     await screen.findByRole("heading", { name: "New order" });
-    await user.selectOptions(
-      await screen.findByLabelText(/^Customer/),
-      "C-238",
+    await user.type(
+      await screen.findByLabelText(/^Customer name/),
+      "Rahul Mehta",
     );
+    await user.type(screen.getByLabelText(/^Phone number/), "0000000001");
     await user.selectOptions(
       screen.getByLabelText(/^Service/),
       "Wash and fold",
@@ -114,6 +128,71 @@ describe("CreateOrderPage", () => {
     expect(
       screen.getByText("Saved on this device. Waiting for the server to confirm."),
     ).toBeInTheDocument();
+  });
+
+  it("explains when a new customer was added for the phone number", async () => {
+    const user = userEvent.setup();
+    renderCreateOrderWithDetail();
+
+    await screen.findByRole("heading", { name: "New order" });
+    await user.type(
+      await screen.findByLabelText(/^Customer name/),
+      "Asha Verma",
+    );
+    await user.type(screen.getByLabelText(/^Phone number/), "9876543210");
+    await user.selectOptions(
+      screen.getByLabelText(/^Service/),
+      "Wash and fold",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/^Delivery time/),
+      "slot-1400",
+    );
+    await user.type(
+      screen.getByLabelText("Item 1 description"),
+      "Shirt",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    expect(
+      await screen.findByText(
+        "No customer found for this phone. Added Asha Verma to the customer list.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the new-customer notice when an existing customer is reused", async () => {
+    const user = userEvent.setup();
+    renderCreateOrderWithDetail();
+
+    await screen.findByRole("heading", { name: "New order" });
+    await user.type(
+      await screen.findByLabelText(/^Customer name/),
+      "Rahul Mehta",
+    );
+    await user.type(screen.getByLabelText(/^Phone number/), "0000000001");
+    await user.selectOptions(
+      screen.getByLabelText(/^Service/),
+      "Wash and fold",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/^Delivery time/),
+      "slot-1400",
+    );
+    await user.type(
+      screen.getByLabelText("Item 1 description"),
+      "Shirt",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "ORD-1048" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No customer found for this phone/),
+    ).not.toBeInTheDocument();
   });
 
   it("shows full and closed delivery times as unavailable", async () => {

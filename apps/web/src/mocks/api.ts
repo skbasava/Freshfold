@@ -1,4 +1,10 @@
-import type { LoginRequest, OrderStatus, Role } from "@laundry/contracts";
+import {
+  deriveCustomerId,
+  normalizePhone,
+  type LoginRequest,
+  type OrderStatus,
+  type Role,
+} from "@laundry/contracts";
 import type {
   ApiCapabilities,
   AppApi,
@@ -425,11 +431,8 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
       input: CreateOrderInput,
       mutationOptions: OrderMutationOptions = {},
     ): Promise<MockOrderDetail> {
-      return withLatency(() => {
+      return withLatency(async () => {
         const fieldErrors: Record<string, string> = {};
-        const customer = store.customers.find(
-          (entry) => entry.id === input.customerId,
-        );
         const slot = findSlot(store, input.deliverySlotId);
         const items = input.items
           .map((item) => ({
@@ -438,9 +441,33 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
           }))
           .filter((item) => item.description.length > 0);
 
-        if (!customer) {
-          fieldErrors.customerId = "Choose a customer.";
+        let customer: CustomerSummary | undefined;
+        let pendingName = "";
+        let pendingPhone = "";
+
+        if ("customerId" in input) {
+          customer = store.customers.find(
+            (entry) => entry.id === input.customerId,
+          );
+          if (!customer) {
+            fieldErrors.customerId = "Choose a customer.";
+          }
+        } else {
+          pendingName = input.customerName.trim();
+          pendingPhone = normalizePhone(input.customerPhone) ?? "";
+          if (!pendingName) {
+            fieldErrors.customerName = "Enter the customer's name.";
+          }
+          if (!pendingPhone) {
+            fieldErrors.customerPhone = "Enter a valid phone number.";
+          }
+          if (pendingPhone) {
+            customer = store.customers.find(
+              (entry) => normalizePhone(entry.phone) === pendingPhone,
+            );
+          }
         }
+
         if (!input.serviceType.trim()) {
           fieldErrors.serviceType = "Choose a service.";
         }
@@ -469,9 +496,24 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
 
         assertSlotAvailable(slot as MockDeliverySlot);
 
+        const now = store.now;
+        let customerCreated = false;
+        if (!customer) {
+          customer = {
+            id: await deriveCustomerId(MOCK_HUB_ID, pendingPhone),
+            hubId: MOCK_HUB_ID,
+            name: pendingName,
+            phone: pendingPhone,
+            notes: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          store.customers.push(customer);
+          customerCreated = true;
+        }
+
         const orderId = `ORD-${store.nextOrderNumber}`;
         store.nextOrderNumber += 1;
-        const now = store.now;
         const orderItems = items.map((item) => ({
           id: `${orderId}-ITEM-${store.nextItemNumber++}`,
           description: item.description,
@@ -480,8 +522,8 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
         }));
         const order: MockOrderRecord = {
           id: orderId,
-          customerId: (customer as CustomerSummary).id,
-          customerName: (customer as CustomerSummary).name,
+          customerId: customer.id,
+          customerName: customer.name,
           status: "confirmed",
           serviceType: input.serviceType,
           deliverySlotId: (slot as MockDeliverySlot).id,
@@ -504,7 +546,7 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
         (slot as MockDeliverySlot).booked += 1;
         refreshSlot(slot as MockDeliverySlot, store.todayKey);
 
-        return orderDetail(store, order);
+        return { ...orderDetail(store, order), customerCreated };
       });
     },
     applyOrderIntent(

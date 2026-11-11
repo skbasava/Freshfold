@@ -9,6 +9,10 @@ import {
   type OrderDetail,
   type OrderStatus,
 } from "../../../../packages/contracts/src/orders";
+import {
+  deriveCustomerId,
+  normalizePhone,
+} from "../../../../packages/contracts/src/phone";
 import { can } from "../../../../packages/domain/src/permissions";
 import {
   CAPACITY_STATUS_SQL,
@@ -40,6 +44,23 @@ type OrderRow = {
 
 type EventRow = {
   payload_hash: string;
+  event_type: string;
+  detail_json: string;
+};
+
+type CustomerRow = {
+  id: string;
+  hub_id: string;
+  name: string;
+  phone: string;
+  phone_normalized: string;
+};
+
+type ResolvedCustomer = {
+  id: string;
+  name: string;
+  phone: string;
+  phoneNormalized: string;
 };
 
 export type ApplyChangeErrorCode =
@@ -104,7 +125,11 @@ export async function applyChange(
       throw new ApplyChangeError("NOT_FOUND", 404);
     }
 
-    return { order, replayed: true };
+    return {
+      order,
+      replayed: true,
+      customerCreated: replayCustomerCreated(existingEvent),
+    };
   }
 
   if (data.intent === "createOrder") {
@@ -126,13 +151,11 @@ async function createOrder(
     throw new ApplyChangeError("ORDER_EXISTS", 409);
   }
 
-  const customer = await db
-    .prepare("SELECT id FROM customers WHERE id = ? AND hub_id = ?")
-    .bind(data.payload.customerId, actor.hubId)
-    .first<{ id: string }>();
-  if (!customer) {
-    throw new ApplyChangeError("INVALID_CUSTOMER", 422);
-  }
+  const customer = await resolveCreateCustomer(
+    db,
+    actor.hubId,
+    data.payload,
+  );
 
   const slot = await findActiveSlot(db, actor.hubId, data.payload.deliverySlotId);
   if (!slot || validateSlotTiming(slot, now)) {
@@ -143,15 +166,55 @@ async function createOrder(
   const eventId = crypto.randomUUID();
   const calendarOutboxId = crypto.randomUUID();
   const notificationOutboxId = crypto.randomUUID();
-  const detailJson = JSON.stringify({
+  const detail = {
     intent: data.intent,
     payload: data.payload,
     previousStatus: null,
     newStatus: "confirmed",
-  });
+    customerCreated: false,
+  };
+  const detailJson = JSON.stringify(detail);
   const source = sourceForActor(actor);
 
   const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO customers (
+          id, hub_id, name, phone, phone_normalized, notes, created_at, updated_at
+        )
+        SELECT ?, ?, ?, ?, ?, NULL, ?, ?
+        WHERE NOT EXISTS (
+          SELECT 1 FROM orders WHERE id = ? AND hub_id = ?
+        )
+          AND NOT EXISTS (
+            SELECT 1 FROM order_events WHERE hub_id = ? AND mutation_id = ?
+          )
+          AND (
+            SELECT COUNT(*) FROM orders
+            WHERE hub_id = ? AND delivery_slot_id = ?
+              AND status IN ${CAPACITY_STATUS_SQL}
+          ) < (
+            SELECT capacity FROM delivery_slots
+            WHERE hub_id = ? AND id = ? AND active = 1
+          )`,
+      )
+      .bind(
+        customer.id,
+        actor.hubId,
+        customer.name,
+        customer.phone,
+        customer.phoneNormalized,
+        now,
+        now,
+        data.orderId,
+        actor.hubId,
+        actor.hubId,
+        data.mutationId,
+        actor.hubId,
+        slot.id,
+        actor.hubId,
+        slot.id,
+      ),
     db
       .prepare(
         `INSERT OR IGNORE INTO orders (
@@ -167,12 +230,15 @@ async function createOrder(
         ) < (
           SELECT capacity FROM delivery_slots
           WHERE hub_id = ? AND id = ? AND active = 1
-        )`,
+        )
+          AND EXISTS (
+            SELECT 1 FROM customers WHERE id = ? AND hub_id = ?
+          )`,
       )
       .bind(
         data.orderId,
         actor.hubId,
-        data.payload.customerId,
+        customer.id,
         data.payload.serviceType,
         slot.id,
         slot.starts_at,
@@ -183,6 +249,8 @@ async function createOrder(
         slot.id,
         actor.hubId,
         slot.id,
+        customer.id,
+        actor.hubId,
       ),
   ];
 
@@ -269,8 +337,48 @@ async function createOrder(
   );
 
   const results = await db.batch(statements);
-  if (canonicalChanges(results) === 1) {
-    return canonicalResult(db, actor.hubId, data.orderId);
+  const customerCreated = changesFor(results, 0) === 1;
+  if (changesFor(results, 1) === 1) {
+    if (customerCreated) {
+      await db
+        .prepare(
+          `UPDATE order_events SET detail_json = ?
+           WHERE hub_id = ? AND mutation_id = ? AND order_id = ?`,
+        )
+        .bind(
+          JSON.stringify({ ...detail, customerCreated: true }),
+          actor.hubId,
+          data.mutationId,
+          data.orderId,
+        )
+        .run();
+    }
+    return canonicalResult(db, actor.hubId, data.orderId, customerCreated);
+  }
+
+  if (customerCreated) {
+    // Defensive compensation: this batch inserted the customer, but no order
+    // was accepted. Remove it only when nothing else references it.
+    await db
+      .prepare(
+        `DELETE FROM customers
+         WHERE id = ? AND hub_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM orders WHERE customer_id = ? AND hub_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM order_events WHERE hub_id = ? AND mutation_id = ?
+           )`,
+      )
+      .bind(
+        customer.id,
+        actor.hubId,
+        customer.id,
+        actor.hubId,
+        actor.hubId,
+        data.mutationId,
+      )
+      .run();
   }
 
   return classifyNoWrite(db, actor, data, payloadHash, slot, null);
@@ -382,8 +490,8 @@ async function updateOrder(
   );
 
   const results = await db.batch(statements);
-  if (canonicalChanges(results) === 1) {
-    return canonicalResult(db, actor.hubId, data.orderId);
+  if (changesFor(results, 0) === 1) {
+    return canonicalResult(db, actor.hubId, data.orderId, false);
   }
 
   return classifyNoWrite(db, actor, data, payloadHash, slot, current);
@@ -600,6 +708,7 @@ async function classifyNoWrite(
     return {
       order: await requireOrder(db, actor.hubId, data.orderId),
       replayed: true,
+      customerCreated: replayCustomerCreated(racedEvent),
     };
   }
 
@@ -641,10 +750,12 @@ async function canonicalResult(
   db: D1Database,
   hubId: string,
   orderId: string,
+  customerCreated: boolean,
 ): Promise<ApplyChangeResult> {
   return {
     order: await requireOrder(db, hubId, orderId),
     replayed: false,
+    customerCreated,
   };
 }
 
@@ -684,14 +795,98 @@ async function findEvent(
 ): Promise<EventRow | null> {
   return db
     .prepare(
-      "SELECT payload_hash FROM order_events WHERE hub_id = ? AND mutation_id = ?",
+      `SELECT payload_hash, event_type, detail_json
+       FROM order_events WHERE hub_id = ? AND mutation_id = ?`,
     )
     .bind(hubId, mutationId)
     .first<EventRow>();
 }
 
-function canonicalChanges(results: D1Result[]): number {
-  return results[0]?.meta.changes ?? 0;
+function changesFor(results: D1Result[], index: number): number {
+  return results[index]?.meta.changes ?? 0;
+}
+
+function replayCustomerCreated(event: EventRow): boolean {
+  if (event.event_type !== "createOrder") {
+    return false;
+  }
+  try {
+    const detail: unknown = JSON.parse(event.detail_json);
+    return (
+      detail !== null &&
+      typeof detail === "object" &&
+      "customerCreated" in detail &&
+      detail.customerCreated === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function findCustomerByPhone(
+  db: D1Database,
+  hubId: string,
+  phoneNormalized: string,
+): Promise<CustomerRow | null> {
+  return db
+    .prepare(
+      `SELECT id, hub_id, name, phone, phone_normalized
+       FROM customers
+       WHERE hub_id = ? AND phone_normalized = ?`,
+    )
+    .bind(hubId, phoneNormalized)
+    .first<CustomerRow>();
+}
+
+async function resolveCreateCustomer(
+  db: D1Database,
+  hubId: string,
+  payload: Extract<
+    ApplyChangeInput,
+    { intent: "createOrder" }
+  >["payload"],
+): Promise<ResolvedCustomer> {
+  if ("customerId" in payload) {
+    const customer = await db
+      .prepare(
+        `SELECT id, hub_id, name, phone, phone_normalized
+         FROM customers
+         WHERE id = ? AND hub_id = ?`,
+      )
+      .bind(payload.customerId, hubId)
+      .first<CustomerRow>();
+    if (!customer) {
+      throw new ApplyChangeError("INVALID_CUSTOMER", 422);
+    }
+    return {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      phoneNormalized: customer.phone_normalized,
+    };
+  }
+
+  const phoneNormalized = normalizePhone(payload.customerPhone);
+  if (!phoneNormalized) {
+    throw new ApplyChangeError("INVALID_CUSTOMER", 422);
+  }
+
+  const existing = await findCustomerByPhone(db, hubId, phoneNormalized);
+  if (existing) {
+    return {
+      id: existing.id,
+      name: existing.name,
+      phone: existing.phone,
+      phoneNormalized: existing.phone_normalized,
+    };
+  }
+
+  return {
+    id: await deriveCustomerId(hubId, phoneNormalized),
+    name: payload.customerName,
+    phone: phoneNormalized,
+    phoneNormalized,
+  };
 }
 
 function sourceForActor(actor: InternalContext): "app" | "calendar" | "system" {
