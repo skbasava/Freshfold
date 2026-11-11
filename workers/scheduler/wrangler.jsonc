@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-scheduler",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "services": [
+    { "binding": "LAUNDRY", "service": "laundry-core" }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "laundry-calendar-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5
+      },
+      {
+        "queue": "laundry-notify-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5
+      }
+    ],
+    "producers": [
+      { "binding": "CALENDAR_QUEUE", "queue": "laundry-calendar-queue" },
+      { "binding": "NOTIFY_QUEUE", "queue": "laundry-notify-queue" }
+    ]
+  },
+  "triggers": {
+    "crons": ["* * * * *", "0 18 * * *"]
+  },
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+}

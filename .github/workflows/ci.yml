@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm exec wrangler deploy --dry-run --config workers/gateway/wrangler.jsonc --outdir /tmp/laundry-ci/gateway
+      - run: pnpm exec wrangler deploy --dry-run --config workers/auth/wrangler.jsonc --outdir /tmp/laundry-ci/auth
+      - run: pnpm exec wrangler deploy --dry-run --config workers/laundry/wrangler.jsonc --outdir /tmp/laundry-ci/laundry
+      - run: pnpm exec wrangler deploy --dry-run --config workers/calendar/wrangler.jsonc --outdir /tmp/laundry-ci/calendar
+      - run: pnpm exec wrangler deploy --dry-run --config workers/notifications/wrangler.jsonc --outdir /tmp/laundry-ci/notifications
+      - run: pnpm exec wrangler deploy --dry-run --config workers/scheduler/wrangler.jsonc --outdir /tmp/laundry-ci/scheduler
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

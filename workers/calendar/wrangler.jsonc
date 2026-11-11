@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-calendar",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "services": [
+    { "binding": "LAUNDRY", "service": "laundry-core" }
+  ],
+  // Secrets (not committed): SERVICE_TOKEN, GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  // GOOGLE_PRIVATE_KEY. GOOGLE_SERVICE_ACCOUNT_EMAIL is non-secret identity,
+  // but it is supplied with the deployment environment alongside the key.
+  "triggers": {
+    "crons": ["* * * * *", "0 18 * * *"]
+  },
+  "queues": {
+    "consumers": [
+      {
+        "queue": "laundry-calendar-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "dead_letter_queue": "laundry-calendar-dlq"
+      }
+    ],
+    "producers": [
+      { "binding": "CALENDAR_DLQ", "queue": "laundry-calendar-dlq" }
+    ]
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "CALENDAR_HUB_ID": "hub-1",
+    "GOOGLE_CALENDAR_ID": "replace-me"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-notifications",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "services": [
+    { "binding": "LAUNDRY", "service": "laundry-core" }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "laundry-notify-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "dead_letter_queue": "laundry-notify-dlq"
+      }
+    ],
+    "producers": [
+      { "binding": "NOTIFY_DLQ", "queue": "laundry-notify-dlq" }
+    ]
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "NOTIFICATION_CHANNEL": "whatsapp",
+    // Business confirmation (OPEN-007) is still required before enabling a delay.
+    "NOTIFICATION_DELAY_SECONDS": "0",
+    "WHATSAPP_API_VERSION": "v22.0"
+  }
+}

@@ -1,0 +1,17 @@
+CREATE INDEX idx_hubs_tenant ON hubs(tenant_id);
+CREATE INDEX idx_customers_hub_phone ON customers(hub_id, phone_normalized);
+CREATE INDEX idx_orders_hub_delivery ON orders(hub_id, delivery_at);
+CREATE INDEX idx_orders_hub_slot_status ON orders(hub_id, delivery_slot_id, status);
+CREATE INDEX idx_orders_hub_version ON orders(hub_id, id, version);
+CREATE INDEX idx_order_items_hub_order ON order_items(hub_id, order_id);
+CREATE INDEX idx_order_items_order ON order_items(order_id);
+CREATE INDEX idx_slots_hub_key ON delivery_slots(hub_id, slot_key);
+CREATE INDEX idx_order_events_order ON order_events(order_id, at);
+CREATE INDEX idx_order_events_hub_mutation ON order_events(hub_id, mutation_id);
+CREATE INDEX idx_changes_hub_cursor ON changes(hub_id, id);
+CREATE INDEX idx_outbox_claim ON outbox(status, next_attempt_at);
+CREATE INDEX idx_outbox_order ON outbox(order_id);
+CREATE INDEX idx_calendar_sync_calendar ON calendar_sync(calendar_id, sync_status);
+CREATE INDEX idx_notifications_claim ON notifications(state, intended_at);
+CREATE INDEX idx_notifications_order ON notifications(order_id, created_at);
+CREATE INDEX idx_repairs_order ON calendar_repairs(order_id, created_at);

@@ -1,0 +1,14 @@
+ENVIRONMENT=development
+AUTH_SESSION_SECRET=replace-me
+INTERNAL_CONTEXT_SECRET=replace-with-at-least-32-characters
+INTERNAL_CONTEXT_KEY_ID=v1
+SERVICE_TOKEN=replace-with-at-least-32-characters
+DLQ_ADMIN_TOKEN=replace-with-at-least-32-characters
+GOOGLE_SERVICE_ACCOUNT_EMAIL=replace-me
+GOOGLE_PRIVATE_KEY=replace-me
+GOOGLE_CALENDAR_ID=replace-me
+WHATSAPP_API_TOKEN=replace-me
+WHATSAPP_PHONE_NUMBER_ID=replace-me
+SMS_API_TOKEN=replace-me
+SMS_API_URL=https://sms.example.invalid/messages
+SMS_SENDER_ID=replace-me

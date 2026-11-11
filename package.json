@@ -1,0 +1,40 @@
+{
+  "name": "laundry-erp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p workers/gateway/tsconfig.json && tsc -p workers/auth/tsconfig.json && tsc -p workers/laundry/tsconfig.json && tsc -p workers/calendar/tsconfig.json && tsc -p workers/notifications/tsconfig.json && tsc -p workers/scheduler/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm typecheck && pnpm test",
+    "dev:gateway": "wrangler dev --config workers/gateway/wrangler.jsonc",
+    "dev:auth": "wrangler dev --config workers/auth/wrangler.jsonc",
+    "dev:laundry": "wrangler dev --config workers/laundry/wrangler.jsonc",
+    "dev:calendar": "wrangler dev --config workers/calendar/wrangler.jsonc",
+    "dev:notifications": "wrangler dev --config workers/notifications/wrangler.jsonc",
+    "dev:scheduler": "wrangler dev --config workers/scheduler/wrangler.jsonc",
+    "db:auth:migrate:local": "wrangler d1 migrations apply laundry-auth --local --config workers/auth/wrangler.jsonc",
+    "db:auth:migrate:remote": "wrangler d1 migrations apply laundry-auth --remote --config workers/auth/wrangler.jsonc",
+    "db:laundry:migrate:local": "wrangler d1 migrations apply laundry-core --local --config workers/laundry/wrangler.jsonc",
+    "db:laundry:migrate:remote": "wrangler d1 migrations apply laundry-core --remote --config workers/laundry/wrangler.jsonc"
+  },
+  "dependencies": {
+    "hono": "4.13.17",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.7.0",
+    "@cloudflare/workers-types": "5.20261110.1",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0",
+    "wrangler": "4.160.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
+  }
+}

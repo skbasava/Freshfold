@@ -1,0 +1,35 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "assets": {
+    "directory": "../../apps/web/public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "services": [
+    { "binding": "AUTH", "service": "laundry-auth" },
+    { "binding": "LAUNDRY", "service": "laundry-core" }
+  ],
+  "ratelimits": [
+    {
+      "name": "LOGIN_RATE_LIMITER",
+      "namespace_id": "2101",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "MUTATION_RATE_LIMITER",
+      "namespace_id": "2102",
+      "simple": { "limit": 120, "period": 60 }
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+}
