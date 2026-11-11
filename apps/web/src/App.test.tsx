@@ -5,9 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { createMockApi } from "./mocks/api";
 
-function renderApp() {
+function renderApp(initialEntries: string[] = ["/"]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <App
         api={createMockApi({
           latencyMs: 0,
@@ -35,6 +35,23 @@ describe("App authentication flow", () => {
     window.dispatchEvent(new Event("online"));
 
     await waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
+  });
+
+  it("sends unauthenticated users to login and returns to the intended route", async () => {
+    const user = userEvent.setup();
+    renderApp(["/orders"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
+    await user.type(screen.getByLabelText(/^Password/), "demo password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Orders" }),
+    ).toBeInTheDocument();
   });
 
   it("bootstraps to the login screen, signs in and signs out", async () => {

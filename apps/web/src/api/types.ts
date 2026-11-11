@@ -27,6 +27,11 @@ export interface AppApi extends MockApi {
   logout(): Promise<void>;
   syncPendingMutations(): Promise<void>;
   getPendingCount(): Promise<number>;
+  /**
+   * Selects the employee/tenant/hub-scoped local cache. Implementations must
+   * keep pending mutations for each account and expose only the active scope.
+   */
+  setAccountScope?(accountKey: string | null): Promise<void>;
 }
 
 export interface ApiConfig {

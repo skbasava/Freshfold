@@ -14,6 +14,12 @@ export const requireCsrf: MiddlewareHandler<GatewayEnv> = async (c, next) => {
     return next();
   }
 
+  // Bearer tokens are not ambient browser credentials, so CSRF does not apply.
+  // The legacy cookie fallback keeps the double-submit check.
+  if (c.get("authSource") === "supabase") {
+    return next();
+  }
+
   const cookie = getCookie(c, CSRF_COOKIE);
   const header = c.req.header(CSRF_HEADER);
 

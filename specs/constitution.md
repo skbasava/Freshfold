@@ -2,17 +2,22 @@
 
 **Status:** Approved Phase 1 specification on 2026-11-11.
 **Approval record:** Phase 1 and the Stage A frontend scope were approved by the project owner on 2026-11-11. This approval does not by itself resolve open business decisions, finalise production migrations, or authorise a production deployment.
+**Supabase Auth amendment:** Approved 2026-11-11 with ADR-014 for Phase B implementation. Production deployment remains separately gated. See §13.
 **Authority:** `prompts/master-prompt.md` overrides `docs/laundry-calendar-sync.md` wherever they conflict. Each deviation is recorded in `docs/adr/`.
 
 This constitution defines immutable architecture and security rules. Changes require an explicit amendment and an ADR. Implementation plans and tasks must comply with every clause.
 
 ---
 
+
+
 ## 1. Cloudflare-only runtime
 
 The system runs only on Cloudflare Workers, D1, Queues, Cron Triggers, Durable Objects only where justified, service bindings, Secrets, Workers Static Assets, Cloudflare observability, and browser IndexedDB.
 
 Prohibited: Workers KV, PostgreSQL, MySQL, MongoDB, any external database, Redis, BullMQ, RabbitMQ, Kafka, external brokers, Node servers, VPS, Kubernetes, third-party sync engines, direct browser-to-Google Calendar calls, a separate manager-owned calendar, and a TV display module.
+
+**Narrow exception:** Supabase Auth is permitted solely as the external staff identity provider under §13. This exception does not permit Supabase Database, Storage, Edge Functions, Row Level Security, or any processing of business data.
 
 **Enforcement:** dependency review, Wrangler configuration review, architecture review, and tests that fail if prohibited bindings are configured.
 
@@ -21,6 +26,8 @@ Prohibited: Workers KV, PostgreSQL, MySQL, MongoDB, any external database, Redis
 Only the Laundry Worker holds the `LAUNDRY_DB` D1 binding. Gateway, Auth, Calendar, Notification, and Scheduler Workers must not access `LAUNDRY_DB` directly.
 
 The Auth Worker may own a separate `AUTH_DB` for identity and sessions. That database is not an order source of truth.
+
+Production staff identity is provided by Supabase Auth under §13. The Auth Worker and `AUTH_DB` are legacy/local-development fallback only; they MUST NOT operate as a parallel production identity source and are retired after migration.
 
 **Enforcement:** binding matrix review and a repository check that only `workers/laundry/wrangler.jsonc` contains the laundry D1 binding.
 
@@ -102,7 +109,56 @@ Every business read and write is scoped by trusted tenant and hub context. Clien
 
 **Enforcement:** authorization tests, cross-tenant access tests, and query review.
 
-## 13. Observability and durable failures
+## 13. External Identity Provider — Supabase Auth (Approved Amendment)
+
+**Status:** Approved Phase A amendment on 2026-11-11 with ADR-014. Phase B implementation is authorized; production deployment requires separate approval.
+
+### Authentication
+
+- Supabase Auth is the approved external staff identity provider.
+- Supabase manages staff credentials, authentication sessions, password recovery and identity records.
+- Supabase is not an application database and MUST NOT store business records.
+- Public employee signup MUST be disabled. Employee onboarding MUST use administrator-controlled invitations.
+
+### Authorization
+
+- Cloudflare Workers MUST verify Supabase access tokens using trusted JWKS and validated claims: signature, issuer, audience, expiry, not-before, key ID and an explicit algorithm allow-list.
+- JWKS MUST be fetched only from the trusted Supabase project endpoint, cached for a bounded period, refreshed on an unknown key ID, and fail closed on fetch or validation failure.
+- A valid JWT MUST NOT grant business permissions by itself.
+- Tenant, hub, role and permission information MUST come from authoritative Cloudflare D1 membership data.
+- Supabase user metadata MUST NOT be treated as authoritative business permissions.
+- Cloudflare D1 remains the source of truth for employee memberships and business authorization.
+- Every protected operation MUST resolve active membership server-side and reject inactive, revoked, cross-tenant or cross-hub access.
+
+### Session and employee lifecycle
+
+- Access and refresh token expiry, refresh failure and logout MUST clear the client session and block synchronization.
+- Pending offline mutations MUST be preserved for later resolution; they MUST NOT be submitted or discarded silently.
+- Employee deactivation MUST invalidate business access; the Gateway MUST re-check membership on every protected request, and Supabase session revocation MUST be attempted.
+- Logout and account switching MUST clear account-scoped local business caches to prevent cross-account or cross-tenant leakage.
+
+### Data isolation and offline security
+
+- Supabase MUST NOT store laundry orders, customers, delivery schedules, capacity reservations or other business records.
+- Supabase service-role credentials, signing secrets and other secrets MUST NOT be exposed to the frontend.
+- Supabase Auth integration MUST NOT bypass the Laundry Worker's single-D1-owner architecture.
+- Offline caches MUST be scoped by employee, tenant and hub; offline mutations MUST NOT synchronize without valid authentication and authorization.
+
+### Availability, security and audit
+
+- Authentication and authorization failures MUST fail closed.
+- Authentication-related security events MUST be logged without exposing credentials, tokens or unnecessary personal data.
+- Supabase outage or JWKS failure MUST deny protected operations rather than fall back to unverified identity.
+
+### Architectural boundaries
+
+- Supabase is an identity provider, not an application database.
+- There MUST be no parallel production authentication system. The Auth Worker/`AUTH_DB` is retired as a production identity source after migration; a local fallback requires separate approval.
+- FreshFold UI MUST remain authentication-provider-independent.
+- All business operations MUST continue through the approved Cloudflare architecture and `applyChange()`.
+- This exception, its amendment and implementation decision MUST be documented in ADR-014 and approved before implementation.
+
+## 14. Observability and durable failures
 
 The system records and alerts on pending outbox count and age, queue retries, Calendar DLQ depth, notification DLQ depth, sync-token resets, Calendar reverts, reconciliation drift, notification failures, mutation conflicts, offline pending mutations, and capacity rejections.
 
@@ -110,13 +166,14 @@ Permanently failing integrations must leave durable failure records and actionab
 
 **Enforcement:** observability review, redaction tests, and runbook review.
 
-## 14. Testing and approval gates
+## 15. Testing and approval gates
 
 Tests must use deterministic clocks and fake external providers. Real Google and messaging integration tests run only when staging credentials are explicitly configured.
 
 No production deploy, D1 schema finalisation, or authoritative write-path implementation may proceed without explicit approval. Phase 2 and later implementation require a separate approval after Phase 1 review.
 
 **Enforcement:** phase-gate checklist, test evidence, and explicit approval records.
+
 
 
 # FreshFold UI — Design System Constitution

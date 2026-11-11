@@ -1,4 +1,6 @@
 ENVIRONMENT=development
+# Local/legacy Auth Worker fallback only. Gateway disables it in staging and production.
+AUTH_FALLBACK_ENABLED=true
 AUTH_SESSION_SECRET=replace-me
 INTERNAL_CONTEXT_SECRET=replace-with-at-least-32-characters
 INTERNAL_CONTEXT_KEY_ID=v1
@@ -12,3 +14,16 @@ WHATSAPP_PHONE_NUMBER_ID=replace-me
 SMS_API_TOKEN=replace-me
 SMS_API_URL=https://sms.example.invalid/messages
 SMS_SENDER_ID=replace-me
+# Supabase Auth server configuration. Use a separate project per environment.
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_JWKS_URL=https://your-project-ref.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_JWT_ISSUER=https://your-project-ref.supabase.co/auth/v1
+SUPABASE_JWT_AUDIENCE=authenticated
+SUPABASE_JWT_ALGORITHMS=RS256,ES256
+SUPABASE_JWT_CLOCK_SKEW_SECONDS=60
+SUPABASE_JWKS_CACHE_TTL_MS=300000
+# Public anon key: safe for the browser, never used as server authorization.
+SUPABASE_ANON_KEY=replace-with-public-anon-key
+# Server-only and only if a separate administrative operation is approved.
+# Never expose this value to the frontend or commit a real value.
+SUPABASE_SERVICE_ROLE_KEY=replace-with-server-only-service-role-key

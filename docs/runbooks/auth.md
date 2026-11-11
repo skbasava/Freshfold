@@ -1,10 +1,16 @@
-# Auth Runbook
+# Auth Worker Runbook (Legacy Local Fallback)
+
+**Status:** Supabase Auth is the production identity provider. This Worker and
+`AUTH_DB` are a local/legacy fallback only. The Gateway disables this flow when
+`ENVIRONMENT` is `staging` or `production`, so they cannot become a second
+production identity source. See `supabase-auth.md`.
 
 ## Architecture
 
 - `workers/auth` owns `AUTH_DB`. It is internal-only (`workers_dev: false`).
-- `workers/gateway` exposes `POST /auth/login`, `GET /auth/session`, and `POST /auth/logout` as service-binding proxies.
+- `workers/gateway` exposes `POST /auth/login`, `GET /auth/session`, and `POST /auth/logout` as service-binding proxies only while the local fallback is enabled.
 - The Gateway calls `GET /internal/session` through the `AUTH` binding and forwards a trusted context to the Laundry Worker. Client-supplied role, hub, or tenant headers are ignored.
+- This Worker does not own employee authorization in the Supabase flow. Employee memberships are stored in Laundry D1 and resolved by the Gateway on every protected request.
 
 ## Schema
 

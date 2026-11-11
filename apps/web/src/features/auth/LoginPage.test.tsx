@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { ApiProvider } from "../../api/context";
 import { AuthProvider, useAuth } from "../../auth/AuthContext";
+import type { AuthClient } from "../../auth/types";
 import { createMockApi } from "../../mocks/api";
 import { MockApiError } from "../../mocks/errors";
 import { LoginPage } from "./LoginPage";
@@ -16,12 +18,14 @@ function SessionProbe() {
 
 function renderLogin(api = createMockApi({ latencyMs: 0, authRequired: true })) {
   return render(
-    <ApiProvider api={api}>
-      <AuthProvider>
-        <LoginPage />
-        <SessionProbe />
-      </AuthProvider>
-    </ApiProvider>,
+    <MemoryRouter initialEntries={["/login"]}>
+      <ApiProvider api={api}>
+        <AuthProvider>
+          <LoginPage />
+          <SessionProbe />
+        </AuthProvider>
+      </ApiProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -78,6 +82,50 @@ describe("LoginPage", () => {
 
     expect(
       await screen.findByText("Too many attempts. Wait a minute and try again."),
+    ).toBeInTheDocument();
+  });
+
+  it("links to the password reset screen", async () => {
+    renderLogin();
+    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
+
+    expect(
+      screen.getByRole("link", { name: "Forgot password?" }),
+    ).toHaveAttribute("href", "/forgot-password");
+  });
+
+  it("explains that an expired session requires signing in again", async () => {
+    const client: AuthClient = {
+      provider: "supabase",
+      getSession: vi.fn(async () => ({
+        accessToken: "expired-token",
+        refreshToken: "refresh-token",
+        expiresAt: Math.floor(Date.now() / 1000) - 10,
+        userId: "user-1",
+        email: "desk@example.com",
+      })),
+      signIn: vi.fn(async () => undefined),
+      signOut: vi.fn(async () => undefined),
+      requestPasswordReset: vi.fn(async () => undefined),
+      updatePassword: vi.fn(async () => undefined),
+      refreshSession: vi.fn(async () => null),
+      onAuthStateChange: vi.fn(() => ({ unsubscribe: vi.fn() })),
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <ApiProvider
+          api={createMockApi({ latencyMs: 0, authRequired: true })}
+        >
+          <AuthProvider authClient={client}>
+            <LoginPage />
+          </AuthProvider>
+        </ApiProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Your session ended. Please sign in again."),
     ).toBeInTheDocument();
   });
 

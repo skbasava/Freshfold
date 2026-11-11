@@ -6,6 +6,7 @@ import {
   orderEventsResponseSchema,
 } from "../../../packages/contracts/src/changes";
 import { applyChangeInputSchema } from "../../../packages/contracts/src/mutations";
+import { membershipResolutionRequestSchema } from "../../../packages/contracts/src/supabase-auth";
 import { REQUEST_ID_HEADER } from "../../../packages/contracts/src/http";
 import {
   customerListResponseSchema,
@@ -18,8 +19,10 @@ import {
   hasHubAccess,
   requireActor,
   requirePermission,
+  requireService,
   type LaundryEnv,
 } from "./authz";
+import { resolveEmployeeMembership } from "./authz/employees";
 import { getCustomer, listCustomers } from "./customers/read";
 import { applyChange, ApplyChangeError } from "./orders/apply-change";
 import { listOrderEvents } from "./orders/events";
@@ -106,6 +109,35 @@ app.get("/health", (c) =>
 
 app.get("/internal/whoami", requireActor, (c) =>
   c.json(c.get("actor")),
+);
+
+app.post(
+  "/internal/auth/resolve-membership",
+  requireService(["gateway"]),
+  async (c) => {
+    const db = c.env.LAUNDRY_DB;
+    if (!db) {
+      return c.json({ error: "database_unavailable" }, 503);
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = membershipResolutionRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_request" }, 400);
+    }
+
+    const result = await resolveEmployeeMembership(
+      db,
+      parsed.data.supabaseSubject,
+      parsed.data.hubId,
+    );
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status);
+    }
+
+    return c.json(result.response);
+  },
 );
 
 app.get("/internal/authz/check", requireActor, (c) => {

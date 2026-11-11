@@ -17,3 +17,4 @@
 | [ADR-011](ADR-011-capacity-model.md) | Capacity counted from active orders; no separate reservation table | Accepted |
 | [ADR-012](ADR-012-notification-provider.md) | Notification provider and idempotency pending | Proposed |
 | [ADR-013](ADR-013-minimal-order-status-model.md) | Minimal six-status order model with hold comments | Accepted |
+| [ADR-014](ADR-014-supabase-auth.md) | Supabase Auth as external staff identity provider | Accepted — Phase B; production deployment separately gated |

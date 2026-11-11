@@ -38,6 +38,9 @@ The web app defaults to the isolated mock adapter so the demo keeps working with
 | `VITE_API_TIMEOUT_MS` | `15000` | Per-request timeout; requests also accept caller aborts. |
 | `VITE_REQUIRE_AUTH` | `false` | Mock mode only: requires the sample login screen before the demo. Live mode always requires a server session. |
 | `VITE_ENABLE_DEMO_FALLBACKS` | `false` | Live mode only: uses clearly labelled sample delivery slots and service names because those read endpoints do not exist yet. |
+| `VITE_SUPABASE_URL` | empty | Public Supabase project URL. When set with an anon key, the app uses Supabase Auth; otherwise it falls back to the local legacy Auth Worker. |
+| `VITE_SUPABASE_ANON_KEY` | empty | Public anon key only. A service-role or `sb_secret_*` key is rejected at startup. |
+| `VITE_SUPABASE_REDIRECT_URL` | empty | Password-reset and invitation redirect, normally `https://<host>/reset-password`. Configure the same URL in the Supabase project. |
 | `VITE_GOOGLE_CALENDAR_EMBED_URL` | empty | Full Google Calendar iframe URL. Takes precedence over the calendar ID. |
 | `VITE_GOOGLE_CALENDAR_ID` | committed in `apps/web/.env.development`; built-in production fallback | Builds the Google Calendar embed URL with `Asia/Kolkata`, week view, and title/print/tabs/calendars hidden. Override locally or for production via environment variable. |
 
@@ -55,7 +58,7 @@ The dashboard iframe is only a view. Delivery orders are written to Google Calen
 
 New orders enqueue calendar events after commit. Existing orders may need the reconciliation/backfill run; `pnpm dev:live` triggers it when Google is ready. The calendar must also be publicly embeddable for the dashboard iframe.
 
-Live mode authenticates through `POST /auth/login`, bootstraps with `GET /auth/session`, sends `x-csrf-token` on writes, and logs out through `POST /auth/logout`. Roles always come from the server session; the mock role switch is hidden in live mode.
+When the public Supabase values are configured, live mode signs in through Supabase Auth with PKCE, sends `Authorization: Bearer <access_token>` to Gateway `/api/*`, and bootstraps the server-owned role and hub from `GET /api/me`. Without them, local development falls back to the legacy Auth Worker (`POST /auth/login`, `GET /auth/session`, CSRF on writes, `POST /auth/logout`); staging and production disable that fallback. Roles always come from the server membership response, never client claims, and the mock role switch is hidden in live mode. See `docs/runbooks/supabase-auth.md` for redirect, staging/production isolation, session, and offline-cache rules.
 
 Missing backend endpoints stay isolated:
 

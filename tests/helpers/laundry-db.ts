@@ -4,6 +4,8 @@ export const OTHER_HUB = "hub-2";
 
 export async function clearLaundryData(db: D1Database): Promise<void> {
   const tables = [
+    "employee_hub_memberships",
+    "employees",
     "calendar_repairs",
     "notifications",
     "sync_state",

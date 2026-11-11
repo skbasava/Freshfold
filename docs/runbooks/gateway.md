@@ -3,20 +3,25 @@
 ## Architecture
 
 - `workers/gateway` is the public entry point and owns static assets.
-- It calls `AUTH` through a service binding to verify sessions and proxies `/auth/*`.
-- It forwards `/api/*` to the `LAUNDRY` service binding with an HMAC-signed internal context.
-- Client-supplied identity headers, cookies, and service identity headers are stripped before forwarding.
+- For `/api/*`, it verifies a Supabase `Authorization: Bearer <access_token>` using the project JWKS, then resolves active employee membership through the `LAUNDRY` service binding.
+- It forwards `/api/*` to Laundry with an HMAC-signed internal context built from the resolved D1 membership, not from JWT role claims.
+- Client-supplied identity headers, cookies, bearer tokens, and service identity headers are stripped before forwarding.
+- The Auth Worker proxy is a local/legacy fallback only. It is disabled when `ENVIRONMENT` is `staging` or `production`.
 
 ## Request Pipeline
 
 1. `requestId` assigns or echoes `x-request-id`.
-2. `/api/*` requires a valid session through `requireSession`.
-3. State-changing `/api/*` requests require CSRF through `requireCsrf`.
-4. Mutating `/api/*` requests pass through `mutationRateLimit`.
-5. `signedContext` builds and signs the trusted actor context.
-6. `forwardToLaundry` forwards the request and returns `cache-control: no-store`.
+2. `/api/*` requires either a verified Supabase bearer token or, outside staging/production, a legacy Auth Worker session through `requireSession`.
+3. Supabase verification checks signature, algorithm, issuer, audience, `exp`, `nbf`, `iat`, and clock skew. JWKS is cached for a bounded interval and refreshed on an unknown `kid`.
+4. The Gateway calls `POST https://laundry.internal/internal/auth/resolve-membership` with `SERVICE_TOKEN` and `x-service-name: gateway`. Missing, inactive, revoked, or cross-membership access is rejected.
+5. State-changing `/api/*` requests using the legacy cookie fallback require CSRF through `requireCsrf`. Bearer-authenticated requests are not ambient browser credentials and skip the CSRF double-submit check.
+6. Mutating `/api/*` requests pass through `mutationRateLimit` using the resolved tenant, hub, and employee ID.
+7. `signedContext` builds and signs the trusted actor context.
+8. `forwardToLaundry` forwards the request and returns `cache-control: no-store`.
 
-`GET /api/me` returns the verified session context without forwarding to Laundry.
+`GET /api/me` returns the resolved internal actor context without forwarding to Laundry.
+
+Supabase, JWKS, or Laundry membership failures fail closed. Authentication failures return `401`; membership failures return `403`; JWKS/configuration failures return `503`.
 
 ## Read Routes
 
@@ -41,13 +46,16 @@ Responses:
 - `409` for version, existing-order, or mutation-payload conflicts
 - `422` for invalid transitions, customers, slots, or full slots
 
-## CSRF
+## Authentication and CSRF
 
-- Login sets a `laundry_csrf` cookie that is readable by the frontend.
-- The frontend must send the cookie value in the `x-csrf-token` header for `POST`, `PUT`, `PATCH`, and `DELETE` requests to `/api/*`.
-- Missing or mismatched values return `403 { "error": "csrf_failed" }`.
+- Production authentication uses Supabase bearer tokens. The Gateway derives only the verified `sub` from the token; role, tenant, hub, email, and employee identity come from Laundry D1.
+- A valid bearer token is mandatory for protected routes in staging and production.
+- Bearer-token requests skip CSRF because the token is not an ambient browser credential.
+- The legacy Auth Worker fallback keeps the `laundry_csrf` cookie and `x-csrf-token` double-submit check for `POST`, `PUT`, `PATCH`, and `DELETE` requests to `/api/*`.
+- Missing or mismatched legacy CSRF values return `403 { "error": "csrf_failed" }`.
 - Safe methods (`GET`, `HEAD`, `OPTIONS`) do not require a CSRF header.
-- The session cookie remains `HttpOnly`.
+- An invalid bearer token never downgrades to the cookie fallback.
+- The legacy session cookie remains `HttpOnly`.
 
 ## Rate Limiting
 
@@ -62,20 +70,31 @@ Responses:
 
 | Binding | Purpose |
 |---|---|
-| `AUTH` | Auth Worker service binding |
+| `AUTH` | Legacy/local Auth Worker service binding; ignored in staging/production |
 | `LAUNDRY` | Laundry Worker service binding |
 | `ASSETS` | Static assets |
+| `SERVICE_TOKEN` | Server-only credential for Laundry membership resolution |
 | `INTERNAL_CONTEXT_SECRET` | HMAC key for trusted context, at least 32 characters |
 | `INTERNAL_CONTEXT_KEY_ID` | Signing key identifier |
+| `SUPABASE_URL` | Supabase project base URL |
+| `SUPABASE_JWKS_URL` | Trusted project JWKS endpoint; derived from `SUPABASE_URL` when omitted |
+| `SUPABASE_JWT_ISSUER` | Expected token issuer |
+| `SUPABASE_JWT_AUDIENCE` | Expected token audience, normally `authenticated` |
+| `SUPABASE_JWT_ALGORITHMS` | Comma-separated allow-list, normally `RS256,ES256` |
+| `SUPABASE_JWT_CLOCK_SKEW_SECONDS` | Clock skew allowance, default 60 |
+| `SUPABASE_JWKS_CACHE_TTL_MS` | Bounded JWKS cache interval, default 300000 |
+| `AUTH_FALLBACK_ENABLED` | Local development toggle; never enables fallback in staging/production |
 | `LOGIN_RATE_LIMITER` | Cloudflare Rate Limiting binding |
 | `MUTATION_RATE_LIMITER` | Cloudflare Rate Limiting binding |
+
+See `supabase-auth.md` for project, redirect URL, signing key, and secret setup.
 
 ## Errors
 
 - Validation failures return `400` with a field path and message; no stack traces.
-- Unauthenticated requests return `401`.
-- Authorization and CSRF failures return `403`.
-- Missing upstream bindings return `503`.
+- Unauthenticated requests return `401`; Supabase token failures include an auth error code.
+- Membership and legacy CSRF failures return `403`.
+- Missing upstream bindings, JWKS failures, and membership-resolver configuration failures return `503`.
 - Unhandled errors are logged with the request ID and return a generic `500`.
 
 ## Local Checks

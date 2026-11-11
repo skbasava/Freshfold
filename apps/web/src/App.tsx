@@ -14,18 +14,23 @@ import {
   type SidebarItem,
 } from "@freshfold/ui";
 import type { Role } from "@laundry/contracts";
-import { useEffect, useState } from "react";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { createAppApi, readApiConfig } from "./api/adapters";
 import { ApiProvider, useApi } from "./api/context";
 import type { AppApi } from "./api/types";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { readSupabaseAuthConfig } from "./auth/supabase-config";
+import { createAccessTokenStore } from "./auth/token-store";
 import { CalendarPage } from "./features/calendar/CalendarPage";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { CustomerDetailPage } from "./features/customers/CustomerDetailPage";
 import { CustomersPage } from "./features/customers/CustomersPage";
 import { DeliveriesPage } from "./features/deliveries/DeliveriesPage";
+import { AuthCallbackPage } from "./features/auth/AuthCallbackPage";
+import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { LoginPage } from "./features/auth/LoginPage";
+import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { CreateOrderPage } from "./features/orders/CreateOrderPage";
 import { OrderDetailPage } from "./features/orders/OrderDetailPage";
 import { OrdersPage } from "./features/orders/OrdersPage";
@@ -267,8 +272,18 @@ function Workspace() {
   );
 }
 
-function AuthGate() {
+interface RouteLocationState {
+  from?: { pathname?: string; search?: string };
+}
+
+function intendedPath(state: unknown): string {
+  const from = (state as RouteLocationState | null)?.from;
+  return from?.pathname ? `${from.pathname}${from.search ?? ""}` : "/";
+}
+
+function RequireAuth({ children }: { children: ReactNode }) {
   const auth = useAuth();
+  const location = useLocation();
 
   if (auth.state.status === "loading") {
     return <SessionLoading />;
@@ -281,10 +296,62 @@ function AuthGate() {
       />
     );
   }
-  if (auth.state.status === "unauthenticated") {
-    return <LoginPage />;
+  if (auth.state.status === "password_recovery") {
+    return <Navigate to="/reset-password" replace />;
   }
-  return <Workspace />;
+  if (auth.state.status === "unauthenticated") {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
+
+function PublicOnly({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const location = useLocation();
+
+  if (auth.state.status === "loading") {
+    return <SessionLoading />;
+  }
+  if (auth.state.status === "password_recovery") {
+    return <Navigate to="/reset-password" replace />;
+  }
+  if (auth.state.status === "authenticated") {
+    return <Navigate to={intendedPath(location.state)} replace />;
+  }
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <PublicOnly>
+            <LoginPage />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicOnly>
+            <ForgotPasswordPage />
+          </PublicOnly>
+        }
+      />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/login/callback" element={<AuthCallbackPage />} />
+      <Route
+        path="/*"
+        element={
+          <RequireAuth>
+            <Workspace />
+          </RequireAuth>
+        }
+      />
+    </Routes>
+  );
 }
 
 export interface AppProps {
@@ -292,14 +359,28 @@ export interface AppProps {
 }
 
 export function App({ api: providedApi }: AppProps = {}) {
+  const [tokenStore] = useState(() => createAccessTokenStore());
+  const [bearerAuthRequired] = useState(() => {
+    try {
+      return Boolean(readSupabaseAuthConfig(import.meta.env));
+    } catch {
+      return true;
+    }
+  });
   const [api] = useState(
-    () => providedApi ?? createAppApi(readApiConfig()),
+    () =>
+      providedApi ??
+      createAppApi(readApiConfig(), {
+        getAccessToken: () => tokenStore.get(),
+        setAccessToken: (token) => tokenStore.set(token),
+        requireBearerAuth: bearerAuthRequired,
+      }),
   );
 
   return (
     <ApiProvider api={api}>
-      <AuthProvider>
-        <AuthGate />
+      <AuthProvider tokenStore={tokenStore}>
+        <AppRoutes />
       </AuthProvider>
     </ApiProvider>
   );

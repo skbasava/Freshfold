@@ -39,6 +39,19 @@ The interface is for non-technical laundry staff: simple language, few steps, pr
 - **Offline:** browser IndexedDB stores pending mutations and optimistic views atomically. Offline-created delivery slots are provisional until server acceptance. Preserve rejected/conflicting mutations for resolution; never label pending orders server-confirmed.
 - Store canonical timestamps in UTC; evaluate delivery/business-time rules in `Asia/Kolkata`.
 
+## Authentication
+
+Follow the authentication architecture in `specs/constitution.md` §13 and
+`docs/adr/ADR-014-supabase-auth.md`. Supabase Auth is the approved external staff identity provider. Phase B
+implementation is authorized; production deployment remains separately gated.
+
+Do not implement a parallel authentication system, run the Auth Worker or
+`AUTH_DB` as a production identity source, store business records in Supabase,
+or bypass Cloudflare Worker authorization.
+
+Every protected feature must include authentication, authorization, and
+cross-tenant/hub tests.
+
 ## FreshFold UI — mandatory design system
 
 **FreshFold UI (`@freshfold/ui`) is the required internal workspace design-system package for every frontend screen.** The previously agreed simple dashboard design is the visual target, **not evidence of an existing implementation**. Build the package and reference dashboard after the relevant implementation phase is approved.

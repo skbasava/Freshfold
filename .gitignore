@@ -7,6 +7,8 @@ coverage/
 .env
 .env.*
 !apps/web/.env.development
+!apps/web/.env.example
 !.dev.vars.example
+!.env.example
 *.log
 .DS_Store

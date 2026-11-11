@@ -128,11 +128,14 @@ function createTransactionContext(tx: IDBTransaction): TransactionContext {
   };
 }
 
-function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
+function openDatabase(
+  factory: IDBFactory,
+  databaseName: string,
+): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let request: IDBOpenDBRequest;
     try {
-      request = factory.open(DB_NAME, DB_VERSION);
+      request = factory.open(databaseName, DB_VERSION);
     } catch (error) {
       reject(error);
       return;
@@ -161,14 +164,19 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   });
 }
 
+export interface IndexedDbBackendOptions {
+  databaseName?: string;
+}
+
 export function createIndexedDbBackend(
   factory: IDBFactory | undefined = globalThis.indexedDB,
+  options: IndexedDbBackendOptions = {},
 ): StorageBackend {
   if (!factory) {
     throw new Error("IndexedDB is not available in this environment");
   }
 
-  const database = openDatabase(factory);
+  const database = openDatabase(factory, options.databaseName ?? DB_NAME);
 
   function run<T>(
     stores: StoreName[],

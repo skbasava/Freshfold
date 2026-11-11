@@ -15,8 +15,9 @@ Operational runbooks for the Laundry ERP. Each failure runbook covers detection,
 | `notification-uncertainty.md` | A message may have been accepted but the ledger cannot prove it. |
 | `secret-rotation.md` | Rotating Cloudflare secrets and provider credentials. |
 | `staging-to-production.md` | Promoting a reviewed change from staging to production. |
-| `auth.md` | Auth sessions, login, CSRF, and role checks. |
-| `gateway.md` | Gateway routing, request IDs, rate limits, and forwarding. |
+| `supabase-auth.md` | Supabase project setup, JWKS/JWT configuration, membership resolution, and environment isolation. |
+| `auth.md` | Local/legacy Auth Worker fallback, sessions, login, CSRF, and role checks. |
+| `gateway.md` | Gateway routing, request IDs, bearer authentication, rate limits, and forwarding. |
 | `environment-separation.md` | Verifying staging and production resources do not overlap. |
 | `production-readiness.md` | Reviewing production blockers, gates, open decisions, and approval status. Deployment is not approved. |
 | `local-development.md` | Running the Workers locally. |

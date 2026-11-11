@@ -18,6 +18,7 @@ Do not apply remote migrations until the staging and production D1 database IDs 
 
 ## Schema notes
 
+- `0003_authz.sql` adds `employees` and `employee_hub_memberships`. Employee records are keyed by the verified Supabase subject; memberships remain the authoritative source for tenant, hub, and role.
 - All business tables carry `hub_id`; `hubs` carries `tenant_id`.
 - Timestamps are UTC epoch milliseconds.
 - `order_events.detail_json` and `calendar_repairs.detail_json` require valid JSON.

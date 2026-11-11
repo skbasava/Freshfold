@@ -5,11 +5,13 @@ import type {
 } from "@laundry/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  AUTH_FAILURE_EVENT,
   GatewayApiError,
   createCookieCsrfStore,
   createGatewayClient,
   createMemoryCsrfStore,
   readCookieValue,
+  type AuthFailureDetail,
   type FetchLike,
 } from "./client";
 
@@ -173,6 +175,82 @@ describe("gateway client authentication", () => {
     expect(call?.init.headers).toMatchObject({
       "x-csrf-token": "csrf-token",
     });
+  });
+});
+
+describe("gateway client bearer authentication", () => {
+  it("sends an Authorization bearer header without cookies or CSRF", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      jsonResponse({ items: [], nextCursor: null }),
+    );
+    const client = createGatewayClient({
+      fetchImpl,
+      getAccessToken: () => "access-token-1",
+      csrfStore: createMemoryCsrfStore("legacy-csrf"),
+    });
+
+    await client.listOrders();
+
+    const [call] = fetchCalls(fetchImpl);
+    expect(call?.init.headers).toMatchObject({
+      authorization: "Bearer access-token-1",
+    });
+    expect(call?.init.headers).not.toHaveProperty("x-csrf-token");
+    expect(call?.init.credentials).toBe("omit");
+  });
+
+  it("resolves the authenticated session from /api/me in bearer mode", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(session));
+    const client = createGatewayClient({
+      fetchImpl,
+      getAccessToken: () => "access-token-1",
+    });
+
+    const restored = await client.getSession();
+
+    expect(restored.user.id).toBe("user-desk");
+    expect(fetchCalls(fetchImpl)[0]?.input).toBe("/api/me");
+  });
+
+  it("keeps the session on a business permission 403", async () => {
+    const listener = vi.fn();
+    const cleared: Array<string | null> = [];
+    window.addEventListener(AUTH_FAILURE_EVENT, listener);
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      jsonResponse({ error: "forbidden" }, 403),
+    );
+    const client = createGatewayClient({
+      fetchImpl,
+      getAccessToken: () => "access-token-1",
+      setAccessToken: (token) => cleared.push(token),
+    });
+
+    await expect(client.listOrders()).rejects.toMatchObject({ status: 403 });
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(cleared).not.toContain(null);
+    window.removeEventListener(AUTH_FAILURE_EVENT, listener);
+  });
+
+  it("announces revoked access and clears the bearer after a 403", async () => {
+    const cleared: Array<string | null> = [];
+    const listener = vi.fn<(event: CustomEvent<AuthFailureDetail>) => void>();
+    window.addEventListener(AUTH_FAILURE_EVENT, listener as unknown as EventListener);
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      jsonResponse({ error: "membership_inactive", code: "membership_inactive" }, 403),
+    );
+    const client = createGatewayClient({
+      fetchImpl,
+      getAccessToken: () => "access-token-1",
+      setAccessToken: (token) => cleared.push(token),
+    });
+
+    await expect(client.listOrders()).rejects.toMatchObject({ status: 403 });
+
+    const detail = listener.mock.calls[0]?.[0]?.detail;
+    expect(detail).toMatchObject({ status: 403, code: "membership_inactive" });
+    expect(cleared).toContain(null);
+    window.removeEventListener(AUTH_FAILURE_EVENT, listener as unknown as EventListener);
   });
 });
 

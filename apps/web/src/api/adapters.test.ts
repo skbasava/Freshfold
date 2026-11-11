@@ -436,6 +436,94 @@ describe("live adapter offline queue", () => {
   });
 });
 
+describe("live adapter authenticated offline sync", () => {
+  function pendingOrder(): LocalOrder {
+    return {
+      id: "order-1",
+      hubId: "hub-1",
+      customerId: "cust-1",
+      customerName: "Alice",
+      customerPhone: "+919000000001",
+      status: "confirmed",
+      serviceType: "Wash and fold",
+      deliverySlotId: "slot-1",
+      deliveryAt: summary.deliveryAt,
+      version: 1,
+      holdComment: null,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+      syncState: "pending",
+    };
+  }
+
+  async function enqueuePending(backend: ReturnType<typeof createMemoryStorageBackend>) {
+    const queue = createMutationQueue(backend);
+    await queue.enqueueOptimistic(
+      pendingOrder(),
+      createPendingMutation({
+        orderId: "order-1",
+        intent: "markProcessing",
+        payload: {},
+        baseVersion: 1,
+        now: 1_000,
+      }),
+    );
+  }
+
+  it("does not flush pending mutations without an authenticated session", async () => {
+    const { fetchImpl, calls } = liveFetch();
+    const backend = createMemoryStorageBackend();
+    await enqueuePending(backend);
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      getAccessToken: () => null,
+    });
+
+    await api.syncPendingMutations();
+
+    expect(calls.some((call) => call.input === "/api/orders/apply-change")).toBe(
+      false,
+    );
+    expect(await api.getPendingCount()).toBe(1);
+  });
+
+  it("keeps each employee's pending mutations isolated across account switches", async () => {
+    const { fetchImpl } = liveFetch();
+    const scopes = new Map<string, ReturnType<typeof createMemoryStorageBackend>>();
+    const backendFor = (key: string | null) => {
+      if (!key) {
+        return createMemoryStorageBackend();
+      }
+      const existing = scopes.get(key);
+      if (existing) {
+        return existing;
+      }
+      const created = createMemoryStorageBackend();
+      scopes.set(key, created);
+      return created;
+    };
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backendFactory: backendFor,
+      getAccessToken: () => null,
+    });
+
+    await api.setAccountScope?.("employee-a:tenant-1:hub-1");
+    await enqueuePending(backendFor("employee-a:tenant-1:hub-1"));
+    expect(await api.getPendingCount()).toBe(1);
+
+    await api.setAccountScope?.("employee-b:tenant-1:hub-1");
+    expect(await api.getPendingCount()).toBe(0);
+
+    await api.setAccountScope?.("employee-a:tenant-1:hub-1");
+    expect(await api.getPendingCount()).toBe(1);
+
+    await api.setAccountScope?.(null);
+    expect(await api.getPendingCount()).toBe(0);
+  });
+});
+
 describe("gateway error messages", () => {
   it("explains when the local gateway is unreachable", () => {
     expect(

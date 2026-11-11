@@ -46,7 +46,9 @@ pnpm dev:gateway
 VITE_API_MODE=live pnpm dev:web
 ```
 
-Vite proxies `/auth` and `/api` to the Gateway on port 8787. Set `VITE_API_BASE_URL` when the Gateway is on a different same-site origin. Live mode uses `GET /auth/session` for bootstrap, `POST /auth/login` and `POST /auth/logout` with the CSRF cookie, and shows the login screen when the session is missing. `VITE_REQUIRE_AUTH=true` enables the sample login screen in mock mode. `VITE_ENABLE_DEMO_FALLBACKS=true` uses clearly labelled sample delivery slots because the slot-listing endpoint does not exist yet.
+Vite proxies `/auth` and `/api` to the Gateway on port 8787. Set `VITE_API_BASE_URL` when the Gateway is on a different same-site origin. The current live UI still uses the legacy Auth Worker fallback (`GET /auth/session`, `POST /auth/login`, `POST /auth/logout`); that fallback is available only outside staging and production. The Gateway accepts Supabase bearer authentication for clients that send `Authorization: Bearer <access_token>`, but the frontend Supabase session flow has not been implemented in this phase. Set `VITE_REQUIRE_AUTH=true` to enable the sample login screen in mock mode. `VITE_ENABLE_DEMO_FALLBACKS=true` uses clearly labelled sample delivery slots because the slot-listing endpoint does not exist yet.
+
+For Supabase-only local testing, configure the Supabase variables in `.dev.vars` from `.dev.vars.example` and set `AUTH_FALLBACK_ENABLED=false`. Automated tests inject local JWKS and clock fakes and do not call Supabase.
 
 ### Google Calendar delivery events
 

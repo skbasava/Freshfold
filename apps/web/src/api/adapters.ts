@@ -77,6 +77,10 @@ export interface CreateAppApiDependencies {
   fetchImpl?: FetchLike;
   csrfStore?: CsrfTokenStore;
   backend?: StorageBackend;
+  backendFactory?: (accountKey: string | null) => StorageBackend;
+  getAccessToken?: () => string | null;
+  setAccessToken?: (token: string | null) => void;
+  requireBearerAuth?: boolean;
   now?: () => number;
   requestIdFactory?: () => string;
 }
@@ -343,9 +347,15 @@ function createLiveApi(
       dependencies.csrfStore ??
       (typeof document === "undefined" ? createMemoryCsrfStore() : undefined),
     requestIdFactory: dependencies.requestIdFactory,
+    getAccessToken: dependencies.getAccessToken,
+    setAccessToken: dependencies.setAccessToken,
   });
-  const backend = dependencies.backend ?? defaultBackend();
-  const queue = createMutationQueue(backend);
+  const bearerRequired =
+    dependencies.requireBearerAuth ?? Boolean(dependencies.getAccessToken);
+  let backend = dependencies.backend ?? defaultBackend();
+  let queue = createMutationQueue(backend);
+  let activeAccountKey: string | null = null;
+  let scopeActivated = false;
   const baseTransport = clientTransport(client);
   const customerCreatedByMutation = new Map<string, boolean>();
   const transport: MutationTransport = {
@@ -364,6 +374,48 @@ function createLiveApi(
   const details = new Map<string, OrderDetail>();
   const customers = new Map<string, Customer>();
   let cachedSession: MockSession | null = null;
+
+  function accountDatabaseName(accountKey: string): string {
+    const safe = accountKey.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+    return `freshfold-laundry-${safe}`;
+  }
+
+  function backendForScope(
+    accountKey: string | null,
+    allowDefault: boolean,
+  ): StorageBackend {
+    if (dependencies.backend) {
+      return dependencies.backend;
+    }
+    if (dependencies.backendFactory) {
+      return dependencies.backendFactory(accountKey);
+    }
+    if (!accountKey) {
+      return allowDefault ? defaultBackend() : createMemoryStorageBackend();
+    }
+    try {
+      return createIndexedDbBackend(undefined, {
+        databaseName: accountDatabaseName(accountKey),
+      });
+    } catch {
+      return createMemoryStorageBackend();
+    }
+  }
+
+  async function setAccountScope(accountKey: string | null): Promise<void> {
+    if (scopeActivated && accountKey === activeAccountKey) {
+      return;
+    }
+    const next = backendForScope(accountKey, !scopeActivated);
+    activeAccountKey = accountKey;
+    scopeActivated = true;
+    backend = next;
+    queue = createMutationQueue(backend);
+    cachedSession = null;
+    details.clear();
+    customers.clear();
+    customerCreatedByMutation.clear();
+  }
 
   async function session(): Promise<MockSession> {
     if (cachedSession) {
@@ -557,7 +609,9 @@ function createLiveApi(
     mutationId: string,
     online: boolean,
   ): Promise<MockOrderDetail> {
-    if (online) {
+    const authenticated =
+      !bearerRequired || Boolean(dependencies.getAccessToken?.());
+    if (online && authenticated) {
       try {
         const summary = await flushPendingMutations({
           queue,
@@ -1153,7 +1207,14 @@ function createLiveApi(
       return { customer, orders };
     },
 
+    async setAccountScope(accountKey: string | null) {
+      await setAccountScope(accountKey);
+    },
+
     async syncPendingMutations() {
+      if (bearerRequired && !dependencies.getAccessToken?.()) {
+        return;
+      }
       await flushPendingMutations({
         queue,
         transport,

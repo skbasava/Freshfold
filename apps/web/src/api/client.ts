@@ -31,6 +31,13 @@ import { defaultFetch, type FetchLike } from "../sync/fetch";
 export type { FetchLike };
 
 export const UNAUTHORIZED_EVENT = "freshfold:unauthorized";
+export const AUTH_FAILURE_EVENT = "freshfold:auth-failure";
+
+export interface AuthFailureDetail {
+  status: number;
+  code: string;
+  requestId?: string;
+}
 
 export interface RequestOptions {
   signal?: AbortSignal;
@@ -140,6 +147,12 @@ export interface GatewayClientOptions {
   csrfStore?: CsrfTokenStore;
   requestIdFactory?: () => string;
   credentials?: "same-origin" | "include" | "omit";
+  /**
+   * When provided, protected requests are authenticated with a Supabase access
+   * token instead of the legacy cookie/CSRF session.
+   */
+  getAccessToken?: () => string | null;
+  setAccessToken?: (token: string | null) => void;
 }
 
 export interface ListOrdersOptions extends RequestOptions {
@@ -244,6 +257,7 @@ export function createGatewayClient(
       }, timeoutMs);
     }
 
+    const accessToken = options.getAccessToken?.() ?? null;
     const headers: Record<string, string> = {
       accept: "application/json",
       [REQUEST_ID_HEADER]: requestIdFactory(),
@@ -251,7 +265,9 @@ export function createGatewayClient(
     if (body !== undefined) {
       headers["content-type"] = "application/json";
     }
-    if (!SAFE_METHODS.has(method)) {
+    if (accessToken) {
+      headers.authorization = `Bearer ${accessToken}`;
+    } else if (!SAFE_METHODS.has(method)) {
       const csrfToken = csrfStore.get();
       if (csrfToken) {
         headers[CSRF_HEADER] = csrfToken;
@@ -262,7 +278,7 @@ export function createGatewayClient(
     try {
       response = await fetchImpl(buildUrl(baseUrl, path), {
         method,
-        credentials,
+        credentials: accessToken ? "omit" : credentials,
         headers,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: controller.signal,
@@ -303,11 +319,38 @@ export function createGatewayClient(
     }
 
     if (!response.ok) {
-      if (response.status === 401 && typeof window !== "undefined") {
-        window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+      const parsedError = apiErrorSchema.safeParse(rawBody);
+      const errorCode = parsedError.success
+        ? parsedError.data.error
+        : `HTTP_${response.status}`;
+      const isAuthFailure =
+        response.status === 401 ||
+        (response.status === 403 &&
+          (errorCode === "membership_missing" ||
+            errorCode === "membership_inactive" ||
+            errorCode === "cross_tenant_denied"));
+      if (isAuthFailure) {
+        if (response.status === 401 && typeof window !== "undefined") {
+          window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+        }
+        if (accessToken) {
+          options.setAccessToken?.(null);
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent<AuthFailureDetail>(AUTH_FAILURE_EVENT, {
+              detail: {
+                status: response.status,
+                code: errorCode,
+                requestId: parsedError.success
+                  ? parsedError.data.requestId
+                  : response.headers.get(REQUEST_ID_HEADER) ?? undefined,
+              },
+            }),
+          );
+        }
       }
 
-      const parsedError = apiErrorSchema.safeParse(rawBody);
       const parsedOrder =
         rawBody !== null &&
         typeof rawBody === "object" &&
@@ -317,9 +360,7 @@ export function createGatewayClient(
 
       throw new GatewayApiError({
         status: response.status,
-        code: parsedError.success
-          ? parsedError.data.error
-          : `HTTP_${response.status}`,
+        code: errorCode,
         requestId: parsedError.success
           ? parsedError.data.requestId
           : response.headers.get(REQUEST_ID_HEADER) ?? undefined,
@@ -368,6 +409,11 @@ export function createGatewayClient(
     },
 
     async logout(requestOptions) {
+      if (options.getAccessToken?.()) {
+        options.setAccessToken?.(null);
+        csrfStore.clear();
+        return;
+      }
       await request(
         "/auth/logout",
         "POST",
@@ -379,7 +425,8 @@ export function createGatewayClient(
     },
 
     getSession(requestOptions) {
-      return request("/auth/session", "GET", sessionResponseSchema, undefined, requestOptions);
+      const path = options.getAccessToken?.() ? "/api/me" : "/auth/session";
+      return request(path, "GET", sessionResponseSchema, undefined, requestOptions);
     },
 
     listCustomers(listOptions = {}) {

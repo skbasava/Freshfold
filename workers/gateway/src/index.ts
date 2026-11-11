@@ -8,7 +8,7 @@ import {
   createLogger,
   safeError,
 } from "../../../packages/shared/src/observability";
-import { requireSession } from "./auth/session";
+import { localAuthFallbackAllowed, requireSession } from "./auth/session";
 import { requireCsrf } from "./middleware/csrf";
 import { errorResponse, validationDetails } from "./middleware/errors";
 import { forwardToLaundry } from "./middleware/forward";
@@ -35,6 +35,10 @@ app.post("/auth/login", async (c) => {
   const ipLimited = await loginIpRateLimit(c);
   if (ipLimited) {
     return ipLimited;
+  }
+
+  if (!localAuthFallbackAllowed(c.env)) {
+    return errorResponse(c, 404, "not_found");
   }
 
   const text = await c.req.text();
@@ -99,6 +103,10 @@ async function proxyAuth(
   c: Context<GatewayEnv>,
   bodyOverride?: string,
 ): Promise<Response> {
+  if (!localAuthFallbackAllowed(c.env)) {
+    return errorResponse(c, 404, "not_found");
+  }
+
   const url = new URL(c.req.url);
   const authPath = url.pathname.replace(/^\/auth/, "") || "/";
   const target = new URL(`https://auth.internal${authPath}${url.search}`);
@@ -118,7 +126,12 @@ async function proxyAuth(
     headers.set("content-type", "application/json");
   }
 
-  const upstream = await c.env.AUTH.fetch(
+  const auth = c.env.AUTH;
+  if (!auth) {
+    return errorResponse(c, 503, "upstream_unavailable");
+  }
+
+  const upstream = await auth.fetch(
     new Request(target, {
       method,
       headers,
