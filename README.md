@@ -60,6 +60,10 @@ New orders enqueue calendar events after commit. Existing orders may need the re
 
 When the public Supabase values are configured, live mode signs in through Supabase Auth with PKCE, sends `Authorization: Bearer <access_token>` to Gateway `/api/*`, and bootstraps the server-owned role and hub from `GET /api/me`. Without them, local development falls back to the legacy Auth Worker (`POST /auth/login`, `GET /auth/session`, CSRF on writes, `POST /auth/logout`); staging and production disable that fallback. Roles always come from the server membership response, never client claims, and the mock role switch is hidden in live mode. See `docs/runbooks/supabase-auth.md` for redirect, staging/production isolation, session, and offline-cache rules.
 
+### Validate Supabase Auth
+
+Follow the [end-to-end validation checklist](docs/runbooks/supabase-auth.md#end-to-end-validation) to configure a Supabase project, seed a local employee membership, verify bearer authentication, run negative/JWKS/session checks, and validate staging before production approval. Never put a service-role key in the browser.
+
 Missing backend endpoints stay isolated:
 
 - delivery-slot listing and service catalogue: empty by default, or explicit demo fallback when enabled;

@@ -106,6 +106,142 @@ this boundary for convenience. Supabase session revocation and the Laundry
 membership check limit, but do not eliminate, the window in which a stolen
 token may remain valid.
 
+## End-to-end validation
+
+Use one Supabase project per environment. Do not reuse local or staging credentials in production.
+
+### 1. Supabase project
+
+- Enable the Email/Password provider.
+- Disable public staff signup and invite employees from the Supabase dashboard or Admin API.
+- Set the Site URL and allowed redirect URLs, including `http://localhost:5173/login/callback` and `http://localhost:5173/reset-password` for local development.
+- Configure allowed browser origins and Auth rate limits/email delivery.
+- Use asymmetric JWT signing keys (`RS256` or `ES256`). The Gateway rejects unsupported algorithms by default.
+- Confirm the JWKS endpoint responds: `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`.
+- Confirm Supabase contains only Auth users/sessions, not orders, customers, employees, memberships, audit, outbox, or capacity data.
+
+### 2. Local backend configuration
+
+Add the non-secret Gateway values to `.dev.vars`:
+
+```text
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_JWT_ISSUER=https://<project-ref>.supabase.co/auth/v1
+SUPABASE_JWT_AUDIENCE=authenticated
+SUPABASE_JWT_ALGORITHMS=RS256,ES256
+AUTH_FALLBACK_ENABLED=false
+```
+
+Do not set `SUPABASE_SERVICE_ROLE_KEY` for normal validation; the Gateway and Laundry do not need it. `pnpm dev:live` generates local `SERVICE_TOKEN` and `INTERNAL_CONTEXT_SECRET` values and links `.dev.vars` into each Worker.
+
+### 3. Frontend configuration
+
+Add these public values to `apps/web/.env.development` or `apps/web/.env.local`:
+
+```text
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<public anon key>
+VITE_SUPABASE_REDIRECT_URL=http://localhost:5173/reset-password
+```
+
+Use only the public anon key. Never put a service-role key or `sb_secret_*` value in a `VITE_*` variable.
+
+### 4. Seed a local employee membership
+
+Apply the Laundry migration and seed the employee whose `supabase_subject` matches the Supabase JWT `sub`:
+
+```bash
+pnpm db:laundry:migrate:local
+
+SUB="<supabase-auth-user-uuid>"
+NOW="$(date +%s)000"
+
+pnpm exec wrangler d1 execute laundry-core --local \
+  --config workers/laundry/wrangler.jsonc \
+  --command "
+    INSERT OR IGNORE INTO tenants (id, name, created_at)
+    VALUES ('tenant-1', 'FreshFold', $NOW);
+
+    INSERT OR IGNORE INTO hubs (id, tenant_id, name, timezone, created_at)
+    VALUES ('hub-1', 'tenant-1', 'Main Hub', 'Asia/Kolkata', $NOW);
+
+    INSERT INTO employees (id, supabase_subject, email, display_name, status, created_at, updated_at)
+    VALUES ('emp-manager', '$SUB', 'manager@example.com', 'Local Manager', 'active', $NOW, $NOW)
+    ON CONFLICT(supabase_subject) DO UPDATE SET
+      email = excluded.email,
+      display_name = excluded.display_name,
+      status = 'active',
+      updated_at = excluded.updated_at;
+
+    INSERT INTO employee_hub_memberships (employee_id, tenant_id, hub_id, role, created_at)
+    VALUES ('emp-manager', 'tenant-1', 'hub-1', 'manager', $NOW)
+    ON CONFLICT(employee_id, hub_id) DO UPDATE SET
+      tenant_id = excluded.tenant_id,
+      role = excluded.role;
+  "
+```
+
+Adjust the employee id, email, hub, and role for the account under test.
+
+### 5. Verify bearer authentication
+
+Start the application and obtain a token:
+
+```bash
+pnpm dev:live
+
+SUPABASE_URL="https://<project-ref>.supabase.co"
+ANON_KEY="<public anon key>"
+TOKEN="$(curl -s -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"manager@example.com","password":"<password>"}' | jq -r .access_token)"
+```
+
+Then verify:
+
+```bash
+curl -i http://127.0.0.1:8787/api/me
+curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/me
+curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/orders
+```
+
+Expected: `401` without a bearer token; `200` with a valid token and active membership. `/api/me` returns the server-owned employee, role, tenant, and hub context.
+
+### 6. Negative and lifecycle checks
+
+- Tampered, expired, not-yet-valid, wrong-issuer, wrong-audience, and wrong-algorithm tokens return `401 invalid_token` or `401 expired_session`.
+- A valid token with no membership returns `403 membership_missing`.
+- Set `employees.status` to `inactive` or `revoked`; the next protected request returns `403 membership_inactive`.
+- Cross-tenant and cross-hub access is denied; client-supplied role, tenant, hub, email, employee, internal-context, and service headers are ignored.
+- JWKS fetch/parse failure returns `503 identity_provider_unavailable`, never unverified identity.
+- Rotate the Supabase signing key; old tokens fail and newly signed tokens succeed after the Gateway refreshes the unknown key id.
+- Expire the session or revoke it in Supabase; the UI returns to login, pending offline mutations remain local, and no sync occurs without a valid session.
+- Log out and switch accounts; account-scoped IndexedDB data is not exposed across employees or tenants.
+
+### 7. Automated checks
+
+```bash
+pnpm vitest run \
+  tests/unit/supabase-jwt.test.ts \
+  tests/unit/supabase-auth-contracts.test.ts \
+  tests/unit/supabase-boundaries.test.ts \
+  tests/integration/supabase-gateway-auth.test.ts \
+  tests/integration/laundry-membership.test.ts
+
+pnpm test:web
+pnpm check
+pnpm exec wrangler deploy --dry-run --config workers/gateway/wrangler.jsonc
+pnpm exec wrangler deploy --dry-run --config workers/laundry/wrangler.jsonc
+```
+
+### 8. Staging validation
+
+Create a separate Supabase project, redirect URLs, Wrangler secrets, and D1 database for staging. Exercise real login, invitation, password reset, session expiry/refresh failure, key rotation, employee deactivation, cross-tenant denial, and offline-sync blocking. Apply the staging D1 migration only with the appropriate approval. Production deployment requires a separate explicit approval.
+
+**Current limitation:** no real Supabase or staging project has been validated; the committed integration tests use injected JWKS, clocks, and mocked provider behavior.
+
 ## Open decisions
 
 - Multi-hub staff: the Laundry resolver can select a membership by a validated `hubId`, but the current Gateway does not accept a client-selected hub. It uses the first active membership ordered by `created_at`, then `hub_id`. A staff hub-selection flow still needs approval.
