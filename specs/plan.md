@@ -1,8 +1,9 @@
 # Laundry ERP Architecture and Implementation Plan
 
-**Status:** Proposed Phase 1 plan. Not final until approved.
+**Status:** Approved Phase 1 plan on 2026-11-11.
+**Approval record:** Phase 1 and the Stage A frontend scope were approved on 2026-11-11. Stage A added the `@freshfold/ui` package and a mock-backed Dashboard; it did not change backend business logic, final migrations, the authoritative write path, remote resources, or deployment status. Open decisions remain open unless separately recorded.
 **Sources of truth:** `prompts/master-prompt.md` overrides `docs/laundry-calendar-sync.md`. Deviations are recorded in `docs/adr/`.
-**Scope:** Phase 0 verification and Phase 1 architecture. No application code, final migrations, or authoritative write path are implemented.
+**Scope:** Phase 0 verification, Phase 1 architecture, and the approved Stage A frontend scaffold. Final migrations and the authoritative write path remain governed by their own approval gates.
 
 ---
 

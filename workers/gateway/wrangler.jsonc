@@ -9,7 +9,7 @@
     "head_sampling_rate": 1
   },
   "assets": {
-    "directory": "../../apps/web/public",
+    "directory": "../../apps/web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },

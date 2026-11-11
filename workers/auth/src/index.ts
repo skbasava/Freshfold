@@ -36,8 +36,8 @@ import {
   timingSafeStringEqual,
 } from "./tokens";
 
-export const SESSION_COOKIE = "laundry_session";
-export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const SESSION_COOKIE = "laundry_session";
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 const DUMMY_PASSWORD: StoredPassword = {
   hash: "6vmV5gEuS-Xjt6WEQOAW70JM5VnReXrgQGw8JXWiF8I",
@@ -63,7 +63,7 @@ type AuthContext = Context<{
   Variables: AuthVariables;
 }>;
 
-export function createAuthApp(
+function createAuthApp(
   dependencies: AuthDependencies = { now: Date.now },
 ) {
   const app = new Hono<{

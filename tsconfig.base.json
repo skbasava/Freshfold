@@ -15,7 +15,8 @@
       "@laundry/domain": ["./packages/domain/src/index.ts"],
       "@laundry/shared": ["./packages/shared/src/index.ts"],
       "@laundry/calendar-client": ["./packages/calendar-client/src/index.ts"],
-      "@laundry/notification-client": ["./packages/notification-client/src/index.ts"]
+      "@laundry/notification-client": ["./packages/notification-client/src/index.ts"],
+      "@freshfold/ui": ["./packages/freshfold-ui/src/index.ts"]
     }
   }
 }

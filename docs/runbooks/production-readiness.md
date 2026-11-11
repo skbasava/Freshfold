@@ -44,9 +44,9 @@ No commit, remote resource creation, remote D1 migration, staging deployment, or
 | Calendar permissions | **Met locally** | Only start-time moves are accepted; forbidden title/description/color/recurrence/resize/all-day edits are reverted. No real Google ACL or identity attribution was verified. |
 | Tenant/hub isolation | **Met locally** | Every business query is hub-scoped; cross-hub and cross-tenant tests exist. |
 | Observability and durable failures | **Partially met** | Structured, redacted logs and log-derived metrics exist. No external metrics backend or paging integration exists. |
-| FreshFold UI design system | **Not met / not present** | `packages/freshfold-ui` and the required React dashboard screens are absent; `apps/web/public/index.html` is still a Phase 2 scaffold. This is a production blocker independent of the Worker correctness. |
+| FreshFold UI design system | **Partially met (Stage A)** | Stage A added `packages/freshfold-ui` and a mock-backed Dashboard using the constitutional tokens and shell. Orders, Deliveries, Customers, production API integration, and browser responsive/visual-regression tests are still outstanding; this remains a production blocker. |
 
-**Documentation drift:** The ADR index and architecture pages still describe themselves as "Proposed Phase 1", and some tables drift from current Wrangler configuration (for example, the documented Scheduler service-binding and cron lists are broader than the current config). This does not affect local tests, but it must be reconciled before recording G1 and before an operator relies on those documents during an incident.
+**Documentation drift:** The ADR index now records Phase 1 approval, but several individual architecture pages and ADRs still describe themselves as "Proposed Phase 1", and some tables drift from current Wrangler configuration (for example, the documented Scheduler service-binding and cron lists are broader than the current config). This does not affect local tests, but it must be reconciled before an operator relies on those documents during an incident.
 
 ---
 
@@ -251,7 +251,7 @@ Production approval is blocked by all of the following:
 7. **D1 Time Travel restore and Worker rollback** were not tested.
 8. **CI was not executed** in this review; the workflow exists but its clean-checkout status is unverified.
 9. **Alert paging is not configured**; log-derived alerts have no guaranteed delivery or on-call routing.
-10. **FreshFold UI/package and dashboard screens are absent**; the frontend is still a scaffold.
+10. **FreshFold UI and the Dashboard are a Stage A mock-backed scaffold only**; Orders, Deliveries, Customers, production API integration, and browser responsive/visual-regression coverage remain outstanding.
 11. **No browser E2E or real IndexedDB** verification was performed.
 12. **No load/quota validation** for one-minute Calendar polling, D1 limits, Queue throughput, or provider limits.
 13. **Open decisions OPEN-001..OPEN-010** still require explicit confirmation/deferment.
@@ -281,6 +281,6 @@ Production approval is blocked by all of the following:
 3. Run staging smoke tests for Google Calendar and messaging providers using staging-only credentials.
 4. Execute Worker rollback and D1 Time Travel restore drills.
 5. Wire alerts to an approved on-call/paging destination and calibrate thresholds.
-6. Implement the FreshFold UI package and required screens, then add responsive and visual-regression tests.
+6. Complete the remaining FreshFold screens and production API integration, then add browser responsive and visual-regression tests.
 7. Run the CI workflow on a clean checkout and require it before deployment.
 8. Record explicit production deployment approval separately; this review does not grant it.

@@ -3,6 +3,7 @@ export interface FetchRequestInitLike {
   headers?: Record<string, string>;
   body?: string;
   credentials?: "same-origin" | "include" | "omit";
+  signal?: AbortSignal;
 }
 
 export type FetchLike = (

@@ -1,6 +1,6 @@
 # Laundry ERP Task Plan
 
-**Status:** Proposed Phase 1 task list. No task is approved for implementation yet.
+**Status:** Phase 1 approved on 2026-11-11. Stage A frontend scope approved and implemented on 2026-11-11. Existing task statuses are preserved; production deployment remains separately gated.
 **Rule:** Every task must have explicit acceptance criteria, automated tests, security considerations, and completion evidence. Tests must be executed before a task is marked complete.
 
 Task status values: `pending`, `in_progress`, `blocked`, `done`.
@@ -60,6 +60,10 @@ Task status values: `pending`, `in_progress`, `blocked`, `done`.
 | T-101 | Runbooks | T-100 | 8 |
 | T-110 | Integration and E2E suites | T-060–T-090 | 8 |
 | T-120 | Production readiness review | T-110 | 8 |
+| T-130 | Phase 1 and Stage A approval record | — | Stage A |
+| T-131 | FreshFold UI workspace package | T-130 | Stage A |
+| T-132 | Web scaffold and Dashboard | T-131 | Stage A |
+| T-133 | Stage A verification | T-132 | Stage A |
 
 ---
 
@@ -1067,3 +1071,231 @@ Task status values: `pending`, `in_progress`, `blocked`, `done`.
 **Security considerations:** Final secret and PII review.
 
 **Completion evidence:** Added `docs/runbooks/production-readiness.md` and linked it from the runbook index and top-level README. The review covers architecture invariants, security controls, migrations/rollback, secrets and environment separation, observability/alerting, runbooks, testing evidence, OPEN-001..OPEN-010, and deployment gates G1–G7. Gate status is explicitly **not satisfied**: constitution/plan/tasks and schema/write-path approvals are unrecorded; open decisions are not explicitly confirmed; no staging environment or staging smoke test exists; staging/production resource isolation is unverified; D1 Time Travel restore and Worker rollback were not tested; remote D1/Queues and real Google/messaging providers were not exercised; CI was not executed in this session; alert paging is not configured; and the FreshFold UI package/screens are absent. No production-ready claim is made and no production deployment was performed. **Production approval: NOT GRANTED.** This status records review completion only, not acceptance of T-120's readiness gates.
+
+**Later status note (2026-11-11):** Stage A recorded Phase 1 approval and added the `@freshfold/ui` package plus a mock-backed Dashboard. The production-readiness conclusion and NOT GRANTED status remain unchanged; schema/write-path approvals, the remaining screens, production API integration, staging, and deployment approval are still outstanding.
+
+---
+
+## Stage A: FreshFold frontend scaffold (approved 2026-11-11)
+
+Stage A is limited to frontend, build, static-asset, and documentation work. It does not approve backend business-logic changes, D1 migrations, remote resource creation, or deployment.
+
+### T-130: Phase 1 and Stage A approval record
+
+**Phase:** Stage A
+**Status:** done
+**Description:** Record Phase 1 and Stage A approval in the governing documents without rewriting architectural content or treating open decisions as resolved.
+
+**Files changed:**
+- `specs/constitution.md`
+- `specs/plan.md`
+- `specs/tasks.md`
+- `docs/adr/README.md`
+
+**Acceptance criteria:**
+- Phase 1 approval is recorded with a date.
+- Stage A scope is identified as frontend-only.
+- Open decisions and proposed ADRs remain visibly open.
+
+**Automated tests:** Documentation review only.
+
+**Completion evidence:** Status and approval headers updated on 2026-11-11. The ADR index records Phase 1 approval while preserving each ADR's own decision status.
+
+---
+
+### T-131: FreshFold UI workspace package
+
+**Phase:** Stage A
+**Status:** done
+**Description:** Create the mandatory `@freshfold/ui` workspace package with semantic tokens, Tailwind theme exposure, shared layout, controls, display, feedback, and a stable public API.
+
+**Files changed:**
+- `packages/freshfold-ui/package.json`
+- `packages/freshfold-ui/tsconfig.json`
+- `packages/freshfold-ui/src/styles/tokens.css`
+- `packages/freshfold-ui/src/styles/globals.css`
+- `packages/freshfold-ui/src/components/layout/`
+- `packages/freshfold-ui/src/components/primitives/`
+- `packages/freshfold-ui/src/components/data-display/`
+- `packages/freshfold-ui/src/components/feedback/`
+- `packages/freshfold-ui/src/index.ts`
+
+**Acceptance criteria:**
+- Tokens match the constitution and are exposed through Tailwind.
+- The public API exports layout, controls, display, and feedback components.
+- No backend, Cloudflare binding, or domain business-logic imports exist in the package.
+- Component behavior is covered by jsdom + Testing Library tests.
+
+**Automated tests:** `pnpm test:web` (shared UI suites) and `pnpm typecheck`.
+
+**Completion evidence:** Shared UI tests and the Dashboard suite passed locally (5 files / 34 tests); `pnpm typecheck` passed. The package exports only `@freshfold/ui` paths and CSS style entries.
+
+---
+
+### T-132: Web scaffold and Dashboard
+
+**Phase:** Stage A
+**Status:** done
+**Description:** Scaffold React + TypeScript + Vite + Tailwind in `apps/web`, add the router and FreshFold shell, separate typed mock adapter, Dashboard, and responsive/accessibility states.
+
+**Files changed:**
+- `apps/web/package.json`
+- `apps/web/vite.config.ts`
+- `apps/web/vitest.config.ts`
+- `apps/web/index.html`
+- `apps/web/src/main.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/index.css`
+- `apps/web/src/mocks/`
+- `apps/web/src/features/dashboard/`
+- `apps/web/src/features/shared/`
+- `apps/web/src/hooks/`
+- `apps/web/src/lib/`
+- `workers/gateway/wrangler.jsonc`
+
+**Acceptance criteria:**
+- Dashboard shows summary, attention items, recent orders, and quick actions.
+- Mock data lives in `apps/web/src/mocks/`, not components.
+- Loading, empty, error, offline, pending-sync, conflict, and success states exist.
+- Desktop, tablet, and mobile layouts use the FreshFold tokens.
+- The production build output is served by the Gateway static assets binding.
+
+**Automated tests:** Dashboard screen tests with injected mock API; `pnpm build:web`.
+
+**Completion evidence:** `pnpm build:web` produced `apps/web/dist/index.html`, hashed CSS, and hashed JS. Gateway `assets.directory` now points to `../../apps/web/dist`. The Dashboard suite covers loading, success, empty, error, offline, pending, and conflict states.
+
+---
+
+### T-133: Stage A verification
+
+**Phase:** Stage A
+**Status:** done
+**Description:** Run the full local verification set and record evidence without deploying or committing.
+
+**Acceptance criteria:**
+- `pnpm check` passes, including Workers, shared UI, web tests, web typecheck, and web build.
+- All six Worker dry-runs pass after the Gateway static-asset change.
+- Secret scan finds no real credentials or customer data.
+- `git status --short` is reviewed and no commit is created.
+
+**Automated tests:** The commands listed above.
+
+**Completion evidence:** `pnpm check` passed: all typechecks, root Vitest 55 files / 326 tests, web Vitest 5 files / 34 tests, and `vite build` produced `apps/web/dist` (`index.html`, 27.90 kB CSS, 291.75 kB JS). All six `wrangler deploy --dry-run` commands passed. The Vite dev server returned HTTP 200 for `/`, and the Gateway served the built app locally with `/assets/index-*.js` and `/assets/index-*.css`. The secret regex scan found only the existing intentional Bearer fixture in `tests/unit/notification-client.test.ts`; no real credential was found. `git status --short` was reviewed and no commit was created. Pre-existing uncommitted changes in `workers/auth/src/index.ts` and `tests/workers/module-exports.test.ts` were left untouched.
+
+---
+
+## Stage C: Production API integration, auth and offline UX (approved 2026-11-11)
+
+Stage C is frontend-only. It adds a typed Gateway client, login/session handling, a mock/live adapter switch, offline queue integration, and UI states. It does not change backend business logic, add backend endpoints, apply remote migrations, create remote resources, deploy, or commit.
+
+### T-150: Typed Gateway API client
+
+**Phase:** Stage C
+**Status:** done
+**Description:** Add a typed client under `apps/web/src/api` for auth/session, customers, orders, changes/events, and `apply-change`, separate from the mock adapter.
+
+**Files changed:**
+- `apps/web/src/api/client.ts`
+- `apps/web/src/api/client.test.ts`
+- `apps/web/src/sync/fetch.ts`
+
+**Acceptance criteria:**
+- Login, logout, session bootstrap, customers list/detail, orders list/detail, changes, order events, and apply-change are typed through shared contracts.
+- Requests include credentials and request IDs; state-changing requests include `x-csrf-token`.
+- 401/403/404/409/422/429/5xx, invalid responses, network failures, timeouts, and caller aborts map to a typed error.
+- A version conflict preserves the canonical server order.
+
+**Completion evidence:** `apps/web/src/api/client.test.ts` passes 15 tests covering login/CSRF reuse, cookie CSRF recovery, safe-method exemption, logout, read query construction, error mapping, retry classification, timeout, and caller abort. The CSRF cookie fallback allows a page reload to recover the double-submit token without localStorage.
+
+### T-151: Mock/live adapter switch and fallback isolation
+
+**Phase:** Stage C
+**Status:** done
+**Description:** Add a `VITE_API_MODE` switch and a live adapter that implements the existing UI data contract while keeping missing endpoints isolated.
+
+**Files changed:**
+- `apps/web/src/api/adapters.ts`
+- `apps/web/src/api/types.ts`
+- `apps/web/src/api/mappers.ts`
+- `apps/web/src/api/fallbacks.ts`
+- `apps/web/src/api/context.tsx`
+- `apps/web/src/api/adapters.test.ts`
+- `apps/web/src/db/memory.ts`
+- `apps/web/src/mocks/api.ts`
+- `apps/web/src/mocks/context.tsx`
+- `apps/web/src/mocks/errors.ts`
+- `apps/web/src/mocks/types.ts`
+
+**Acceptance criteria:**
+- Mock mode remains the default and still uses isolated sample data.
+- Live mode uses Gateway endpoints for session, customers, orders, changes, events, and apply-change.
+- Delivery-slot listing and service names are unavailable by default or explicitly labelled demo fallbacks.
+- Customer create/update stays unavailable; customer order history is an explicitly labelled scan of the order list.
+- Client-supplied roles are never trusted in live mode.
+
+**Completion evidence:** `apps/web/src/api/adapters.test.ts` passes 8 tests for config defaults, mock/live separation, mock auth gating, live session/orders/customers reads, fallback capability labels, live CSRF flush, live version-conflict preservation, and provisional offline updates. The live adapter merges IndexedDB-local pending/conflict state into reads and writes canonical server state only after acceptance.
+
+### T-152: Login, session bootstrap and role-aware shell
+
+**Phase:** Stage C
+**Status:** done
+**Description:** Add the FreshFold login screen, session provider, logout, role-aware shell, and reconnect flush wiring.
+
+**Files changed:**
+- `apps/web/src/auth/AuthContext.tsx`
+- `apps/web/src/features/auth/LoginPage.tsx`
+- `apps/web/src/features/auth/LoginPage.test.tsx`
+- `apps/web/src/auth/AuthContext.test.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+
+**Acceptance criteria:**
+- Login uses FreshFold components with labelled fields, visible validation, loading, and safe error messages.
+- Session bootstrap shows loading/error/retry and unauthenticated/login states.
+- Logout clears the session; live roles come only from the server session.
+- Role changes and manager-only actions remain consistent with the backend permission matrix.
+- Pending mutations flush on reconnect.
+
+**Completion evidence:** `LoginPage.test.tsx` (4), `AuthContext.test.tsx` (4) and `App.test.tsx` (2) pass. A server 401 returns the shell to the login screen. The shell hides the mock role switch in live mode, keeps reschedule/cancel manager-only, and flushes the queue on the browser `online` event. No browser E2E or real session cookie flow was run.
+
+### T-153: Offline and conflict UI integration
+
+**Phase:** Stage C
+**Status:** done
+**Description:** Wire the existing IndexedDB mutation queue into create, reschedule, hold/status flows and expose pending/rejected/conflict states without false confirmation.
+
+**Files changed:**
+- `apps/web/src/features/orders/OrderDetailPage.tsx`
+- `apps/web/src/features/orders/OrderDetailPage.test.tsx`
+- `apps/web/src/features/orders/CreateOrderPage.tsx`
+- `apps/web/src/features/orders/CreateOrderPage.test.tsx`
+- `apps/web/src/features/orders/RescheduleDialog.tsx`
+- `apps/web/src/features/dashboard/Dashboard.tsx`
+- `apps/web/src/features/deliveries/DeliveriesPage.tsx`
+- `apps/web/src/features/customers/CustomerDetailPage.tsx`
+
+**Acceptance criteria:**
+- Offline create/update writes the optimistic order and stable mutation before submission.
+- Pending changes are never described as server-confirmed.
+- Rejected and conflicting mutations remain visible for review.
+- Per-order submission order and stable mutation IDs are preserved.
+- Missing delivery-slot/customer-history capabilities are surfaced honestly.
+
+**Completion evidence:** Order detail tests cover provisional status and reschedule changes, rejected mutations, and conflicts. Create-order tests cover offline creation followed by a pending detail view. Existing data-layer tests cover per-order ordering, stable mutation IDs, conflict/rejection preservation, and reconnect flush. Live create/reschedule are blocked with a clear message when delivery slots are unavailable, because the backend has no slot-listing endpoint.
+
+### T-154: Stage C verification
+
+**Phase:** Stage C
+**Status:** done
+**Description:** Run local typecheck, test, build, browser-server, secret-scan and git-status checks without deploying or committing.
+
+**Acceptance criteria:**
+- Web typecheck, web tests, and production build pass.
+- `pnpm check` passes.
+- Local Vite serves the key routes with HTTP 200.
+- Secret scan finds no real credentials.
+- `git status` is reviewed and no commit is created.
+
+**Completion evidence:** `pnpm check` passed: all typechecks; root Vitest 55 files / 326 tests; web Vitest 16 files / 107 tests; `vite build` produced `apps/web/dist/index.html`, 29.37 kB CSS, and 476.24 kB JS. The local Vite server returned HTTP 200 for `/`, `/orders`, `/orders/new`, `/orders/ORD-1042`, `/deliveries`, `/customers`, and `/customers/C-238`. The secret scan found no matches in non-test web/UI source. `git status --short` was reviewed and no commit was created.
+
+Not verified: real browser IndexedDB persistence, real network calls to a running Gateway, real login cookies/CSRF over HTTPS, staging credentials, browser visual regression, or any remote Cloudflare resource. Pre-existing uncommitted repository changes were left untouched.

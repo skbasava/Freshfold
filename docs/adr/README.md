@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-**Status:** Proposed Phase 1 records. Not final until the Phase 1 approval gate is passed.
+**Status:** Phase 1 approved on 2026-11-11. The status column records each decision's own state; ADRs still marked Proposed remain pending their specific business decision and are not silently accepted by the Phase 1 approval.
 
 | ADR | Decision | Status |
 |---|---|---|

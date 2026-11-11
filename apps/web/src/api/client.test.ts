@@ -1,0 +1,293 @@
+import type {
+  ApplyChangeInput,
+  OrderDetail,
+  SessionResponse,
+} from "@laundry/contracts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  GatewayApiError,
+  createCookieCsrfStore,
+  createGatewayClient,
+  createMemoryCsrfStore,
+  readCookieValue,
+  type FetchLike,
+} from "./client";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+const session: SessionResponse = {
+  user: {
+    id: "user-desk",
+    email: "desk@example.com",
+    displayName: "Desk User",
+  },
+  hub: { id: "hub-1", tenantId: "tenant-1" },
+  role: "front_desk",
+};
+
+const order: OrderDetail = {
+  id: "order-1",
+  hubId: "hub-1",
+  customerId: "cust-1",
+  customerName: "Alice",
+  customerPhone: "+919000000001",
+  status: "processing",
+  serviceType: "Wash and fold",
+  deliverySlotId: "slot-1",
+  deliveryAt: 1_000,
+  version: 2,
+  createdAt: 900,
+  updatedAt: 1_000,
+  cancelledAt: null,
+  holdComment: null,
+  customer: {
+    id: "cust-1",
+    hubId: "hub-1",
+    name: "Alice",
+    phone: "+919000000001",
+    notes: null,
+    createdAt: 900,
+    updatedAt: 900,
+  },
+  items: [],
+};
+
+const markProcessing: ApplyChangeInput = {
+  orderId: "order-1",
+  mutationId: "mutation-1",
+  intent: "markProcessing",
+  payload: {},
+  baseVersion: 1,
+};
+
+function fetchCalls(fetchImpl: ReturnType<typeof vi.fn>) {
+  return fetchImpl.mock.calls.map(([input, init]) => ({
+    input: String(input),
+    init: init as {
+      method?: string;
+      headers?: Record<string, string>;
+      body?: string;
+      credentials?: string;
+    },
+  }));
+}
+
+describe("gateway client authentication", () => {
+  it("logs in with credentials, stores the CSRF token and reuses it on writes", async () => {
+    const csrfStore = createMemoryCsrfStore();
+    const fetchImpl = vi.fn<FetchLike>(async (input) => {
+      if (String(input) === "/auth/login") {
+        return jsonResponse({
+          ...session,
+          csrfToken: "csrf-from-login",
+          expiresAt: 2_000,
+        });
+      }
+      if (String(input) === "/api/orders/apply-change") {
+        return jsonResponse({ order, replayed: false });
+      }
+      return jsonResponse({ error: "not_found" }, 404);
+    });
+    const client = createGatewayClient({
+      fetchImpl,
+      csrfStore,
+      requestIdFactory: () => "request-1",
+    });
+
+    const login = await client.login({
+      email: "desk@example.com",
+      password: "correct horse",
+    });
+    const result = await client.applyChange(markProcessing);
+
+    expect(login.role).toBe("front_desk");
+    expect(csrfStore.get()).toBe("csrf-from-login");
+    expect(result.order.id).toBe("order-1");
+
+    const calls = fetchCalls(fetchImpl);
+    expect(calls[0]).toMatchObject({
+      input: "/auth/login",
+      init: {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({
+          email: "desk@example.com",
+          password: "correct horse",
+        }),
+      },
+    });
+    expect(calls[1]?.init.headers).toMatchObject({
+      "content-type": "application/json",
+      "x-csrf-token": "csrf-from-login",
+      "x-request-id": "request-1",
+    });
+    expect(calls[1]?.init.credentials).toBe("include");
+  });
+
+  it("reads the CSRF cookie after a reload", () => {
+    expect(readCookieValue("a=1; laundry_csrf=token-2; b=2", "laundry_csrf")).toBe(
+      "token-2",
+    );
+
+    const store = createCookieCsrfStore({
+      get cookie() {
+        return "laundry_csrf=cookie-token";
+      },
+    });
+    expect(store.get()).toBe("cookie-token");
+  });
+
+  it("does not attach CSRF to safe reads", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(session));
+    const client = createGatewayClient({
+      fetchImpl,
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+
+    await client.getSession();
+
+    const [call] = fetchCalls(fetchImpl);
+    expect(call?.init.method).toBe("GET");
+    expect(call?.init.headers).not.toHaveProperty("x-csrf-token");
+  });
+
+  it("logs out with the CSRF header", async () => {
+    const fetchImpl = vi.fn<FetchLike>(
+      async () => new Response(null, { status: 204 }),
+    );
+    const client = createGatewayClient({
+      fetchImpl,
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+
+    await client.logout();
+
+    const [call] = fetchCalls(fetchImpl);
+    expect(call?.input).toBe("/auth/logout");
+    expect(call?.init.method).toBe("POST");
+    expect(call?.init.headers).toMatchObject({
+      "x-csrf-token": "csrf-token",
+    });
+  });
+});
+
+describe("gateway client read queries", () => {
+  it("builds change-feed and order-event queries", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async (input) => {
+      if (String(input).startsWith("/api/changes")) {
+        return jsonResponse({ changes: [], nextCursor: 5, hasMore: false });
+      }
+      return jsonResponse({ items: [] });
+    });
+    const client = createGatewayClient({ fetchImpl });
+
+    await client.getChanges({ since: 5, limit: 10 });
+    await client.getOrderEvents("order-1", { limit: 20 });
+
+    const calls = fetchCalls(fetchImpl);
+    expect(calls[0]?.input).toBe("/api/changes?since=5&limit=10");
+    expect(calls[1]?.input).toBe("/api/orders/order-1/events?limit=20");
+  });
+});
+
+describe("gateway client error mapping", () => {
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [404, "not_found"],
+    [422, "SLOT_FULL"],
+    [429, "rate_limited"],
+    [500, "internal_error"],
+  ])("maps HTTP %i to a typed error", async (status, code) => {
+    const client = createGatewayClient({
+      fetchImpl: async () =>
+        jsonResponse({ error: code, requestId: "server-request" }, status),
+    });
+
+    await expect(client.getOrder("order-1")).rejects.toMatchObject({
+      name: "GatewayApiError",
+      status,
+      code,
+      requestId: "server-request",
+    });
+  });
+
+  it("preserves the canonical order on a version conflict", async () => {
+    const client = createGatewayClient({
+      fetchImpl: async () =>
+        jsonResponse({ error: "VERSION_CONFLICT", order }, 409),
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+
+    await expect(client.applyChange(markProcessing)).rejects.toMatchObject({
+      status: 409,
+      code: "VERSION_CONFLICT",
+      currentOrder: { id: "order-1", version: 2 },
+    });
+  });
+
+  it("classifies rate limits and server failures as retryable", async () => {
+    const limited = createGatewayClient({
+      fetchImpl: async () => jsonResponse({ error: "rate_limited" }, 429),
+    });
+    const failed = createGatewayClient({
+      fetchImpl: async () => jsonResponse({ error: "internal_error" }, 503),
+    });
+
+    await expect(limited.getOrder("order-1")).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof GatewayApiError && error.retryable,
+    );
+    await expect(failed.getOrder("order-1")).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof GatewayApiError && error.retryable,
+    );
+  });
+});
+
+describe("gateway client cancellation", () => {
+  it("times out a hanging request", async () => {
+    const hanging: FetchLike = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    const client = createGatewayClient({
+      fetchImpl: hanging,
+      timeoutMs: 10,
+    });
+
+    await expect(client.getSession()).rejects.toMatchObject({
+      code: "REQUEST_TIMEOUT",
+      retryable: true,
+    });
+  });
+
+  it("supports caller aborts", async () => {
+    const controller = new AbortController();
+    const hanging: FetchLike = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    const client = createGatewayClient({
+      fetchImpl: hanging,
+      timeoutMs: 10_000,
+    });
+
+    const request = client.getSession({ signal: controller.signal });
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({
+      code: "REQUEST_ABORTED",
+      retryable: true,
+    });
+  });
+});

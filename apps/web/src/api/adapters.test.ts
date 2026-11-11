@@ -1,0 +1,370 @@
+import type {
+  OrderDetail,
+  OrderSummary,
+  SessionResponse,
+} from "@laundry/contracts";
+import { describe, expect, it, vi } from "vitest";
+import { createMemoryStorageBackend } from "../db/memory";
+import { createMockApi } from "../mocks/api";
+import { createMutationQueue, createPendingMutation } from "../sync/mutation-queue";
+import type { LocalOrder } from "../sync/types";
+import {
+  createAppApi,
+  describeGatewayError,
+  readApiConfig,
+  type ApiConfig,
+} from "./adapters";
+import {
+  createMemoryCsrfStore,
+  GatewayApiError,
+  type FetchLike,
+} from "./client";
+
+const session: SessionResponse = {
+  user: {
+    id: "user-manager",
+    email: "manager@example.com",
+    displayName: "Maya Manager",
+  },
+  hub: { id: "hub-1", tenantId: "tenant-1" },
+  role: "manager",
+};
+
+const summary: OrderSummary = {
+  id: "order-1",
+  hubId: "hub-1",
+  customerId: "cust-1",
+  customerName: "Alice",
+  customerPhone: "+919000000001",
+  status: "processing",
+  serviceType: "Wash and fold",
+  deliverySlotId: "slot-1",
+  deliveryAt: Date.parse("2026-11-11T16:00:00+05:30"),
+  version: 2,
+  createdAt: Date.parse("2026-11-11T09:00:00+05:30"),
+  updatedAt: Date.parse("2026-11-11T10:00:00+05:30"),
+  cancelledAt: null,
+  holdComment: null,
+};
+
+const detail: OrderDetail = {
+  ...summary,
+  customer: {
+    id: "cust-1",
+    hubId: "hub-1",
+    name: "Alice",
+    phone: "+919000000001",
+    notes: null,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt,
+  },
+  items: [
+    {
+      id: "item-1",
+      hubId: "hub-1",
+      orderId: "order-1",
+      description: "Shirt",
+      quantity: 2,
+      serviceType: "Wash and fold",
+      createdAt: summary.createdAt,
+    },
+  ],
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function liveFetch(): {
+  fetchImpl: FetchLike;
+  calls: Array<{ input: string; init?: Record<string, unknown> }>;
+} {
+  const calls: Array<{ input: string; init?: Record<string, unknown> }> = [];
+  const fetchImpl: FetchLike = async (input, init) => {
+    calls.push({ input, init: init as Record<string, unknown> });
+    const path = String(input);
+
+    if (path === "/auth/session") {
+      return jsonResponse(session);
+    }
+    if (path.startsWith("/api/orders?") || path === "/api/orders") {
+      return jsonResponse({ items: [summary], nextCursor: null });
+    }
+    if (path === "/api/orders/order-1") {
+      return jsonResponse(detail);
+    }
+    if (path.startsWith("/api/customers?") || path === "/api/customers") {
+      return jsonResponse({ items: [detail.customer], nextCursor: null });
+    }
+    if (path === "/api/customers/cust-1") {
+      return jsonResponse(detail.customer);
+    }
+    if (path === "/api/orders/apply-change") {
+      return jsonResponse({ order: detail, replayed: false });
+    }
+    return jsonResponse({ error: "not_found" }, 404);
+  };
+  return { fetchImpl, calls };
+}
+
+function liveConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
+  return {
+    mode: "live",
+    baseUrl: "",
+    timeoutMs: 1_000,
+    demoFallbacks: false,
+    requireAuth: true,
+    ...overrides,
+  };
+}
+
+describe("API mode configuration", () => {
+  it("defaults to the mock adapter and opts into live explicitly", () => {
+    expect(readApiConfig({})).toMatchObject({
+      mode: "mock",
+      demoFallbacks: false,
+      requireAuth: false,
+    });
+    expect(readApiConfig({ VITE_API_MODE: "live" })).toMatchObject({
+      mode: "live",
+    });
+    expect(readApiConfig({ VITE_API_MODE: "LIVE" }).mode).toBe("live");
+  });
+
+  it("keeps mock and live adapters separate", async () => {
+    const mock = createAppApi(
+      readApiConfig({ VITE_API_MODE: "mock" }),
+    );
+    const { fetchImpl } = liveFetch();
+    const live = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend: createMemoryStorageBackend(),
+    });
+
+    expect(mock.mode).toBe("mock");
+    expect(mock.capabilities).toMatchObject({
+      roleSwitch: true,
+      deliverySlots: "available",
+    });
+    expect((await mock.getSession()).user.name).toBe("Riya Sharma");
+
+    expect(live.mode).toBe("live");
+    expect(live.capabilities).toMatchObject({
+      roleSwitch: false,
+      deliverySlots: "unavailable",
+      customerWrite: "unavailable",
+      customerOrderHistory: "order-scan-fallback",
+    });
+    expect((await live.getSession()).user.name).toBe("Maya Manager");
+  });
+
+  it("requires authentication in mock mode only when configured", async () => {
+    const api = createMockApi({
+      latencyMs: 0,
+      syncIssues: false,
+      authRequired: true,
+    });
+
+    await expect(api.getSession()).rejects.toMatchObject({ status: 401 });
+    const signedIn = await api.login({
+      email: "desk@example.com",
+      password: "demo",
+    });
+    expect(signedIn.user.role).toBe("front_desk");
+    expect((await api.getSession()).user.name).toBe("Riya Sharma");
+
+    await api.logout();
+    await expect(api.getSession()).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe("live adapter reads", () => {
+  it("uses the gateway session, order and customer endpoints", async () => {
+    const { fetchImpl, calls } = liveFetch();
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend: createMemoryStorageBackend(),
+    });
+
+    const signedIn = await api.getSession();
+    const orders = await api.listOrders({ search: "alice" });
+    const order = await api.getOrder("order-1");
+    const customer = await api.getCustomer("cust-1");
+
+    expect(signedIn.user.name).toBe("Maya Manager");
+    expect(orders.items).toHaveLength(1);
+    expect(orders.items[0]).toMatchObject({
+      id: "order-1",
+      customerName: "Alice",
+      totalItems: 2,
+    });
+    expect(order?.customer.name).toBe("Alice");
+    expect(order?.deliverySlot?.label).toContain("4:00");
+    expect(customer?.customer.name).toBe("Alice");
+    expect(customer?.orders.map((entry) => entry.id)).toEqual(["order-1"]);
+    expect(calls.some((call) => call.input === "/auth/session")).toBe(true);
+    expect(calls.some((call) => call.input === "/api/orders/order-1")).toBe(
+      true,
+    );
+  });
+
+  it("marks delivery slots and customer order history as isolated fallbacks", async () => {
+    const { fetchImpl } = liveFetch();
+    const unavailable = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend: createMemoryStorageBackend(),
+    });
+    const fallback = createAppApi(liveConfig({ demoFallbacks: true }), {
+      fetchImpl,
+      backend: createMemoryStorageBackend(),
+    });
+
+    expect((await unavailable.getCreateOrderOptions()).slots).toEqual([]);
+    expect((await fallback.getCreateOrderOptions()).slots.length).toBeGreaterThan(
+      0,
+    );
+    expect(fallback.capabilities.deliverySlots).toBe("demo-fallback");
+  });
+});
+
+describe("live adapter offline queue", () => {
+  it("flushes a pending mutation through the gateway with CSRF", async () => {
+    const { fetchImpl, calls } = liveFetch();
+    const backend = createMemoryStorageBackend();
+    const queue = createMutationQueue(backend);
+    const local: LocalOrder = {
+      id: "order-1",
+      hubId: "hub-1",
+      customerId: "cust-1",
+      customerName: "Alice",
+      customerPhone: "+919000000001",
+      status: "confirmed",
+      serviceType: "Wash and fold",
+      deliverySlotId: "slot-1",
+      deliveryAt: summary.deliveryAt,
+      version: 1,
+      holdComment: null,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+      syncState: "pending",
+    };
+    await queue.enqueueOptimistic(
+      local,
+      createPendingMutation({
+        orderId: "order-1",
+        intent: "markProcessing",
+        payload: {},
+        baseVersion: 1,
+        now: 1_000,
+      }),
+    );
+
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+    await api.syncPendingMutations();
+
+    const applyChange = calls.find(
+      (call) => call.input === "/api/orders/apply-change",
+    );
+    expect(applyChange?.init).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({
+        "x-csrf-token": "csrf-token",
+      }),
+    });
+    expect(await api.getPendingCount()).toBe(0);
+    expect(await backend.getOrder("order-1")).toMatchObject({
+      syncState: "synced",
+      status: "processing",
+      version: 2,
+    });
+  });
+
+  it("preserves a live version conflict and exposes the canonical order", async () => {
+    const fetchImpl: FetchLike = async (input, init) => {
+      const path = String(input);
+      if (path === "/auth/session") {
+        return jsonResponse(session);
+      }
+      if (path === "/api/orders/order-1" && init?.method === "GET") {
+        return jsonResponse(detail);
+      }
+      if (path === "/api/orders/apply-change") {
+        return jsonResponse(
+          {
+            error: "VERSION_CONFLICT",
+            order: { ...detail, version: 3, status: "hold" },
+          },
+          409,
+        );
+      }
+      return jsonResponse({ error: "not_found" }, 404);
+    };
+    const backend = createMemoryStorageBackend();
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+
+    await expect(
+      api.applyOrderIntent("order-1", "markProcessing", {}, 2),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "VERSION_CONFLICT",
+      currentOrder: { id: "order-1", syncState: "conflict" },
+    });
+
+    const mutations = await createMutationQueue(backend).listMutations(
+      "order-1",
+    );
+    expect(mutations[0]?.status).toBe("conflict");
+    expect((await backend.getOrder("order-1"))?.syncState).toBe("conflict");
+  });
+
+  it("keeps an offline update provisional and preserves its mutation id", async () => {
+    const { fetchImpl } = liveFetch();
+    const backend = createMemoryStorageBackend();
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      csrfStore: createMemoryCsrfStore("csrf-token"),
+    });
+
+    const updated = await api.applyOrderIntent(
+      "order-1",
+      "markProcessing",
+      {},
+      2,
+      { online: false },
+    );
+
+    expect(updated.syncState).toBe("pending");
+    expect(updated.status).toBe("processing");
+    const mutations = await createMutationQueue(backend).listMutations(
+      "order-1",
+    );
+    expect(mutations).toHaveLength(1);
+    expect(mutations[0]?.mutationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+  });
+});
+
+describe("gateway error messages", () => {
+  it("explains when the local gateway is unreachable", () => {
+    expect(
+      describeGatewayError(
+        new GatewayApiError({ status: 0, code: "NETWORK_ERROR" }),
+      ),
+    ).toBe(
+      "Cannot reach the local Gateway. Start the backend with `pnpm dev:live` and try again.",
+    );
+  });
+});

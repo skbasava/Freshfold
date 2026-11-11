@@ -1,6 +1,7 @@
 # Laundry ERP Constitution
 
-**Status:** Proposed Phase 1 specification. Not final until approved.
+**Status:** Approved Phase 1 specification on 2026-11-11.
+**Approval record:** Phase 1 and the Stage A frontend scope were approved by the project owner on 2026-11-11. This approval does not by itself resolve open business decisions, finalise production migrations, or authorise a production deployment.
 **Authority:** `prompts/master-prompt.md` overrides `docs/laundry-calendar-sync.md` wherever they conflict. Each deviation is recorded in `docs/adr/`.
 
 This constitution defines immutable architecture and security rules. Changes require an explicit amendment and an ADR. Implementation plans and tasks must comply with every clause.
