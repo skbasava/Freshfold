@@ -61,14 +61,26 @@ describe("LoginPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Continue with Google" }),
-    ).toBeInTheDocument();
+    const googleButton = screen.getByRole("button", {
+      name: "Continue with Google",
+    });
+    expect(googleButton).toBeInTheDocument();
+    expect(googleButton).toBeEnabled();
+    expect(googleButton.querySelector("svg")).toBeInTheDocument();
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /forgot password/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a calm invite-only staff notice when Supabase auth is active", async () => {
+    renderLogin({ authClient: supabaseClient() });
+
+    expect(
+      await screen.findByText("Restricted to approved hub staff"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Demo mode")).not.toBeInTheDocument();
   });
 
   it("signs in with Google demo mode", async () => {

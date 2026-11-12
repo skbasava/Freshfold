@@ -6,19 +6,25 @@ export interface AuthLayoutProps {
   aside?: ReactNode;
 }
 
-export function FreshFoldBrandMark() {
+export function FreshFoldBrandMark({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-primary text-surface shadow-card">
+    <div className="inline-flex items-center gap-3">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary text-surface shadow-card">
         <SparkleIcon className="h-5 w-5" />
       </span>
-      <span className="flex flex-col">
-        <span className="text-lg font-semibold tracking-tight text-text">
+      <span className="flex flex-col text-left">
+        <span className="text-lg font-semibold leading-tight tracking-tight text-text">
           FreshFold
         </span>
-        <span className="text-xs font-medium text-text-muted">
-          Hub operations workspace
-        </span>
+        {!compact ? (
+          <span className="text-xs font-medium text-text-muted">
+            Hub operations
+          </span>
+        ) : null}
       </span>
     </div>
   );
@@ -27,13 +33,13 @@ export function FreshFoldBrandMark() {
 export function AuthLayout({ children, aside }: AuthLayoutProps) {
   if (!aside) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 py-10">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 py-10 sm:px-6 sm:py-14">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-28 right-1/4 h-72 w-72 rounded-full bg-primary/5 blur-3xl"
+          className="pointer-events-none absolute top-0 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl sm:h-96 sm:w-96"
         />
         <div className="relative w-full max-w-md">
-          <div className="mb-6 flex justify-center">
+          <div className="mb-7 flex justify-center">
             <FreshFoldBrandMark />
           </div>
           {children}
