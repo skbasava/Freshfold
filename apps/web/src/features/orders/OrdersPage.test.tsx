@@ -78,6 +78,19 @@ describe("OrdersPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows an onboarding empty state when no orders exist yet", async () => {
+    renderOrders(
+      createMockApi({ latencyMs: 0, empty: true }),
+    );
+
+    expect(
+      await screen.findByText("No orders yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "New order" }).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
   it("shows pending, conflict and rejected sync states", async () => {
     renderOrders(
       createMockApi({ latencyMs: 0, syncIssues: true }),

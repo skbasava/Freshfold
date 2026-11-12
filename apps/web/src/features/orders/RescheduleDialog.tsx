@@ -1,6 +1,8 @@
 import {
   Alert,
   Button,
+  CalendarIcon,
+  EmptyState,
   LoadingState,
   Modal,
   Select,
@@ -172,18 +174,27 @@ export function RescheduleDialog({
       ) : null}
 
       {!loading && !loadError && !deliveryTimesUnavailable ? (
-        <Select
-          label="New delivery time"
-          placeholder="Choose a new time"
-          value={slotId}
-          onChange={(event) => setSlotId(event.target.value)}
-          options={slots.map((slot) => ({
-            value: slot.id,
-            label: slotLabel(slot),
-            disabled: slot.status !== "open",
-          }))}
-          error={fieldError}
-        />
+        slots.length === 0 ? (
+          <EmptyState
+            compact
+            icon={<CalendarIcon className="h-5 w-5" />}
+            title="No delivery times available"
+            description="There are no open delivery slots to move this order to."
+          />
+        ) : (
+          <Select
+            label="New delivery time"
+            placeholder="Choose a new time"
+            value={slotId}
+            onChange={(event) => setSlotId(event.target.value)}
+            options={slots.map((slot) => ({
+              value: slot.id,
+              label: slotLabel(slot),
+              disabled: slot.status !== "open",
+            }))}
+            error={fieldError}
+          />
+        )
       ) : null}
     </Modal>
   );

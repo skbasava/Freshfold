@@ -23,22 +23,22 @@ pnpm check
 - `pnpm test` runs Vitest in the Workers runtime
 - `pnpm test:web` runs the jsdom + Testing Library web suite
 - `pnpm build:web` builds `apps/web/dist` for the Gateway static assets
-- `pnpm dev:web` starts the Vite development server with mock data
-- `pnpm dev:live` starts Auth, Laundry, Gateway, Notifications, and Scheduler, plus live Vite; Calendar starts only when Google credentials are configured
+- `pnpm dev:web` starts the Vite development server in live mode (`VITE_API_MODE=live` in `apps/web/.env.development`; use `VITE_API_MODE=mock pnpm dev:web` for isolated mock data)
+- `pnpm dev:live` starts Laundry, Gateway (Supabase Auth for both authentication and authorization), Notifications, and Scheduler without requiring a web build, plus live Vite; Calendar starts only when Google credentials are configured
 - `pnpm dev:<worker>` starts one Worker locally on its fixed port
 
 ## Frontend API modes
 
-The web app defaults to the isolated mock adapter so the demo keeps working without a backend. For live data, run the local stack with `pnpm dev:live`; it starts Auth, Laundry, Gateway, Notifications, and Scheduler, starts Calendar when Google credentials are configured, and runs Vite in live mode. When Google is ready it also triggers an outbox sweep and calendar reconciliation. See `docs/runbooks/local-development.md` for ports and manual startup.
+Vite development (`pnpm dev:web`) defaults to live mode via `apps/web/.env.development`, while production builds without `VITE_API_MODE=live` and unit defaults fall back to the isolated mock adapter. For the full local stack, run `pnpm dev:live`; it starts Laundry, Gateway, Notifications, and Scheduler without needing `apps/web/dist`, starts Calendar when Google credentials are configured, redirects `http://localhost:8787` browser visits to Vite at `http://localhost:5173`, and runs Vite in live mode. When Google is ready it also triggers an outbox sweep and calendar reconciliation. See `docs/runbooks/local-development.md` for ports and manual startup.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `VITE_API_MODE` | `mock` | `mock` uses `src/mocks/`; `live` uses the typed Gateway client in `src/api/`. |
-| `VITE_API_BASE_URL` | empty (same origin) | Optional Gateway origin. Cookies still require a same-site deployment or proxy. |
+| `VITE_API_BASE_URL` | empty (same origin) | Optional Gateway origin. |
 | `VITE_API_TIMEOUT_MS` | `15000` | Per-request timeout; requests also accept caller aborts. |
-| `VITE_REQUIRE_AUTH` | `false` | Mock mode only: requires the sample login screen before the demo. Live mode always requires a server session. |
+| `VITE_REQUIRE_AUTH` | `false` | Mock mode only: requires the sample login screen before the demo. Live mode always requires a verified Supabase session. |
 | `VITE_ENABLE_DEMO_FALLBACKS` | `false` | Live mode only: uses clearly labelled sample delivery slots and service names because those read endpoints do not exist yet. |
-| `VITE_SUPABASE_URL` | empty | Public Supabase project URL. When set with an anon key, the app uses Supabase Auth; otherwise it falls back to the local legacy Auth Worker. |
+| `VITE_SUPABASE_URL` | empty | Public Supabase project URL used for live PKCE sign-in and Google OAuth. |
 | `VITE_SUPABASE_ANON_KEY` | empty | Public anon key only. A service-role or `sb_secret_*` key is rejected at startup. |
 | `VITE_SUPABASE_REDIRECT_URL` | empty | Password-reset and invitation redirect, normally `https://<host>/reset-password`. Configure the same URL in the Supabase project. |
 | `VITE_GOOGLE_CALENDAR_EMBED_URL` | empty | Full Google Calendar iframe URL. Takes precedence over the calendar ID. |
@@ -58,11 +58,11 @@ The dashboard iframe is only a view. Delivery orders are written to Google Calen
 
 New orders enqueue calendar events after commit. Existing orders may need the reconciliation/backfill run; `pnpm dev:live` triggers it when Google is ready. The calendar must also be publicly embeddable for the dashboard iframe.
 
-When the public Supabase values are configured, live mode signs in through Supabase Auth with PKCE, sends `Authorization: Bearer <access_token>` to Gateway `/api/*`, and bootstraps the server-owned role and hub from `GET /api/me`. Without them, local development falls back to the legacy Auth Worker (`POST /auth/login`, `GET /auth/session`, CSRF on writes, `POST /auth/logout`); staging and production disable that fallback. Roles always come from the server membership response, never client claims, and the mock role switch is hidden in live mode. See `docs/runbooks/supabase-auth.md` for redirect, staging/production isolation, session, and offline-cache rules.
+Live mode signs in exclusively through Supabase Auth with PKCE (including Google OAuth), sends `Authorization: Bearer <access_token>` to Gateway `/api/*`, and bootstraps the staff session (`role`, `tenantId`, `hubId`) from `GET /api/me`. There is no legacy Auth Worker or `AUTH_DB`; the Gateway verifies the Supabase JWT against JWKS and derives staff role, tenant, hub, and active status solely from server-controlled `app_metadata` / Custom Access Token Auth Hook claims (`user_metadata` and built-in `"authenticated"` roles are never trusted for authorization). See `docs/runbooks/supabase-auth.md` for redirect, claim setup, staging/production isolation, session, and offline-cache rules.
 
 ### Validate Supabase Auth
 
-Follow the [end-to-end validation checklist](docs/runbooks/supabase-auth.md#end-to-end-validation) to configure a Supabase project, seed a local employee membership, verify bearer authentication, run negative/JWKS/session checks, and validate staging before production approval. Never put a service-role key in the browser.
+Follow the [end-to-end validation checklist](docs/runbooks/supabase-auth.md#end-to-end-validation) to configure a Supabase project, set `app_metadata` claims (`role`, `tenant_id`, `hub_id`) on the staff user, seed the matching tenant/hub in local `LAUNDRY_DB`, verify bearer authentication, run negative/JWKS/session checks, and validate staging before production approval. Never put a service-role key in the browser.
 
 Missing backend endpoints stay isolated:
 
@@ -88,11 +88,11 @@ CONFIRM_PRODUCTION=DEPLOY_PRODUCTION pnpm deploy:cloudflare production
 Before deploying:
 
 - Authenticate Wrangler with `pnpm exec wrangler login` and confirm with `pnpm exec wrangler whoami`.
-- Replace the placeholder D1 `database_id` values in the auth and Laundry Wrangler configs. The script refuses to deploy while either remains `00000000-0000-0000-0000-000000000000`.
+- Replace the placeholder D1 `database_id` value in the Laundry Wrangler config (`workers/laundry/wrangler.jsonc`). The script refuses to deploy while it remains `00000000-0000-0000-0000-000000000000`.
 - Use environment-specific `workers/<worker>/wrangler.<environment>.jsonc` files when they exist; otherwise the script uses `workers/<worker>/wrangler.jsonc`.
 - Set `GATEWAY_HEALTH_URL` to run an optional post-deploy health check.
 
-The script runs `pnpm check` and `pnpm build:web` unless `--skip-checks` is passed. It deploys auth, Laundry, Calendar, Notifications, and Scheduler first, then the Gateway. It never deploys to production without `CONFIRM_PRODUCTION=DEPLOY_PRODUCTION`.
+The script runs `pnpm check` and `pnpm build:web` unless `--skip-checks` is passed. It deploys Laundry, Calendar, Notifications, and Scheduler first, then the Gateway. It never deploys to production without `CONFIRM_PRODUCTION=DEPLOY_PRODUCTION`.
 
 ## Layout
 

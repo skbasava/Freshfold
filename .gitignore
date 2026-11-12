@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 .wrangler/
+workers/gateway/.wrangler-live.json
 dist/
 coverage/
 .dev.vars

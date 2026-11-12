@@ -1,7 +1,4 @@
 ENVIRONMENT=development
-# Local/legacy Auth Worker fallback only. Gateway disables it in staging and production.
-AUTH_FALLBACK_ENABLED=true
-AUTH_SESSION_SECRET=replace-me
 INTERNAL_CONTEXT_SECRET=replace-with-at-least-32-characters
 INTERNAL_CONTEXT_KEY_ID=v1
 SERVICE_TOKEN=replace-with-at-least-32-characters
@@ -14,7 +11,8 @@ WHATSAPP_PHONE_NUMBER_ID=replace-me
 SMS_API_TOKEN=replace-me
 SMS_API_URL=https://sms.example.invalid/messages
 SMS_SENDER_ID=replace-me
-# Supabase Auth server configuration. Use a separate project per environment.
+# Supabase Auth server configuration (authn + JWT app_metadata/custom claim authz).
+# Use a separate project per environment.
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_JWKS_URL=https://your-project-ref.supabase.co/auth/v1/.well-known/jwks.json
 SUPABASE_JWT_ISSUER=https://your-project-ref.supabase.co/auth/v1

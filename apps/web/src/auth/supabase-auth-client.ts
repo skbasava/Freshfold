@@ -1,5 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { SupabaseAuthConfig } from "./supabase-config";
+import {
+  defaultOAuthCallbackUrl,
+  type SupabaseAuthConfig,
+} from "./supabase-config";
 import type {
   AuthClient,
   AuthClientErrorCode,
@@ -41,6 +44,18 @@ export interface SupabaseAuthLike {
       SupabaseResponse<{
         session: SupabaseSessionLike | null;
         user: SupabaseSessionLike["user"] | null;
+      }>
+    >;
+    signInWithOAuth(input: {
+      provider: "google";
+      options?: {
+        redirectTo?: string;
+        queryParams?: Record<string, string>;
+      };
+    }): Promise<
+      SupabaseResponse<{
+        provider: string;
+        url: string | null;
       }>
     >;
     signOut(): Promise<{ error: SupabaseAuthErrorLike | null }>;
@@ -101,6 +116,15 @@ function mapError(error: SupabaseAuthErrorLike | null): AuthClientError {
     return new AuthClientError(
       "email_not_confirmed",
       "Check your email to confirm your account before signing in.",
+    );
+  }
+  if (
+    code.includes("access_denied") ||
+    /access_denied/i.test(message)
+  ) {
+    return new AuthClientError(
+      "oauth_denied",
+      "Google sign-in was cancelled. Try again when you are ready.",
     );
   }
   if (
@@ -205,6 +229,22 @@ export function createSupabaseAuthClient(
           "provider_unavailable",
           "The sign-in service did not return a session.",
         );
+      }
+    },
+
+    async signInWithGoogle(redirectTo) {
+      const targetRedirect = redirectTo ?? defaultOAuthCallbackUrl();
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          ...(targetRedirect ? { redirectTo: targetRedirect } : {}),
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+      if (error) {
+        throw mapError(error);
       }
     },
 

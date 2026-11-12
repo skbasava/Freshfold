@@ -6,6 +6,7 @@ import {
 } from "cloudflare:test";
 import type { D1Migration } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { sessionResponseSchema } from "../../packages/contracts/src/auth";
 import {
   INTERNAL_CONTEXT_HEADER,
   INTERNAL_KEY_ID_HEADER,
@@ -19,7 +20,6 @@ import { clearLaundryData, seedLaundryReadFixtures } from "../helpers/laundry-db
 import {
   createTestKey,
   jwksFetch,
-  seedEmployee,
   signSupabaseToken,
   SUPABASE_AUDIENCE,
   SUPABASE_ISSUER,
@@ -66,40 +66,15 @@ function createLaundryBinding(captured: Request[]): Fetcher {
   } as Fetcher;
 }
 
-function createAuthFallbackBinding(): Fetcher {
-  return {
-    fetch: async (request: Request) => {
-      if (!request.url.endsWith("/internal/session")) {
-        return Response.json({ error: "not_found" }, { status: 404 });
-      }
-      const cookie = request.headers.get("cookie") ?? "";
-      if (!cookie.includes("laundry_session=legacy-session")) {
-        return Response.json({ error: "unauthorized" }, { status: 401 });
-      }
-      return Response.json({
-        actorId: "legacy-user",
-        actorType: "user",
-        role: "front_desk",
-        tenantId: "tenant-1",
-        hubId: "hub-1",
-        exp: SUPABASE_NOW_MS + 60_000,
-      });
-    },
-  } as Fetcher;
-}
-
 function bindings(
   jwks: ReturnType<typeof jwksFetch>,
   captured: Request[],
   overrides: Partial<GatewayBindings> = {},
 ): GatewayBindings {
   return {
-    AUTH: createAuthFallbackBinding(),
     LAUNDRY: createLaundryBinding(captured),
-    SERVICE_TOKEN,
     INTERNAL_CONTEXT_SECRET,
     INTERNAL_CONTEXT_KEY_ID: "v1",
-    LOGIN_RATE_LIMITER: permissiveLimiter(),
     MUTATION_RATE_LIMITER: permissiveLimiter(),
     SUPABASE_JWKS_URL,
     SUPABASE_JWT_ISSUER: SUPABASE_ISSUER,
@@ -126,28 +101,6 @@ function bearer(token: string): RequestInit {
   return { headers: { authorization: `Bearer ${token}` } };
 }
 
-async function seedDesk(): Promise<void> {
-  await seedEmployee(db, {
-    id: "employee-desk",
-    subject: "subject-desk",
-    email: "desk@example.com",
-    memberships: [
-      { tenantId: "tenant-1", hubId: "hub-1", role: "front_desk" },
-    ],
-  });
-}
-
-async function seedManager(): Promise<void> {
-  await seedEmployee(db, {
-    id: "employee-manager",
-    subject: "subject-manager",
-    email: "manager@example.com",
-    memberships: [
-      { tenantId: "tenant-1", hubId: "hub-1", role: "manager" },
-    ],
-  });
-}
-
 function applyCancelBody(): string {
   return JSON.stringify({
     orderId: "order-1",
@@ -168,9 +121,8 @@ beforeEach(async () => {
   await seedLaundryReadFixtures(db);
 });
 
-describe("gateway Supabase bearer authentication", () => {
-  it("derives identity from the verified JWT and Laundry membership", async () => {
-    await seedDesk();
+describe("gateway Supabase bearer authentication and authorization", () => {
+  it("derives identity and authorization from the verified JWT without calling Laundry D1 for authz", async () => {
     const jwks = jwksFetch([key]);
     const captured: Request[] = [];
     const token = await signSupabaseToken(key, testClaims());
@@ -191,17 +143,9 @@ describe("gateway Supabase bearer authentication", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(captured).toHaveLength(2);
-    const resolution = captured[0];
-    expect(resolution?.url).toBe(
-      "https://laundry.internal/internal/auth/resolve-membership",
-    );
-    expect(resolution?.method).toBe("POST");
-    expect(resolution?.headers.get("x-service-token")).toBe(SERVICE_TOKEN);
-    expect(resolution?.headers.get("x-service-name")).toBe("gateway");
-    expect(resolution?.headers.get("authorization")).toBeNull();
+    expect(captured).toHaveLength(1);
 
-    const forwarded = captured[1];
+    const forwarded = captured[0];
     expect(forwarded?.url).toBe("https://laundry.internal/api/orders");
     expect(forwarded?.headers.get("authorization")).toBeNull();
     expect(forwarded?.headers.get("cookie")).toBeNull();
@@ -221,7 +165,7 @@ describe("gateway Supabase bearer authentication", () => {
       return;
     }
     expect(verified.context).toMatchObject({
-      actorId: "employee-desk",
+      actorId: "subject-desk",
       actorType: "user",
       role: "front_desk",
       tenantId: "tenant-1",
@@ -229,8 +173,7 @@ describe("gateway Supabase bearer authentication", () => {
     });
   });
 
-  it("serves /api/me from the resolved membership", async () => {
-    await seedDesk();
+  it("serves /api/me matching SessionResponse contract from verified JWT claims", async () => {
     const token = await signSupabaseToken(key, testClaims());
 
     const response = await requestGateway(
@@ -240,17 +183,22 @@ describe("gateway Supabase bearer authentication", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      actorId: "employee-desk",
-      actorType: "user",
+    const parsed = sessionResponseSchema.parse(await response.json());
+    expect(parsed).toEqual({
+      user: {
+        id: "subject-desk",
+        email: "desk@example.com",
+        displayName: "Desk User",
+      },
+      hub: {
+        id: "hub-1",
+        tenantId: "tenant-1",
+      },
       role: "front_desk",
-      tenantId: "tenant-1",
-      hubId: "hub-1",
     });
   });
 
   it("rejects missing, malformed, expired, and tampered tokens", async () => {
-    await seedDesk();
     const jwks = jwksFetch([key]);
     const envBindings = bindings(jwks, []);
     const expired = await signSupabaseToken(
@@ -292,7 +240,6 @@ describe("gateway Supabase bearer authentication", () => {
   });
 
   it("rejects wrong issuer, audience, and algorithm", async () => {
-    await seedDesk();
     const envBindings = bindings(jwksFetch([key]), []);
     const wrongIssuer = await signSupabaseToken(
       key,
@@ -318,7 +265,6 @@ describe("gateway Supabase bearer authentication", () => {
   });
 
   it("fails closed when JWKS retrieval fails", async () => {
-    await seedDesk();
     const token = await signSupabaseToken(key, testClaims());
     const failingJwks = {
       calls: [] as string[],
@@ -340,38 +286,74 @@ describe("gateway Supabase bearer authentication", () => {
     });
   });
 
-  it("denies inactive, revoked, and unknown employees even with a valid JWT", async () => {
-    await seedEmployee(db, {
-      id: "employee-inactive",
-      subject: "subject-inactive",
-      status: "inactive",
-      memberships: [
-        { tenantId: "tenant-1", hubId: "hub-1", role: "front_desk" },
-      ],
-    });
-    await seedEmployee(db, {
-      id: "employee-revoked",
-      subject: "subject-revoked",
-      status: "revoked",
-      memberships: [
-        { tenantId: "tenant-1", hubId: "hub-1", role: "manager" },
-      ],
-    });
+  it("denies inactive, revoked, missing, and user_metadata-only claims with 403", async () => {
     const envBindings = bindings(jwksFetch([key]), []);
 
     const inactive = await requestGateway(
       "/api/me",
-      bearer(await signSupabaseToken(key, testClaims({ sub: "subject-inactive" }))),
+      bearer(
+        await signSupabaseToken(
+          key,
+          testClaims({
+            sub: "subject-inactive",
+            app_metadata: {
+              role: "front_desk",
+              tenant_id: "tenant-1",
+              hub_id: "hub-1",
+              status: "inactive",
+            },
+          }),
+        ),
+      ),
       envBindings,
     );
     const revoked = await requestGateway(
       "/api/me",
-      bearer(await signSupabaseToken(key, testClaims({ sub: "subject-revoked" }))),
+      bearer(
+        await signSupabaseToken(
+          key,
+          testClaims({
+            sub: "subject-revoked",
+            app_metadata: {
+              role: "manager",
+              tenant_id: "tenant-1",
+              hub_id: "hub-1",
+              status: "revoked",
+            },
+          }),
+        ),
+      ),
       envBindings,
     );
     const missing = await requestGateway(
       "/api/me",
-      bearer(await signSupabaseToken(key, testClaims({ sub: "subject-missing" }))),
+      bearer(
+        await signSupabaseToken(
+          key,
+          testClaims({
+            sub: "subject-missing",
+            app_metadata: {},
+          }),
+        ),
+      ),
+      envBindings,
+    );
+    const userMetaSpoof = await requestGateway(
+      "/api/me",
+      bearer(
+        await signSupabaseToken(
+          key,
+          testClaims({
+            sub: "subject-spoof",
+            app_metadata: {},
+            user_metadata: {
+              role: "manager",
+              tenant_id: "tenant-1",
+              hub_id: "hub-1",
+            },
+          }),
+        ),
+      ),
       envBindings,
     );
 
@@ -387,14 +369,25 @@ describe("gateway Supabase bearer authentication", () => {
     expect(await missing.json()).toMatchObject({
       code: "membership_missing",
     });
+    expect(userMetaSpoof.status).toBe(403);
+    expect(await userMetaSpoof.json()).toMatchObject({
+      code: "membership_missing",
+    });
   });
 
   it("allows manager mutations without CSRF and denies front-desk mutations", async () => {
-    await seedManager();
     const jwks = jwksFetch([key]);
     const managerToken = await signSupabaseToken(
       key,
-      testClaims({ sub: "subject-manager" }),
+      testClaims({
+        sub: "subject-manager",
+        app_metadata: {
+          role: "manager",
+          tenant_id: "tenant-1",
+          hub_id: "hub-1",
+          status: "active",
+        },
+      }),
     );
     const managerResponse = await requestGateway(
       "/api/orders/apply-change",
@@ -415,13 +408,6 @@ describe("gateway Supabase bearer authentication", () => {
     }>();
     expect(managerBody.order.status).toBe("cancelled");
 
-    await seedEmployee(db, {
-      id: "employee-desk-2",
-      subject: "subject-desk-2",
-      memberships: [
-        { tenantId: "tenant-1", hubId: "hub-1", role: "front_desk" },
-      ],
-    });
     const deskToken = await signSupabaseToken(
       key,
       testClaims({ sub: "subject-desk-2" }),
@@ -449,25 +435,8 @@ describe("gateway Supabase bearer authentication", () => {
     expect(await deskResponse.json()).toMatchObject({ error: "FORBIDDEN" });
   });
 
-  it("does not downgrade an invalid bearer token to the local cookie fallback", async () => {
-    await seedDesk();
-    const response = await requestGateway(
-      "/api/me",
-      {
-        headers: {
-          authorization: "Bearer not-a-jwt",
-          cookie: "laundry_session=legacy-session",
-        },
-      },
-      bindings(jwksFetch([key]), []),
-    );
-
-    expect(response.status).toBe(401);
-    expect(await response.json()).toMatchObject({ code: "invalid_token" });
-  });
-
-  it("keeps the Auth Worker fallback local-only", async () => {
-    for (const environment of ["staging", "production"]) {
+  it("does not accept legacy cookies or /auth/* endpoints in any environment", async () => {
+    for (const environment of ["development", "staging", "production"]) {
       const envBindings = bindings(jwksFetch([key]), [], {
         ENVIRONMENT: environment,
       });

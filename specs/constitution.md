@@ -2,7 +2,7 @@
 
 **Status:** Approved Phase 1 specification on 2026-11-11.
 **Approval record:** Phase 1 and the Stage A frontend scope were approved by the project owner on 2026-11-11. This approval does not by itself resolve open business decisions, finalise production migrations, or authorise a production deployment.
-**Supabase Auth amendment:** Approved 2026-11-11 with ADR-014 for Phase B implementation. Production deployment remains separately gated. See §13.
+**Supabase Auth amendment:** Approved 2026-11-11 with ADR-014; amended 2026-11-12 with ADR-015 to remove the Auth Worker, `AUTH_DB`, and D1 employee/membership tables and use Supabase Auth for both authentication and authorization. Production deployment remains separately gated. See §13.
 **Authority:** `prompts/master-prompt.md` overrides `docs/laundry-calendar-sync.md` wherever they conflict. Each deviation is recorded in `docs/adr/`.
 
 This constitution defines immutable architecture and security rules. Changes require an explicit amendment and an ADR. Implementation plans and tasks must comply with every clause.
@@ -23,13 +23,11 @@ Prohibited: Workers KV, PostgreSQL, MySQL, MongoDB, any external database, Redis
 
 ## 2. Single D1 owner
 
-Only the Laundry Worker holds the `LAUNDRY_DB` D1 binding. Gateway, Auth, Calendar, Notification, and Scheduler Workers must not access `LAUNDRY_DB` directly.
+Only the Laundry Worker holds the `LAUNDRY_DB` D1 binding. Gateway, Calendar, Notification, and Scheduler Workers must not access `LAUNDRY_DB` directly.
 
-The Auth Worker may own a separate `AUTH_DB` for identity and sessions. That database is not an order source of truth.
+Staff authentication, session validation, and staff authorization (`role`, `tenantId`, `hubId`) are provided by Supabase Auth under §13 and ADR-015. The legacy Auth Worker and `AUTH_DB` have been removed.
 
-Production staff identity is provided by Supabase Auth under §13. The Auth Worker and `AUTH_DB` are legacy/local-development fallback only; they MUST NOT operate as a parallel production identity source and are retired after migration.
-
-**Enforcement:** binding matrix review and a repository check that only `workers/laundry/wrangler.jsonc` contains the laundry D1 binding.
+**Enforcement:** binding matrix review and a repository check that only `workers/laundry/wrangler.jsonc` contains a D1 binding (`LAUNDRY_DB`).
 
 ## 3. Single write path
 
@@ -109,39 +107,36 @@ Every business read and write is scoped by trusted tenant and hub context. Clien
 
 **Enforcement:** authorization tests, cross-tenant access tests, and query review.
 
-## 13. External Identity Provider — Supabase Auth (Approved Amendment)
+## 13. External Identity & Authorization Provider — Supabase Auth (Approved Amendment, ADR-015)
 
-**Status:** Approved Phase A amendment on 2026-11-11 with ADR-014. Phase B implementation is authorized; production deployment requires separate approval.
+**Status:** Amended 2026-11-12 with ADR-015. Production deployment requires separate approval.
 
 ### Authentication
 
-- Supabase Auth is the approved external staff identity provider.
-- Supabase manages staff credentials, authentication sessions, password recovery and identity records.
-- Supabase is not an application database and MUST NOT store business records.
-- Public employee signup MUST be disabled. Employee onboarding MUST use administrator-controlled invitations.
+- Supabase Auth is the sole staff authentication and session provider.
+- Supabase manages staff credentials, authentication sessions, OAuth, and password recovery.
+- Supabase is not an application database and MUST NOT store business records (orders, customers, delivery slots, audit events, outbox rows).
+- Public employee signup MUST be disabled. Employee onboarding MUST use administrator-controlled invitations or approved Google Workspace SSO accounts.
 
 ### Authorization
 
-- Cloudflare Workers MUST verify Supabase access tokens using trusted JWKS and validated claims: signature, issuer, audience, expiry, not-before, key ID and an explicit algorithm allow-list.
+- Cloudflare Workers MUST verify Supabase access tokens using trusted JWKS and validated claims: signature, issuer, audience, expiry, not-before, key ID and an explicit asymmetric algorithm allow-list (`RS256`, `ES256`).
 - JWKS MUST be fetched only from the trusted Supabase project endpoint, cached for a bounded period, refreshed on an unknown key ID, and fail closed on fetch or validation failure.
-- A valid JWT MUST NOT grant business permissions by itself.
-- Tenant, hub, role and permission information MUST come from authoritative Cloudflare D1 membership data.
-- Supabase user metadata MUST NOT be treated as authoritative business permissions.
-- Cloudflare D1 remains the source of truth for employee memberships and business authorization.
-- Every protected operation MUST resolve active membership server-side and reject inactive, revoked, cross-tenant or cross-hub access.
+- Tenant (`tenantId`), hub (`hubId`), role (`front_desk`, `manager`, `service`), and active/revoked status MUST be read exclusively from server-controlled claims in the verified Supabase JWT (`app_metadata` or Custom Access Token Auth Hook claims).
+- Client-editable `user_metadata`, Supabase's built-in `role: "authenticated"` claim, and unverified client headers MUST NOT be treated as authoritative business permissions.
+- Missing `role`, `tenantId`, or `hubId` claims, or inactive/revoked status, MUST fail closed (`403`) at the Gateway.
+- Gateway derives signed `InternalContext` from verified JWT claims and forwards it to the Laundry Worker, which enforces RBAC and tenant/hub isolation on every operation.
 
 ### Session and employee lifecycle
 
 - Access and refresh token expiry, refresh failure and logout MUST clear the client session and block synchronization.
 - Pending offline mutations MUST be preserved for later resolution; they MUST NOT be submitted or discarded silently.
-- Employee deactivation MUST invalidate business access; the Gateway MUST re-check membership on every protected request, and Supabase session revocation MUST be attempted.
 - Logout and account switching MUST clear account-scoped local business caches to prevent cross-account or cross-tenant leakage.
 
 ### Data isolation and offline security
 
 - Supabase MUST NOT store laundry orders, customers, delivery schedules, capacity reservations or other business records.
 - Supabase service-role credentials, signing secrets and other secrets MUST NOT be exposed to the frontend.
-- Supabase Auth integration MUST NOT bypass the Laundry Worker's single-D1-owner architecture.
 - Offline caches MUST be scoped by employee, tenant and hub; offline mutations MUST NOT synchronize without valid authentication and authorization.
 
 ### Availability, security and audit
@@ -152,11 +147,10 @@ Every business read and write is scoped by trusted tenant and hub context. Clien
 
 ### Architectural boundaries
 
-- Supabase is an identity provider, not an application database.
-- There MUST be no parallel production authentication system. The Auth Worker/`AUTH_DB` is retired as a production identity source after migration; a local fallback requires separate approval.
+- Supabase is an identity and staff-authorization provider, not an application business database.
+- There MUST be no parallel authentication system; the Auth Worker, `AUTH_DB`, and D1 `employees`/`employee_hub_memberships` tables are removed per ADR-015.
 - FreshFold UI MUST remain authentication-provider-independent.
 - All business operations MUST continue through the approved Cloudflare architecture and `applyChange()`.
-- This exception, its amendment and implementation decision MUST be documented in ADR-014 and approved before implementation.
 
 ## 14. Observability and durable failures
 

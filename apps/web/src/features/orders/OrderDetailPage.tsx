@@ -6,6 +6,7 @@ import {
   DataTable,
   EmptyState,
   LoadingState,
+  OrdersIcon,
   PageContainer,
   PageHeader,
   StatusBadge,
@@ -196,7 +197,7 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
     return (
       <PageContainer className="flex flex-col gap-6">
         <PageHeader eyebrow="Order" title="Order details" />
-        <LoadingState label="Loading order" rows={4} />
+        <LoadingState label="Loading order" variant="detail" rows={4} />
       </PageContainer>
     );
   }
@@ -229,6 +230,7 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
       <PageContainer className="flex flex-col gap-6">
         <PageHeader eyebrow="Order" title="Order details" />
         <EmptyState
+          icon={<OrdersIcon className="h-6 w-6" />}
           title="Order not found"
           description="It may have been removed. Go back to the order list."
           action={
@@ -315,6 +317,8 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
               getRowKey={(item) => item.id}
               emptyState={
                 <EmptyState
+                  compact
+                  icon={<OrdersIcon className="h-5 w-5" />}
                   title="No items"
                   description="This order has no items."
                 />

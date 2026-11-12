@@ -22,7 +22,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm exec wrangler deploy --dry-run --config workers/gateway/wrangler.jsonc --outdir /tmp/laundry-ci/gateway
-      - run: pnpm exec wrangler deploy --dry-run --config workers/auth/wrangler.jsonc --outdir /tmp/laundry-ci/auth
       - run: pnpm exec wrangler deploy --dry-run --config workers/laundry/wrangler.jsonc --outdir /tmp/laundry-ci/laundry
       - run: pnpm exec wrangler deploy --dry-run --config workers/calendar/wrangler.jsonc --outdir /tmp/laundry-ci/calendar
       - run: pnpm exec wrangler deploy --dry-run --config workers/notifications/wrangler.jsonc --outdir /tmp/laundry-ci/notifications

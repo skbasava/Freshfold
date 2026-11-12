@@ -1,4 +1,5 @@
 import type { GatewayBindings } from "../types";
+import { createLogger, safeError } from "../../../../packages/shared/src/observability";
 import {
   createSupabaseJwtVerifier,
   type SupabaseJwtVerifier,
@@ -24,15 +25,23 @@ let active:
     }
   | null = null;
 
+function nonPlaceholder(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed || trimmed.toLowerCase().includes("your-project-ref")) {
+    return "";
+  }
+  return trimmed;
+}
+
 export function readSupabaseRuntimeConfig(
   env: GatewayBindings,
 ): SupabaseRuntimeConfig | null {
-  const baseUrl = env.SUPABASE_URL?.trim().replace(/\/+$/, "");
+  const baseUrl = nonPlaceholder(env.SUPABASE_URL).replace(/\/+$/, "");
   const jwksUrl =
-    env.SUPABASE_JWKS_URL?.trim() ||
+    nonPlaceholder(env.SUPABASE_JWKS_URL) ||
     (baseUrl ? `${baseUrl}/auth/v1/.well-known/jwks.json` : "");
   const issuer =
-    env.SUPABASE_JWT_ISSUER?.trim() ||
+    nonPlaceholder(env.SUPABASE_JWT_ISSUER) ||
     (baseUrl ? `${baseUrl}/auth/v1` : "");
   const audience = env.SUPABASE_JWT_AUDIENCE?.trim() || "authenticated";
 
@@ -93,10 +102,21 @@ export function getSupabaseJwtVerifier(
     return active.verifier;
   }
 
+  const logger = createLogger({
+    service: "gateway",
+    ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
+  });
+
   const verifier = createSupabaseJwtVerifier({
     ...config,
     fetchImpl,
     now: clock,
+    onJwksError: (detail) => {
+      logger.warn("supabase_jwks_fetch_failed", {
+        ...detail,
+        ...(detail.error ? { error: safeError(detail.error) } : {}),
+      });
+    },
   });
   active = { configKey, fetchImpl, clock, verifier };
   return verifier;

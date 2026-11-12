@@ -5,6 +5,7 @@ import {
   Button,
   CalendarIcon,
   Card,
+  CheckCircleIcon,
   EmptyState,
   LoadingState,
   PageContainer,
@@ -12,6 +13,7 @@ import {
   PlusIcon,
   SearchIcon,
   StatusBadge,
+  TruckIcon,
   XCircleIcon,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
@@ -125,6 +127,8 @@ function AttentionList({ items, onOpen }: AttentionListProps) {
   if (items.length === 0) {
     return (
       <EmptyState
+        compact
+        icon={<CheckCircleIcon className="h-5 w-5" />}
         title="No orders need attention"
         description="You're all caught up. New issues will appear here."
       />
@@ -188,6 +192,8 @@ function TodayDeliveries({ orders, label }: TodayDeliveriesProps) {
   if (orders.length === 0) {
     return (
       <EmptyState
+        compact
+        icon={<TruckIcon className="h-5 w-5" />}
         title="No deliveries today"
         description="Orders scheduled for today will appear here."
       />
@@ -305,7 +311,11 @@ export function Dashboard({ api, online }: DashboardProps) {
       />
 
       {state.status === "loading" ? (
-        <LoadingState label="Loading today's orders" rows={4} />
+        <LoadingState
+          label="Loading today's orders"
+          variant="cards"
+          rows={4}
+        />
       ) : null}
 
       {state.status === "error" ? (

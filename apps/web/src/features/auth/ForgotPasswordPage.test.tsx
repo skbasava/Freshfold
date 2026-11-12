@@ -13,6 +13,7 @@ function authClient(): AuthClient {
     provider: "supabase",
     getSession: vi.fn(async () => null),
     signIn: vi.fn(async () => undefined),
+    signInWithGoogle: vi.fn(async () => undefined),
     signOut: vi.fn(async () => undefined),
     requestPasswordReset: vi.fn(async () => undefined),
     updatePassword: vi.fn(async () => undefined),

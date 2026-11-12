@@ -41,6 +41,7 @@ function fakeAuthClient(overrides: Partial<AuthClient> = {}): AuthClient {
     provider: "supabase",
     getSession: vi.fn(async () => authSession),
     signIn: vi.fn(async () => undefined),
+    signInWithGoogle: vi.fn(async () => undefined),
     signOut: vi.fn(async () => undefined),
     requestPasswordReset: vi.fn(async () => undefined),
     updatePassword: vi.fn(async () => undefined),
@@ -82,6 +83,9 @@ function Probe() {
         }
       >
         Sign in
+      </button>
+      <button type="button" onClick={() => void auth.loginWithGoogle()}>
+        Sign in with Google
       </button>
       <button type="button" onClick={() => void auth.logout()}>
         Sign out
@@ -151,6 +155,19 @@ describe("AuthProvider with Supabase", () => {
     expect(await screen.findByText("Riya Sharma · front_desk")).toBeInTheDocument();
     expect(client.signIn).toHaveBeenCalledWith("desk@example.com", "demo password");
     expect(tokenStore.get()).toBe("access-token-1");
+  });
+
+  it("initiates Google OAuth through the Supabase identity provider", async () => {
+    const user = userEvent.setup();
+    const client = fakeAuthClient({
+      getSession: vi.fn(async () => null),
+    });
+
+    renderAuth(client);
+    await screen.findByText("unauthenticated");
+    await user.click(screen.getByRole("button", { name: "Sign in with Google" }));
+
+    expect(client.signInWithGoogle).toHaveBeenCalledTimes(1);
   });
 
   it("clears the session and token when refresh fails", async () => {

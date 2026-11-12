@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { ApiProvider } from "../../api/context";
+import type { AppApi } from "../../api/types";
 import { AuthProvider, useAuth } from "../../auth/AuthContext";
+import { AuthClientError } from "../../auth/supabase-auth-client";
 import type { AuthClient } from "../../auth/types";
 import { createMockApi } from "../../mocks/api";
 import { MockApiError } from "../../mocks/errors";
@@ -16,11 +18,34 @@ function SessionProbe() {
   ) : null;
 }
 
-function renderLogin(api = createMockApi({ latencyMs: 0, authRequired: true })) {
+function supabaseClient(overrides: Partial<AuthClient> = {}): AuthClient {
+  return {
+    provider: "supabase",
+    getSession: vi.fn(async () => null),
+    signIn: vi.fn(async () => undefined),
+    signInWithGoogle: vi.fn(async () => undefined),
+    signOut: vi.fn(async () => undefined),
+    requestPasswordReset: vi.fn(async () => undefined),
+    updatePassword: vi.fn(async () => undefined),
+    refreshSession: vi.fn(async () => null),
+    onAuthStateChange: vi.fn(() => ({ unsubscribe: vi.fn() })),
+    ...overrides,
+  };
+}
+
+function renderLogin({
+  api = createMockApi({ latencyMs: 0, authRequired: true }),
+  authClient,
+  initialEntries = ["/login"],
+}: {
+  api?: AppApi;
+  authClient?: AuthClient;
+  initialEntries?: Array<string | { pathname: string; state?: unknown }>;
+} = {}) {
   return render(
-    <MemoryRouter initialEntries={["/login"]}>
+    <MemoryRouter initialEntries={initialEntries}>
       <ApiProvider api={api}>
-        <AuthProvider>
+        <AuthProvider authClient={authClient}>
           <LoginPage />
           <SessionProbe />
         </AuthProvider>
@@ -30,38 +55,71 @@ function renderLogin(api = createMockApi({ latencyMs: 0, authRequired: true })) 
 }
 
 describe("LoginPage", () => {
-  it("signs in with email and password", async () => {
+  it("renders Google-only sign in without email, password, or password reset fields", async () => {
+    renderLogin();
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /forgot password/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("signs in with Google demo mode", async () => {
     const user = userEvent.setup();
     renderLogin();
     await screen.findByRole("heading", { name: "Sign in to FreshFold" });
 
-    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
-    await user.type(screen.getByLabelText(/^Password/), "demo password");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
-
-    expect(await screen.findByText("Signed in as Riya Sharma")).toBeInTheDocument();
-  });
-
-  it("explains invalid credentials without leaking details", async () => {
-    const user = userEvent.setup();
-    const api = createMockApi({ latencyMs: 0, authRequired: true });
-    vi.spyOn(api, "login").mockRejectedValue(
-      new MockApiError("bad credentials", {
-        status: 401,
-        code: "UNAUTHORIZED",
-      }),
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
     );
-    renderLogin(api);
-    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
-
-    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
-    await user.type(screen.getByLabelText(/^Password/), "wrong password");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(
-      await screen.findByText("Email or password is incorrect."),
+      await screen.findByText("Signed in as Riya Sharma"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/bad credentials/i)).not.toBeInTheDocument();
+  });
+
+  it("starts Supabase Google OAuth when Supabase auth is active", async () => {
+    const user = userEvent.setup();
+    const client = supabaseClient();
+    renderLogin({ authClient: client });
+    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(client.signInWithGoogle).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains cancelled Google sign-in without leaking raw details", async () => {
+    const user = userEvent.setup();
+    const client = supabaseClient({
+      signInWithGoogle: vi.fn(async () => {
+        throw new AuthClientError("oauth_denied", "raw oauth access_denied");
+      }),
+    });
+    renderLogin({ authClient: client });
+    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Google sign-in was cancelled. Try again when you are ready.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/raw oauth access_denied/i),
+    ).not.toBeInTheDocument();
   });
 
   it("asks the user to wait after too many attempts", async () => {
@@ -73,30 +131,52 @@ describe("LoginPage", () => {
         code: "RATE_LIMITED",
       }),
     );
-    renderLogin(api);
+    renderLogin({ api });
     await screen.findByRole("heading", { name: "Sign in to FreshFold" });
 
-    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
-    await user.type(screen.getByLabelText(/^Password/), "demo password");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
 
     expect(
-      await screen.findByText("Too many attempts. Wait a minute and try again."),
+      await screen.findByText(
+        "Too many sign-in attempts. Wait a minute and try again.",
+      ),
     ).toBeInTheDocument();
   });
 
-  it("links to the password reset screen", async () => {
-    renderLogin();
-    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
+  it("explains when Google sign-in is returned with a callback cancellation notice", async () => {
+    renderLogin({
+      initialEntries: [
+        { pathname: "/login", state: { oauthError: "cancelled" } },
+      ],
+    });
 
     expect(
-      screen.getByRole("link", { name: "Forgot password?" }),
-    ).toHaveAttribute("href", "/forgot-password");
+      await screen.findByText(
+        "Google sign-in was cancelled. Try again when you are ready.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("warns and disables the button in live mode when Supabase is not configured", async () => {
+    const mockApi = createMockApi({ latencyMs: 0, authRequired: true });
+    const liveApi: AppApi = { ...mockApi, mode: "live" };
+
+    renderLogin({ api: liveApi });
+
+    expect(
+      await screen.findByText(
+        "Google sign-in is not configured in this environment.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    ).toBeDisabled();
   });
 
   it("explains that an expired session requires signing in again", async () => {
-    const client: AuthClient = {
-      provider: "supabase",
+    const client = supabaseClient({
       getSession: vi.fn(async () => ({
         accessToken: "expired-token",
         refreshToken: "refresh-token",
@@ -104,42 +184,12 @@ describe("LoginPage", () => {
         userId: "user-1",
         email: "desk@example.com",
       })),
-      signIn: vi.fn(async () => undefined),
-      signOut: vi.fn(async () => undefined),
-      requestPasswordReset: vi.fn(async () => undefined),
-      updatePassword: vi.fn(async () => undefined),
-      refreshSession: vi.fn(async () => null),
-      onAuthStateChange: vi.fn(() => ({ unsubscribe: vi.fn() })),
-    };
+    });
 
-    render(
-      <MemoryRouter initialEntries={["/login"]}>
-        <ApiProvider
-          api={createMockApi({ latencyMs: 0, authRequired: true })}
-        >
-          <AuthProvider authClient={client}>
-            <LoginPage />
-          </AuthProvider>
-        </ApiProvider>
-      </MemoryRouter>,
-    );
+    renderLogin({ authClient: client });
 
     expect(
       await screen.findByText("Your session ended. Please sign in again."),
     ).toBeInTheDocument();
-  });
-
-  it("requires both fields before sending", async () => {
-    const user = userEvent.setup();
-    const api = createMockApi({ latencyMs: 0, authRequired: true });
-    const login = vi.spyOn(api, "login");
-    renderLogin(api);
-    await screen.findByRole("heading", { name: "Sign in to FreshFold" });
-
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
-
-    expect(screen.getByText("Enter your email.")).toBeInTheDocument();
-    expect(screen.getByText("Enter your password.")).toBeInTheDocument();
-    expect(login).not.toHaveBeenCalled();
   });
 });

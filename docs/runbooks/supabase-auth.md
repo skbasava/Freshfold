@@ -1,34 +1,45 @@
 # Supabase Auth Runbook
 
-**Status:** Phase B backend configuration notes. No staging or production project, migration, secret, or end-to-end validation has been performed in this repository.
+**Status:** Active local and staging/production auth architecture (`ADR-015`). Staging and production projects, secrets, and remote validation remain separately gated.
 
 ## Scope
 
-- Supabase Auth is the production staff identity provider.
-- Supabase stores identity records and sessions only. Orders, customers, employees, memberships, audit, outbox, and capacity data stay in Laundry D1.
-- The Gateway verifies Supabase access tokens with the project JWKS and resolves employee membership from Laundry D1 on every protected request.
-- The Auth Worker and `AUTH_DB` remain a local/legacy fallback only. The Gateway disables that fallback when `ENVIRONMENT` is `staging` or `production`.
+- Supabase Auth is the sole staff identity, session validation, and staff authorization provider (`ADR-015`).
+- Supabase stores staff accounts, sessions, and server-controlled staff claims (`app_metadata` or Custom Access Token Auth Hook claims). Orders, customers, tenants, hubs, audit, outbox, and capacity data stay in Laundry D1 (`LAUNDRY_DB`).
+- The Gateway verifies Supabase access tokens with the project JWKS and resolves `role`, `tenantId`, `hubId`, status, and display name from verified JWT `app_metadata` / Custom Access Token Auth Hook claims on every protected request.
+- The legacy Auth Worker (`workers/auth`), `AUTH_DB`, and D1 employee/membership tables (`employees`, `employee_hub_memberships`) have been removed. There is no cookie or CSRF fallback.
 
 ## Environment isolation
 
 Use a separate Supabase project, redirect URLs, anon key, JWKS URL, issuer, and secrets for local development, staging, and production. Never reuse a staging or local project in production.
 
-| Environment | Supabase project | Gateway fallback |
+| Environment | Supabase project | Gateway mode |
 |---|---|---|
-| Local | Local/development project or an injected test JWKS | Allowed by default in development |
-| Staging | Dedicated staging project | Disabled |
-| Production | Dedicated production project | Disabled |
+| Local | Local/development project or injected test JWKS | Supabase bearer auth only (no local Auth Worker fallback) |
+| Staging | Dedicated staging project | Supabase bearer auth only |
+| Production | Dedicated production project | Supabase bearer auth only |
 
 ## Supabase project setup
 
 1. Create one project per environment and record its project reference.
-2. Enable email/password authentication.
-3. Disable public employee signup. Onboard staff with administrator-controlled invitations.
-4. Configure allowed redirect URLs for password reset and email confirmation, for example `https://<environment-host>/reset-password`.
-5. Configure allowed browser origins for the deployed frontend host.
-6. Configure Auth rate limits and email delivery according to the environment's policy.
+2. Enable the Google OAuth provider (with your Google Cloud OAuth Client ID and Client Secret) for staff login.
+3. Disable public employee signup so random logins cannot assign themselves `app_metadata`. Only server-controlled `app_metadata` or a Custom Access Token Auth Hook can grant `role`, `tenant_id`, and `hub_id`; users without valid staff claims are denied with `403 membership_missing`.
+4. Configure allowed redirect URLs for Google OAuth callback and recovery, including `http://localhost:5173/login/callback` locally and `https://<environment-host>/login/callback` plus `/reset-password` in deployed environments.
+5. Configure allowed browser origins for the frontend host.
+6. Configure Auth rate limits according to the environment's policy.
 7. Use Supabase's asymmetric JWT signing keys. The Gateway accepts only `RS256` and `ES256` by default.
 8. Confirm the JWKS endpoint is `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`.
+
+## Staff authorization claims (`app_metadata` / Auth Hook)
+
+On every protected request, Gateway verifies the bearer JWT signature and validates staff authorization using `resolveSupabaseAuthorization(claims)` in `@laundry/contracts`:
+
+- Role: `app_metadata.role` (or `app_metadata.staff_role`, or hook claim `app_role` / `staff_role`). Built-in Supabase `role: "authenticated"` and `user_metadata` are **ignored**.
+- Tenant: `app_metadata.tenant_id` (or `tenantId`, or top-level hook claim `tenant_id` / `tenantId`).
+- Hub: `app_metadata.hub_id` (or `hubId`, or single-element `hub_ids`, or top-level hook claim).
+- Status: defaults to `"active"`; `disabled: true`, `revoked: true`, or `"inactive"` / `"revoked"` status returns `403 membership_inactive`.
+
+Never grant authorization from `user_metadata` because Supabase users can edit their own `user_metadata`.
 
 ## Gateway configuration
 
@@ -44,26 +55,22 @@ SUPABASE_JWT_CLOCK_SKEW_SECONDS=60
 SUPABASE_JWKS_CACHE_TTL_MS=300000
 ```
 
-Server-only secrets:
+Server-only secret shared with Laundry:
 
 ```bash
-pnpm exec wrangler secret put SERVICE_TOKEN --config workers/gateway/wrangler.jsonc
-pnpm exec wrangler secret put SERVICE_TOKEN --config workers/laundry/wrangler.jsonc
 pnpm exec wrangler secret put INTERNAL_CONTEXT_SECRET --config workers/gateway/wrangler.jsonc
 pnpm exec wrangler secret put INTERNAL_CONTEXT_SECRET --config workers/laundry/wrangler.jsonc
 ```
 
-`SERVICE_TOKEN` lets the Gateway call the Laundry internal membership resolver as the `gateway` service. `INTERNAL_CONTEXT_SECRET` signs the forwarded employee context. Rotate the Gateway and Laundry copies together.
+`INTERNAL_CONTEXT_SECRET` signs the forwarded internal actor context from Gateway to Laundry. Rotate the Gateway and Laundry copies together.
 
-Only set `SUPABASE_SERVICE_ROLE_KEY` if a separate server-side administrative operation is approved. It is never shipped to the browser, is not read by the current Gateway or Laundry code, and must not be added to frontend environment files.
+Only set `SUPABASE_SERVICE_ROLE_KEY` if a separate server-side administrative operation is approved. It is never shipped to the browser, is not read by Gateway or Laundry code, and must not be added to frontend environment files.
 
 The public `SUPABASE_ANON_KEY` belongs only to frontend configuration. It is not server authorization.
 
 ## Local development
 
 - Keep `.dev.vars` local and ignored. Use `.dev.vars.example` placeholders.
-- A local Supabase project is optional when the Auth Worker fallback is enabled.
-- Set `AUTH_FALLBACK_ENABLED=false` to test the Supabase-only path locally.
 - Automated tests inject local JWKS and clock fakes; they never call Supabase.
 
 ## Frontend configuration and session handling
@@ -75,36 +82,16 @@ three public values and keep every other Supabase credential server-side:
 ```text
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<public anon key>
-VITE_SUPABASE_REDIRECT_URL=https://<environment-host>/reset-password
+VITE_SUPABASE_REDIRECT_URL=http://localhost:5173/reset-password
 ```
 
-- Add the exact redirect URL to the Supabase project's allowed redirect list.
-  Invitations and password recovery both return to `/reset-password`, where the
-  employee sets a password. Public employee signup stays disabled.
-- Use a separate Supabase project and redirect URL for local, staging, and
-  production. Never copy staging or local values into production.
-- The anon key is public and is not authorization. A service-role key or
-  `sb_secret_*` key in `VITE_*` configuration is rejected at startup.
-- The access token is held in the Supabase client's per-tab `sessionStorage` and sent as
-  `Authorization: Bearer <access_token>` to Gateway `/api/*`. Bearer requests use
-  `credentials: "omit"` and do not send the legacy CSRF header.
-- The Gateway remains authoritative for role, tenant, and hub. The UI never
-  derives permissions from JWT claims or client-supplied headers.
-- On `401`, refresh failure, or logout the session and access token are cleared,
-  synchronization stops, and the login screen explains that sign-in is required.
-  On `403` (including revoked or inactive membership) the UI shows an
-  access-removed message and requires a new sign-in.
-- Local order caches use a separate IndexedDB database per
-  employee/tenant/hub scope. Logout or account switching never exposes another
-  employee's cached orders, while pending, rejected, and conflicted mutations
-  remain stored for the original account and are never flushed without a valid
-  session.
-
-Residual risk: tokens kept in browser session storage are exposed to a
-successful XSS attack. Keep a strict CSP, avoid unsafe HTML, and do not weaken
-this boundary for convenience. Supabase session revocation and the Laundry
-membership check limit, but do not eliminate, the window in which a stolen
-token may remain valid.
+- Add the exact callback (`.../login/callback`) and recovery (`.../reset-password`) URLs to the Supabase project's allowed redirect list. Public employee signup stays disabled.
+- Use a separate Supabase project and redirect URL for local, staging, and production. Never copy staging or local values into production.
+- The anon key is public and is not authorization. A service-role key or `sb_secret_*` key in `VITE_*` configuration is rejected at startup.
+- The access token is held in the Supabase client's per-tab `sessionStorage` and sent as `Authorization: Bearer <access_token>` to Gateway `/api/*` with `credentials: "omit"`.
+- `GET /api/me` returns the validated `SessionResponse` built from Gateway's verified JWT claims.
+- On `401`, refresh failure, or logout the session and access token are cleared, synchronization stops, and the login screen explains that sign-in is required. On `403` (missing or inactive staff claims) the UI signs out the un-authorized Supabase session and displays the error clearly.
+- Local order caches use a separate IndexedDB database per employee/tenant/hub scope. Logout or account switching never exposes another employee's cached orders, while pending, rejected, and conflicted mutations remain stored for the original account and are never flushed without a valid session.
 
 ## End-to-end validation
 
@@ -112,17 +99,24 @@ Use one Supabase project per environment. Do not reuse local or staging credenti
 
 ### 1. Supabase project
 
-- Enable the Email/Password provider.
-- Disable public staff signup and invite employees from the Supabase dashboard or Admin API.
-- Set the Site URL and allowed redirect URLs, including `http://localhost:5173/login/callback` and `http://localhost:5173/reset-password` for local development.
-- Configure allowed browser origins and Auth rate limits/email delivery.
-- Use asymmetric JWT signing keys (`RS256` or `ES256`). The Gateway rejects unsupported algorithms by default.
+- Enable Google OAuth (and/or Email/Password for admin-invited accounts).
+- Disable public staff signup and configure redirect URLs (`http://localhost:5173/login/callback`, `http://localhost:5173/reset-password`).
+- Set `app_metadata` on the staff user (via Supabase Dashboard -> Authentication -> Users, Admin API, or Custom Access Token Auth Hook):
+  ```json
+  {
+    "role": "manager",
+    "tenant_id": "tenant-1",
+    "hub_id": "hub-1",
+    "display_name": "Local Manager",
+    "status": "active"
+  }
+  ```
+- Use asymmetric JWT signing keys (`RS256` or `ES256`).
 - Confirm the JWKS endpoint responds: `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`.
-- Confirm Supabase contains only Auth users/sessions, not orders, customers, employees, memberships, audit, outbox, or capacity data.
 
 ### 2. Local backend configuration
 
-Add the non-secret Gateway values to `.dev.vars`:
+Add the Supabase values to `.dev.vars`:
 
 ```text
 SUPABASE_URL=https://<project-ref>.supabase.co
@@ -130,10 +124,9 @@ SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.jso
 SUPABASE_JWT_ISSUER=https://<project-ref>.supabase.co/auth/v1
 SUPABASE_JWT_AUDIENCE=authenticated
 SUPABASE_JWT_ALGORITHMS=RS256,ES256
-AUTH_FALLBACK_ENABLED=false
 ```
 
-Do not set `SUPABASE_SERVICE_ROLE_KEY` for normal validation; the Gateway and Laundry do not need it. `pnpm dev:live` generates local `SERVICE_TOKEN` and `INTERNAL_CONTEXT_SECRET` values and links `.dev.vars` into each Worker.
+`pnpm dev:live` generates local `SERVICE_TOKEN` and `INTERNAL_CONTEXT_SECRET` values and links `.dev.vars` into each Worker.
 
 ### 3. Frontend configuration
 
@@ -145,16 +138,13 @@ VITE_SUPABASE_ANON_KEY=<public anon key>
 VITE_SUPABASE_REDIRECT_URL=http://localhost:5173/reset-password
 ```
 
-Use only the public anon key. Never put a service-role key or `sb_secret_*` value in a `VITE_*` variable.
+### 4. Seed local tenant and hub in `LAUNDRY_DB`
 
-### 4. Seed a local employee membership
-
-Apply the Laundry migration and seed the employee whose `supabase_subject` matches the Supabase JWT `sub`:
+Apply the Laundry migration and ensure the matching tenant/hub rows exist in `LAUNDRY_DB` for order creation/reads:
 
 ```bash
 pnpm db:laundry:migrate:local
 
-SUB="<supabase-auth-user-uuid>"
 NOW="$(date +%s)000"
 
 pnpm exec wrangler d1 execute laundry-core --local \
@@ -165,41 +155,12 @@ pnpm exec wrangler d1 execute laundry-core --local \
 
     INSERT OR IGNORE INTO hubs (id, tenant_id, name, timezone, created_at)
     VALUES ('hub-1', 'tenant-1', 'Main Hub', 'Asia/Kolkata', $NOW);
-
-    INSERT INTO employees (id, supabase_subject, email, display_name, status, created_at, updated_at)
-    VALUES ('emp-manager', '$SUB', 'manager@example.com', 'Local Manager', 'active', $NOW, $NOW)
-    ON CONFLICT(supabase_subject) DO UPDATE SET
-      email = excluded.email,
-      display_name = excluded.display_name,
-      status = 'active',
-      updated_at = excluded.updated_at;
-
-    INSERT INTO employee_hub_memberships (employee_id, tenant_id, hub_id, role, created_at)
-    VALUES ('emp-manager', 'tenant-1', 'hub-1', 'manager', $NOW)
-    ON CONFLICT(employee_id, hub_id) DO UPDATE SET
-      tenant_id = excluded.tenant_id,
-      role = excluded.role;
   "
 ```
 
-Adjust the employee id, email, hub, and role for the account under test.
-
 ### 5. Verify bearer authentication
 
-Start the application and obtain a token:
-
-```bash
-pnpm dev:live
-
-SUPABASE_URL="https://<project-ref>.supabase.co"
-ANON_KEY="<public anon key>"
-TOKEN="$(curl -s -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
-  -H "apikey: $ANON_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"manager@example.com","password":"<password>"}' | jq -r .access_token)"
-```
-
-Then verify:
+Start the application (`pnpm dev:live`) and verify `/api/me`:
 
 ```bash
 curl -i http://127.0.0.1:8787/api/me
@@ -207,28 +168,25 @@ curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/me
 curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/orders
 ```
 
-Expected: `401` without a bearer token; `200` with a valid token and active membership. `/api/me` returns the server-owned employee, role, tenant, and hub context.
+Expected: `401` without a bearer token; `200` with a valid token containing active `app_metadata` staff claims. `/api/me` returns the `SessionResponse` object (`user`, `hub`, `role`).
 
 ### 6. Negative and lifecycle checks
 
 - Tampered, expired, not-yet-valid, wrong-issuer, wrong-audience, and wrong-algorithm tokens return `401 invalid_token` or `401 expired_session`.
-- A valid token with no membership returns `403 membership_missing`.
-- Set `employees.status` to `inactive` or `revoked`; the next protected request returns `403 membership_inactive`.
-- Cross-tenant and cross-hub access is denied; client-supplied role, tenant, hub, email, employee, internal-context, and service headers are ignored.
-- JWKS fetch/parse failure returns `503 identity_provider_unavailable`, never unverified identity.
+- A valid token with missing `app_metadata` / hook claims (or with claims placed only in `user_metadata`) returns `403 membership_missing`.
+- Set `app_metadata.status` to `"inactive"` or `"revoked"` (or `disabled: true`); after refreshing the token, protected requests return `403 membership_inactive`.
+- Client-supplied role, tenant, hub, email, employee, internal-context, and service headers are ignored.
+- JWKS fetch/parse failure returns `503 identity_provider_unavailable` and logs safe diagnostic context (`supabase_jwks_fetch_failed`), never unverified identity.
 - Rotate the Supabase signing key; old tokens fail and newly signed tokens succeed after the Gateway refreshes the unknown key id.
-- Expire the session or revoke it in Supabase; the UI returns to login, pending offline mutations remain local, and no sync occurs without a valid session.
-- Log out and switch accounts; account-scoped IndexedDB data is not exposed across employees or tenants.
 
 ### 7. Automated checks
 
 ```bash
-pnpm vitest run \
+pnpm exec vitest run \
   tests/unit/supabase-jwt.test.ts \
   tests/unit/supabase-auth-contracts.test.ts \
   tests/unit/supabase-boundaries.test.ts \
-  tests/integration/supabase-gateway-auth.test.ts \
-  tests/integration/laundry-membership.test.ts
+  tests/integration/supabase-gateway-auth.test.ts
 
 pnpm test:web
 pnpm check
@@ -236,44 +194,13 @@ pnpm exec wrangler deploy --dry-run --config workers/gateway/wrangler.jsonc
 pnpm exec wrangler deploy --dry-run --config workers/laundry/wrangler.jsonc
 ```
 
-### 8. Staging validation
-
-Create a separate Supabase project, redirect URLs, Wrangler secrets, and D1 database for staging. Exercise real login, invitation, password reset, session expiry/refresh failure, key rotation, employee deactivation, cross-tenant denial, and offline-sync blocking. Apply the staging D1 migration only with the appropriate approval. Production deployment requires a separate explicit approval.
-
-**Current limitation:** no real Supabase or staging project has been validated; the committed integration tests use injected JWKS, clocks, and mocked provider behavior.
-
-## Open decisions
-
-- Multi-hub staff: the Laundry resolver can select a membership by a validated `hubId`, but the current Gateway does not accept a client-selected hub. It uses the first active membership ordered by `created_at`, then `hub_id`. A staff hub-selection flow still needs approval.
-- JWKS cache TTL, clock skew, and the exact Supabase signing algorithms are configurable defaults (`300000` ms, `60` s, `RS256,ES256`); they are not yet validated against a staging project.
-- Whether Supabase session revocation must be checked server-side in addition to Laundry membership status remains open.
-
-## Verification checklist
-
-- [ ] Missing, malformed, expired, not-yet-valid, tampered, wrong-issuer, wrong-audience, wrong-algorithm, and unknown-key tokens are rejected.
-- [ ] JWKS fetch or parse failures return `503` and never fall back to unverified identity.
-- [ ] JWKS refreshes on an unknown `kid` and after the cache TTL.
-- [ ] A valid JWT with missing, inactive, or revoked membership is rejected.
-- [ ] Client-supplied role, tenant, hub, email, employee, internal-context, and service headers are ignored.
-- [ ] Bearer requests do not require CSRF; cookie fallback requests still do.
-- [ ] Protected API requests resolve membership on every request.
-- [ ] Staging is validated separately with a dedicated Supabase project before production approval.
-
-## Rollback
-
-- Disable the Supabase path by restoring the previous approved Gateway deployment and identity flow only with explicit approval.
-- Revoke Supabase sessions and disable employee memberships in Laundry D1.
-- No business data needs to be migrated back because Supabase never stores it.
-- Do not re-enable the Auth Worker fallback in staging or production as an incident shortcut.
-
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | `401 invalid_token` | Token is malformed, has the wrong issuer/audience/algorithm, fails signature verification, or references an unknown key |
 | `401 expired_session` | Access token expired; refresh through Supabase and retry |
-| `503 identity_provider_unavailable` | JWKS retrieval/parsing failed or Laundry service credentials are missing or rejected |
-| `403 membership_missing` | No active employee row for the verified `sub`, or no hub membership |
-| `403 membership_inactive` | Employee status is `inactive` or `revoked` |
-| `403 cross_tenant_denied` | Requested hub is not one of the employee's memberships |
-| `/auth/login` returns `404` | The legacy fallback is disabled in staging/production, which is expected |
+| `503 identity_provider_unavailable` | JWKS retrieval/parsing failed (`supabase_jwks_fetch_failed` in Gateway logs) or `SUPABASE_URL`/`SUPABASE_JWKS_URL`/`INTERNAL_CONTEXT_SECRET` is missing |
+| `403 membership_missing` | Signed-in Supabase user lacks `role`, `tenant_id`, and `hub_id` in `app_metadata` or Custom Access Token Auth Hook claims |
+| `403 membership_inactive` | Staff claim status is `inactive`/`revoked` or `disabled`/`revoked` is `true` |
+| `403 cross_tenant_denied` | Request target belongs to another tenant or hub |

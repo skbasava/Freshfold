@@ -23,7 +23,7 @@ The React application lives in `apps/web` and uses the `@freshfold/ui` workspace
 pnpm dev:web
 ```
 
-Vite serves the app at `http://localhost:5173`. The web app defaults to the typed mock adapter in `apps/web/src/mocks/` and does not require the Workers to be running.
+Vite serves the app at `http://localhost:5173`. `apps/web/.env.development` sets `VITE_API_MODE=live` so Vite dev always runs against the Gateway on port `8787`; pass `VITE_API_MODE=mock pnpm dev:web` to run the isolated mock adapter instead.
 
 ### Live stack
 
@@ -33,22 +33,21 @@ Start the local backend and the live Vite app with one command:
 pnpm dev:live
 ```
 
-The script creates `.dev.vars` if needed, applies the local Auth and Laundry D1 migrations, starts Auth on `8788`, Laundry on `8789`, Gateway on `8787`, Notifications on `8791`, and Scheduler on `8792`, waits for Gateway health, then starts Vite in live mode at `http://localhost:5173`. Calendar on `8790` starts only when the Google service-account email and a valid PEM private key are configured. When Google is ready, the script also triggers an outbox sweep and calendar reconciliation, then repeats the sweep every few seconds. Create orders at `http://localhost:5173`; the built Gateway app at `http://localhost:8787` defaults to mock mode. Press Ctrl-C to stop the stack.
+The script creates `.dev.vars` if needed, applies the local Laundry D1 migrations, starts Laundry on `8789`, Gateway on `8787` (Supabase Auth for authentication and authorization, without requiring `apps/web/dist` to be built), Notifications on `8791`, and Scheduler on `8792`, waits for Gateway health, then starts Vite in live mode at `http://localhost:5173`. Browser visits to `http://localhost:8787` redirect to `http://localhost:5173`. Calendar on `8790` starts only when the Google service-account email and a valid PEM private key are configured. When Google is ready, the script also triggers an outbox sweep and calendar reconciliation, then repeats the sweep every few seconds. Press Ctrl-C to stop the stack.
 
 To use a built SPA served by the Gateway instead, run `pnpm build:web` and then `pnpm dev:gateway`.
 
 Manual live startup is also supported; the dev scripts have fixed ports:
 
 ```bash
-pnpm dev:auth
 pnpm dev:laundry
 pnpm dev:gateway
-VITE_API_MODE=live pnpm dev:web
+pnpm dev:web
 ```
 
-Vite proxies `/auth` and `/api` to the Gateway on port 8787. Set `VITE_API_BASE_URL` when the Gateway is on a different same-site origin. The current live UI still uses the legacy Auth Worker fallback (`GET /auth/session`, `POST /auth/login`, `POST /auth/logout`); that fallback is available only outside staging and production. The Gateway accepts Supabase bearer authentication for clients that send `Authorization: Bearer <access_token>`, but the frontend Supabase session flow has not been implemented in this phase. Set `VITE_REQUIRE_AUTH=true` to enable the sample login screen in mock mode. `VITE_ENABLE_DEMO_FALLBACKS=true` uses clearly labelled sample delivery slots because the slot-listing endpoint does not exist yet.
+Vite proxies `/api` to the Gateway on port `8787`. Set `VITE_API_BASE_URL` when the Gateway is on a different origin. Live mode signs in with Supabase Auth (PKCE / Google OAuth) and sends `Authorization: Bearer <access_token>` to Gateway `/api/*`. Set `VITE_REQUIRE_AUTH=true` to enable the sample login screen in mock mode. `VITE_ENABLE_DEMO_FALLBACKS=true` uses clearly labelled sample delivery slots because the slot-listing endpoint does not exist yet.
 
-For Supabase-only local testing, configure the Supabase variables in `.dev.vars` from `.dev.vars.example` and set `AUTH_FALLBACK_ENABLED=false`. Automated tests inject local JWKS and clock fakes and do not call Supabase.
+Configure the Supabase variables in `.dev.vars` from `.dev.vars.example` and in `apps/web/.env.development` (or `.env.local`), and ensure the test user has `app_metadata` claims (`role`, `tenant_id`, `hub_id`). Automated tests inject local JWKS and clock fakes and do not call Supabase. See `docs/runbooks/supabase-auth.md`.
 
 ### Google Calendar delivery events
 
@@ -83,7 +82,6 @@ The Gateway uses `not_found_handling: "single-page-application"`, so client-side
 
 ```bash
 pnpm dev:gateway
-pnpm dev:auth
 pnpm dev:laundry
 pnpm dev:calendar
 pnpm dev:notifications
@@ -91,17 +89,6 @@ pnpm dev:scheduler
 ```
 
 Each Worker listens on its own local port. Health checks are available at `GET /health` and return `{ "status": "ok", "service": "<name>" }`.
-
-## Auth Worker
-
-The Auth Worker owns `AUTH_DB`. Apply its migration before starting it locally:
-
-```bash
-pnpm db:auth:migrate:local
-pnpm dev:auth
-```
-
-Public clients use the Gateway routes `POST /auth/login`, `GET /auth/session`, and `POST /auth/logout`. The Auth Worker is internal-only (`workers_dev: false`); the Gateway reaches `GET /internal/session` through its `AUTH` service binding. See `docs/runbooks/auth.md`.
 
 ## Laundry Worker
 
@@ -119,8 +106,7 @@ Migrations under `migrations/laundry` are staging candidates until the schema an
 - D1 databases are simulated under `.wrangler/state`.
 - Queues are simulated locally by Wrangler.
 - Service bindings connect to other local Wrangler sessions when those sessions are running; otherwise Wrangler reports `[not connected]`.
-- Gateway rate limiting uses the `LOGIN_RATE_LIMITER` and `MUTATION_RATE_LIMITER` bindings. In local development, missing limiters are allowed; production fails closed.
-- Gateway state-changing `/api/*` requests require the `x-csrf-token` header and `laundry_csrf` cookie. See `docs/runbooks/gateway.md`.
+- Gateway rate limiting uses the `MUTATION_RATE_LIMITER` binding. In local development, missing limiters are allowed; production fails closed.
 - Scheduled handlers do not fire automatically in local development. Trigger them manually with `wrangler dev --test-scheduled` or the local scheduled endpoint.
 
 ## Checks

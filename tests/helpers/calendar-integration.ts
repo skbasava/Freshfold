@@ -47,6 +47,7 @@ export function createCalendarHarness(
             LAUNDRY_DB: db,
             INTERNAL_CONTEXT_SECRET: "test-internal-context-secret-32-bytes",
             SERVICE_TOKEN,
+            LAUNDRY_CLOCK: () => now,
           } as never,
           ctx,
         );

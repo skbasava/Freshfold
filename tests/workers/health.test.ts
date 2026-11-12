@@ -1,6 +1,5 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import auth from "../../workers/auth/src/index";
 import calendar from "../../workers/calendar/src/index";
 import gateway from "../../workers/gateway/src/index";
 import laundry from "../../workers/laundry/src/index";
@@ -9,7 +8,6 @@ import scheduler from "../../workers/scheduler/src/index";
 
 const workers = [
   { service: "gateway", app: gateway },
-  { service: "auth", app: auth },
   { service: "laundry", app: laundry },
   { service: "calendar", app: calendar },
   { service: "notifications", app: notifications },

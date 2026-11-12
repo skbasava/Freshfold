@@ -25,7 +25,7 @@ Every application log line is one JSON object:
 - `level` is one of `debug`, `info`, `warn`, `error`.
 - `event` is a stable name from `OBSERVABILITY_EVENTS` or an existing worker event such as `calendar_queue_message_retried`.
 - `timestamp` is ISO-8601 in UTC.
-- `requestId` comes from the `x-request-id` header when present and is forwarded Gateway → Auth/Laundry. Queue work uses `outboxId`/`orderId` for correlation because it has no HTTP request.
+- `requestId` comes from the `x-request-id` header when present and is forwarded Gateway → Laundry. Queue work uses `outboxId`/`orderId` for correlation because it has no HTTP request.
 - `correlationId` falls back to `requestId`.
 
 Metrics are emitted as structured log events so no new database, Workers KV namespace, or external metrics service is required:
@@ -100,7 +100,7 @@ pnpm exec wrangler queues list
 pnpm exec wrangler queues consumer list <queue-name>
 ```
 
-D1 error rate, rows read/written, and storage are Cloudflare platform metrics. Inspect them in the dashboard for the staging/production `laundry-core` and `laundry-auth` databases; see `d1-errors.md` for read-only diagnostic commands.
+D1 error rate, rows read/written, and storage are Cloudflare platform metrics. Inspect them in the dashboard for the staging/production `laundry-core` database; see `d1-errors.md` for read-only diagnostic commands.
 
 ## Alert review procedure
 

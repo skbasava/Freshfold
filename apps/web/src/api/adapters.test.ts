@@ -15,7 +15,6 @@ import {
   type ApiConfig,
 } from "./adapters";
 import {
-  createMemoryCsrfStore,
   GatewayApiError,
   type FetchLike,
 } from "./client";
@@ -87,7 +86,7 @@ function liveFetch(): {
     calls.push({ input, init: init as Record<string, unknown> });
     const path = String(input);
 
-    if (path === "/auth/session") {
+    if (path === "/api/me") {
       return jsonResponse(session);
     }
     if (path.startsWith("/api/orders?") || path === "/api/orders") {
@@ -205,7 +204,7 @@ describe("live adapter reads", () => {
     expect(order?.deliverySlot?.label).toContain("4:00");
     expect(customer?.customer.name).toBe("Alice");
     expect(customer?.orders.map((entry) => entry.id)).toEqual(["order-1"]);
-    expect(calls.some((call) => call.input === "/auth/session")).toBe(true);
+    expect(calls.some((call) => call.input === "/api/me")).toBe(true);
     expect(calls.some((call) => call.input === "/api/orders/order-1")).toBe(
       true,
     );
@@ -241,7 +240,7 @@ describe("live adapter customer creation", () => {
     };
     const fetchImpl: FetchLike = async (input, init) => {
       const path = String(input);
-      if (path === "/auth/session") {
+      if (path === "/api/me") {
         return jsonResponse(session);
       }
       if (path.startsWith("/api/customers")) {
@@ -283,7 +282,7 @@ describe("live adapter customer creation", () => {
     const api = createAppApi(liveConfig({ demoFallbacks: true }), {
       fetchImpl,
       backend: createMemoryStorageBackend(),
-      csrfStore: createMemoryCsrfStore("csrf-token"),
+      getAccessToken: () => "access-token-1",
     });
     const options = await api.getCreateOrderOptions();
     const slot = options.slots.find((entry) => entry.status === "open");
@@ -310,7 +309,7 @@ describe("live adapter customer creation", () => {
 });
 
 describe("live adapter offline queue", () => {
-  it("flushes a pending mutation through the gateway with CSRF", async () => {
+  it("flushes a pending mutation through the gateway with bearer auth", async () => {
     const { fetchImpl, calls } = liveFetch();
     const backend = createMemoryStorageBackend();
     const queue = createMutationQueue(backend);
@@ -344,7 +343,7 @@ describe("live adapter offline queue", () => {
     const api = createAppApi(liveConfig(), {
       fetchImpl,
       backend,
-      csrfStore: createMemoryCsrfStore("csrf-token"),
+      getAccessToken: () => "access-token-1",
     });
     await api.syncPendingMutations();
 
@@ -354,7 +353,7 @@ describe("live adapter offline queue", () => {
     expect(applyChange?.init).toMatchObject({
       method: "POST",
       headers: expect.objectContaining({
-        "x-csrf-token": "csrf-token",
+        authorization: "Bearer access-token-1",
       }),
     });
     expect(await api.getPendingCount()).toBe(0);
@@ -368,7 +367,7 @@ describe("live adapter offline queue", () => {
   it("preserves a live version conflict and exposes the canonical order", async () => {
     const fetchImpl: FetchLike = async (input, init) => {
       const path = String(input);
-      if (path === "/auth/session") {
+      if (path === "/api/me") {
         return jsonResponse(session);
       }
       if (path === "/api/orders/order-1" && init?.method === "GET") {
@@ -389,7 +388,7 @@ describe("live adapter offline queue", () => {
     const api = createAppApi(liveConfig(), {
       fetchImpl,
       backend,
-      csrfStore: createMemoryCsrfStore("csrf-token"),
+      getAccessToken: () => "access-token-1",
     });
 
     await expect(
@@ -413,7 +412,7 @@ describe("live adapter offline queue", () => {
     const api = createAppApi(liveConfig(), {
       fetchImpl,
       backend,
-      csrfStore: createMemoryCsrfStore("csrf-token"),
+      getAccessToken: () => "access-token-1",
     });
 
     const updated = await api.applyOrderIntent(
@@ -532,6 +531,16 @@ describe("gateway error messages", () => {
       ),
     ).toBe(
       "Cannot reach the local Gateway. Start the backend with `pnpm dev:live` and try again.",
+    );
+  });
+
+  it("explains when a Google account lacks FreshFold role claims", () => {
+    expect(
+      describeGatewayError(
+        new GatewayApiError({ status: 403, code: "membership_missing" }),
+      ),
+    ).toBe(
+      "Your Google account is not enabled for a FreshFold hub yet. Ask your hub manager to assign your role and hub.",
     );
   });
 });

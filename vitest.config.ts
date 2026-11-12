@@ -27,9 +27,8 @@ export default defineConfig({
       miniflare: {
         compatibilityDate: "2026-11-11",
         compatibilityFlags: ["nodejs_compat"],
-        d1Databases: ["AUTH_DB", "LAUNDRY_DB"],
+        d1Databases: ["LAUNDRY_DB"],
         bindings: {
-          TEST_AUTH_MIGRATIONS: await readD1Migrations("migrations/auth"),
           TEST_LAUNDRY_MIGRATIONS: await readD1Migrations("migrations/laundry"),
         },
       },

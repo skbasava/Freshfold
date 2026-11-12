@@ -18,7 +18,7 @@ Do not apply remote migrations until the staging and production D1 database IDs 
 
 ## Schema notes
 
-- `0003_authz.sql` adds `employees` and `employee_hub_memberships`. Employee records are keyed by the verified Supabase subject; memberships remain the authoritative source for tenant, hub, and role.
+- Staff authentication and authorization (`role`, `tenantId`, `hubId`) come from verified Supabase Auth JWT claims (`app_metadata` / Custom Access Token Auth Hook claims) under `docs/adr/ADR-015-supabase-full-authz.md`; `LAUNDRY_DB` stores business data only (`tenants`, `hubs`, `customers`, `delivery_slots`, `orders`, audit/outbox/calendar/notification state).
 - All business tables carry `hub_id`; `hubs` carries `tenant_id`.
 - Timestamps are UTC epoch milliseconds.
 - `order_events.detail_json` and `calendar_repairs.detail_json` require valid JSON.

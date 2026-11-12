@@ -8,6 +8,8 @@ import {
   LoadingState,
   PageContainer,
   PageHeader,
+  SearchIcon,
+  UsersIcon,
   type DataTableColumn,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
@@ -109,7 +111,7 @@ export function CustomersPage() {
       </Card>
 
       {state.status === "loading" ? (
-        <LoadingState label="Loading customers" rows={3} />
+        <LoadingState label="Loading customers" variant="table" rows={3} />
       ) : null}
 
       {state.status === "error" ? (
@@ -137,10 +139,24 @@ export function CustomersPage() {
           rows={data.items}
           getRowKey={(customer) => customer.id}
           emptyState={
-            <EmptyState
-              title="No customers found"
-              description="Try a different name or phone number."
-            />
+            search.trim() ? (
+              <EmptyState
+                icon={<SearchIcon className="h-6 w-6" />}
+                title="No customers found"
+                description="Try a different name or phone number."
+                action={
+                  <Button variant="secondary" onClick={() => setSearch("")}>
+                    Clear search
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<UsersIcon className="h-6 w-6" />}
+                title="No customers found"
+                description="Customers appear here automatically when orders are created."
+              />
+            )
           }
         />
       ) : null}

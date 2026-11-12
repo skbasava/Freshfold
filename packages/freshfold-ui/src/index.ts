@@ -5,12 +5,14 @@ export {
   CheckCircleIcon,
   ChevronDownIcon,
   CloseIcon,
+  GoogleIcon,
   HomeIcon,
   InfoCircleIcon,
   MenuIcon,
   OrdersIcon,
   PlusIcon,
   SearchIcon,
+  ShieldCheckIcon,
   SparkleIcon,
   TruckIcon,
   UsersIcon,
@@ -38,7 +40,10 @@ export type { AlertProps, AlertTone } from "./components/feedback/Alert";
 export { EmptyState } from "./components/feedback/EmptyState";
 export type { EmptyStateProps } from "./components/feedback/EmptyState";
 export { LoadingState } from "./components/feedback/LoadingState";
-export type { LoadingStateProps } from "./components/feedback/LoadingState";
+export type {
+  LoadingStateProps,
+  LoadingStateVariant,
+} from "./components/feedback/LoadingState";
 export { Modal } from "./components/feedback/Modal";
 export type { ModalProps } from "./components/feedback/Modal";
 export { Toast, ToastViewport } from "./components/feedback/Toast";

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  employeeHubMembershipSchema,
-  employeeRecordSchema,
-  membershipResolutionRequestSchema,
-  membershipResolutionResponseSchema,
+  resolveSupabaseAuthorization,
   supabaseAuthErrorCodeSchema,
   supabaseJwtAlgorithmSchema,
   supabaseJwtClaimsSchema,
@@ -20,6 +17,13 @@ const validClaims = {
   nbf: 1_799_999_400,
   role: "authenticated",
   session_id: "22222222-2222-4222-8222-222222222222",
+  app_metadata: {
+    role: "manager",
+    tenant_id: "tenant-1",
+    hub_id: "hub-1",
+    status: "active",
+    display_name: "Maya Manager",
+  },
 };
 
 describe("Supabase JWT contracts", () => {
@@ -65,79 +69,105 @@ describe("Supabase JWT contracts", () => {
   });
 });
 
-describe("employee membership contracts", () => {
-  it("validates an active employee and membership", () => {
-    expect(
-      employeeRecordSchema.parse({
-        id: "employee-1",
-        supabaseSubject: "subject-1",
-        email: "manager@example.com",
-        displayName: "Maya Manager",
-        status: "active",
-        createdAt: 1,
-        updatedAt: 2,
-      }),
-    ).toMatchObject({ id: "employee-1", status: "active" });
+describe("Supabase authorization extraction", () => {
+  it("resolves role, tenant, hub, and display name from app_metadata", () => {
+    const parsed = supabaseJwtClaimsSchema.parse(validClaims);
+    const result = resolveSupabaseAuthorization(parsed);
 
-    expect(
-      employeeHubMembershipSchema.parse({
-        employeeId: "employee-1",
+    expect(result).toEqual({
+      ok: true,
+      authorization: {
+        role: "manager",
         tenantId: "tenant-1",
         hubId: "hub-1",
-        role: "manager",
-        createdAt: 1,
-      }),
-    ).toMatchObject({ role: "manager" });
-  });
-
-  it("requires a verified subject and optional hub hint", () => {
-    expect(
-      membershipResolutionRequestSchema.parse({ supabaseSubject: "subject-1" }),
-    ).toEqual({ supabaseSubject: "subject-1" });
-    expect(
-      membershipResolutionRequestSchema.parse({
-        supabaseSubject: "subject-1",
-        hubId: "hub-2",
-      }),
-    ).toMatchObject({ hubId: "hub-2" });
-    expect(
-      membershipResolutionRequestSchema.safeParse({ supabaseSubject: "" })
-        .success,
-    ).toBe(false);
-  });
-
-  it("validates a resolved employee context with permissions", () => {
-    const response = membershipResolutionResponseSchema.parse({
-      employee: {
-        id: "employee-1",
-        supabaseSubject: "subject-1",
-        email: "manager@example.com",
-        displayName: "Maya Manager",
         status: "active",
-        createdAt: 1,
-        updatedAt: 2,
+        displayName: "Maya Manager",
       },
-      selected: {
-        employeeId: "employee-1",
-        tenantId: "tenant-1",
-        hubId: "hub-1",
+    });
+  });
+
+  it("supports Custom Access Token Auth Hook claims", () => {
+    const parsed = supabaseJwtClaimsSchema.parse({
+      ...validClaims,
+      app_metadata: {},
+      staff_role: "front_desk",
+      tenant_id: "tenant-2",
+      hub_id: "hub-9",
+      user_metadata: { full_name: "Riya Sharma" },
+    });
+    const result = resolveSupabaseAuthorization(parsed);
+
+    expect(result).toEqual({
+      ok: true,
+      authorization: {
+        role: "front_desk",
+        tenantId: "tenant-2",
+        hubId: "hub-9",
+        status: "active",
+        displayName: "Riya Sharma",
+      },
+    });
+  });
+
+  it("never trusts user_metadata or built-in top-level role=authenticated for authz", () => {
+    const parsed = supabaseJwtClaimsSchema.parse({
+      ...validClaims,
+      role: "authenticated",
+      app_metadata: {},
+      user_metadata: {
         role: "manager",
-        createdAt: 1,
+        tenant_id: "tenant-1",
+        hub_id: "hub-1",
       },
-      memberships: [
-        {
-          employeeId: "employee-1",
-          tenantId: "tenant-1",
-          hubId: "hub-1",
-          role: "manager",
-          createdAt: 1,
-        },
-      ],
-      permissions: ["view_orders", "manage_users"],
     });
 
-    expect(response.selected.hubId).toBe("hub-1");
-    expect(response.permissions).toContain("view_orders");
+    expect(resolveSupabaseAuthorization(parsed)).toEqual({
+      ok: false,
+      status: 403,
+      code: "membership_missing",
+      reason: "missing_or_invalid_role",
+    });
+  });
+
+  it("fails closed when role, tenant, or hub is missing or inactive", () => {
+    const missingHub = supabaseJwtClaimsSchema.parse({
+      ...validClaims,
+      app_metadata: { role: "front_desk", tenant_id: "tenant-1" },
+    });
+    const inactive = supabaseJwtClaimsSchema.parse({
+      ...validClaims,
+      app_metadata: {
+        role: "front_desk",
+        tenant_id: "tenant-1",
+        hub_id: "hub-1",
+        status: "revoked",
+      },
+    });
+    const disabled = supabaseJwtClaimsSchema.parse({
+      ...validClaims,
+      app_metadata: {
+        role: "front_desk",
+        tenant_id: "tenant-1",
+        hub_id: "hub-1",
+        disabled: true,
+      },
+    });
+
+    expect(resolveSupabaseAuthorization(missingHub)).toMatchObject({
+      ok: false,
+      status: 403,
+      code: "membership_missing",
+    });
+    expect(resolveSupabaseAuthorization(inactive)).toMatchObject({
+      ok: false,
+      status: 403,
+      code: "membership_inactive",
+    });
+    expect(resolveSupabaseAuthorization(disabled)).toMatchObject({
+      ok: false,
+      status: 403,
+      code: "membership_inactive",
+    });
   });
 
   it("defines the auth error codes from the plan", () => {
@@ -148,6 +178,7 @@ describe("employee membership contracts", () => {
       "membership_inactive",
       "cross_tenant_denied",
       "refresh_failed",
+      "identity_provider_unavailable",
     ]) {
       expect(supabaseAuthErrorCodeSchema.parse(code)).toBe(code);
     }

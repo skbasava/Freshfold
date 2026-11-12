@@ -37,6 +37,10 @@ function fakeSupabase(
         data: { session: session(), user: session().user },
         error: null,
       })),
+      signInWithOAuth: vi.fn(async () => ({
+        data: { provider: "google", url: "https://accounts.google.com/o/oauth2/v2/auth" },
+        error: null,
+      })),
       signOut: vi.fn(async () => ({ error: null })),
       resetPasswordForEmail: vi.fn(async () => ({ data: {}, error: null })),
       updateUser: vi.fn(async () => ({ data: { user: session().user }, error: null })),
@@ -84,6 +88,54 @@ describe("Supabase auth client adapter", () => {
     expect(signIn).toHaveBeenCalledWith({
       email: "desk@example.com",
       password: "wrong",
+    });
+  });
+
+  it("starts Google OAuth PKCE flow with account selection and callback URL", async () => {
+    const signInWithOAuth = vi.fn(async () => ({
+      data: {
+        provider: "google",
+        url: "https://accounts.google.com/o/oauth2/v2/auth",
+      },
+      error: null,
+    }));
+    const client = createSupabaseAuthClient(
+      config,
+      fakeSupabase({ signInWithOAuth }),
+    );
+
+    await client.signInWithGoogle("http://localhost:5173/login/callback");
+
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "http://localhost:5173/login/callback",
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+  });
+
+  it("maps cancelled Google OAuth errors to oauth_denied", async () => {
+    const signInWithOAuth = vi.fn(async () => ({
+      data: { provider: "google", url: null },
+      error: {
+        message: "access_denied",
+        status: 400,
+        code: "access_denied",
+      },
+    }));
+    const client = createSupabaseAuthClient(
+      config,
+      fakeSupabase({ signInWithOAuth }),
+    );
+
+    await expect(
+      client.signInWithGoogle("http://localhost:5173/login/callback"),
+    ).rejects.toMatchObject({
+      name: "AuthClientError",
+      code: "oauth_denied",
     });
   });
 

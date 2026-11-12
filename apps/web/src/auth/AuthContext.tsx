@@ -13,7 +13,6 @@ import type { AuthFailureDetail } from "../api/client";
 import { useApi } from "../api/context";
 import type { AppApi } from "../api/types";
 import { isMockApiError } from "../mocks/errors";
-import { createLegacyAuthClient } from "./legacy-auth-client";
 import { AuthClientError, createSupabaseAuthClient } from "./supabase-auth-client";
 import { readSupabaseAuthConfig } from "./supabase-config";
 import {
@@ -39,8 +38,9 @@ export type AuthState =
 
 export interface AuthContextValue {
   state: AuthState;
-  authProvider: "supabase" | "legacy";
+  authProvider: "supabase" | "mock" | "unconfigured";
   login(input: LoginRequest): Promise<AuthenticatedSession>;
+  loginWithGoogle(): Promise<void>;
   logout(): Promise<void>;
   refresh(): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
@@ -133,6 +133,50 @@ function clearPasswordSetupUrl(): void {
   window.history.replaceState({}, "", url);
 }
 
+function createMockAuthClient(api: AppApi): AuthClient {
+  return {
+    provider: "mock",
+    async getSession() {
+      const session = await api.getSession();
+      return {
+        accessToken: "",
+        refreshToken: null,
+        expiresAt: null,
+        userId: session.user.name,
+        email: null,
+      };
+    },
+    async signIn(email: string, password: string) {
+      await api.login({ email, password });
+    },
+    async signInWithGoogle() {
+      await api.login({
+        email: "desk@example.com",
+        password: "demo-google-sso",
+      });
+    },
+    async signOut() {
+      await api.logout();
+    },
+    async requestPasswordReset() {
+      throw new Error(
+        "Password reset is only available when Supabase Auth is configured.",
+      );
+    },
+    async updatePassword() {
+      throw new Error(
+        "Password changes are only available when Supabase Auth is configured.",
+      );
+    },
+    async refreshSession() {
+      return this.getSession();
+    },
+    onAuthStateChange() {
+      return { unsubscribe() {} };
+    },
+  };
+}
+
 function defaultAuthClient(api: AppApi): {
   client?: AuthClient;
   error?: string;
@@ -150,7 +194,10 @@ function defaultAuthClient(api: AppApi): {
           : "Supabase configuration is invalid.",
     };
   }
-  return { client: createLegacyAuthClient(api) };
+  if (api.mode === "mock") {
+    return { client: createMockAuthClient(api) };
+  }
+  return {};
 }
 
 export function AuthProvider({
@@ -243,7 +290,7 @@ export function AuthProvider({
     [api, clearLocalSession, client, clock, tokenStore],
   );
 
-  const resolveLegacySession = useCallback(async () => {
+  const resolveMockSession = useCallback(async () => {
     try {
       const response = await api.getSession();
       const mapped = mapServerSession(response, clock);
@@ -261,13 +308,17 @@ export function AuthProvider({
   }, [api, clearLocalSession, clock]);
 
   const refresh = useCallback(async () => {
+    if (setup.error) {
+      return;
+    }
     if (!client) {
+      await clearLocalSession();
       return;
     }
     setState({ status: "loading" });
     try {
-      if (client.provider === "legacy") {
-        await resolveLegacySession();
+      if (client.provider === "mock") {
+        await resolveMockSession();
         return;
       }
 
@@ -313,14 +364,23 @@ export function AuthProvider({
       }
       setState({ status: "error", message: errorMessage(error) });
     }
-  }, [clearLocalSession, client, clock, pendingSetup, resolveLegacySession, resolveSupabaseSession, tokenStore]);
+  }, [
+    clearLocalSession,
+    client,
+    clock,
+    pendingSetup,
+    resolveMockSession,
+    resolveSupabaseSession,
+    setup.error,
+    tokenStore,
+  ]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!client || client.provider === "legacy") {
+    if (!client || client.provider === "mock") {
       return;
     }
 
@@ -358,7 +418,7 @@ export function AuthProvider({
     });
 
     return () => subscription.unsubscribe();
-  }, [clearLocalSession, client, resolveSupabaseSession, tokenStore]);
+  }, [clearLocalSession, client, pendingSetup, resolveSupabaseSession, tokenStore]);
 
   useEffect(() => {
     const handleAuthFailure = (event: Event) => {
@@ -388,7 +448,7 @@ export function AuthProvider({
         throw new Error("Sign-in is unavailable.");
       }
 
-      if (client.provider === "legacy") {
+      if (client.provider === "mock") {
         const response = await api.login(input);
         const mapped = mapServerSession(response, clock);
         await api.setAccountScope?.(accountScopeKey(mapped));
@@ -406,17 +466,31 @@ export function AuthProvider({
     [api, client, clock, resolveSupabaseSession],
   );
 
+  const loginWithGoogle = useCallback(async () => {
+    if (!client) {
+      throw new AuthClientError(
+        "provider_unavailable",
+        "Google sign-in requires Supabase Auth configuration.",
+      );
+    }
+
+    if (client.provider === "mock") {
+      await client.signInWithGoogle();
+      setPendingSetup(false);
+      await resolveMockSession();
+      return;
+    }
+
+    await client.signInWithGoogle();
+  }, [client, resolveMockSession]);
+
   const logout = useCallback(async () => {
     try {
-      if (client?.provider === "supabase") {
-        await client.signOut();
-      } else {
-        await api.logout();
-      }
+      await client?.signOut();
     } finally {
       await clearLocalSession();
     }
-  }, [api, clearLocalSession, client]);
+  }, [clearLocalSession, client]);
 
   const requestPasswordReset = useCallback(
     async (email: string) => {
@@ -449,8 +523,9 @@ export function AuthProvider({
   const value = useMemo<AuthContextValue>(
     () => ({
       state,
-      authProvider: client?.provider ?? "legacy",
+      authProvider: client?.provider ?? "unconfigured",
       login,
+      loginWithGoogle,
       logout,
       refresh,
       requestPasswordReset,
@@ -460,6 +535,7 @@ export function AuthProvider({
       state,
       client?.provider,
       login,
+      loginWithGoogle,
       logout,
       refresh,
       requestPasswordReset,

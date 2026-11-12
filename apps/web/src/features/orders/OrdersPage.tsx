@@ -7,9 +7,11 @@ import {
   EmptyState,
   Input,
   LoadingState,
+  OrdersIcon,
   PageContainer,
   PageHeader,
   PlusIcon,
+  SearchIcon,
   Select,
   StatusBadge,
   type DataTableColumn,
@@ -133,6 +135,7 @@ export function OrdersPage() {
   }, [api, search, status, sort, page, reloadToken]);
 
   const data = state.status === "success" ? state.data : null;
+  const hasFilters = search.trim() !== "" || status !== "all";
   const attentionCount =
     data?.items.filter((order) => order.syncState !== "synced").length ?? 0;
 
@@ -193,7 +196,7 @@ export function OrdersPage() {
       ) : null}
 
       {state.status === "loading" ? (
-        <LoadingState label="Loading orders" rows={4} />
+        <LoadingState label="Loading orders" variant="table" rows={4} />
       ) : null}
 
       {state.status === "error" ? (
@@ -223,22 +226,39 @@ export function OrdersPage() {
             rows={data.items}
             getRowKey={(order) => order.id}
             emptyState={
-              <EmptyState
-                title="No orders found"
-                description="Try a different search or status."
-                action={
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setSearch("");
-                      setStatus("all");
-                      setPage(1);
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                }
-              />
+              hasFilters ? (
+                <EmptyState
+                  icon={<SearchIcon className="h-6 w-6" />}
+                  title="No orders found"
+                  description="Try a different search or status."
+                  action={
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSearch("");
+                        setStatus("all");
+                        setPage(1);
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={<OrdersIcon className="h-6 w-6" />}
+                  title="No orders yet"
+                  description="New orders created at the desk will appear here."
+                  action={
+                    <Button
+                      leadingIcon={<PlusIcon className="h-4 w-4" />}
+                      onClick={() => navigate("/orders/new")}
+                    >
+                      New order
+                    </Button>
+                  }
+                />
+              )
             }
           />
 

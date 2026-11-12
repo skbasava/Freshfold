@@ -46,6 +46,21 @@ describe("DeliveriesPage", () => {
     expect(screen.getByText("Full — no places left")).toBeInTheDocument();
   });
 
+  it("shows an empty state when no delivery times exist for the day", async () => {
+    const api = createMockApi({ latencyMs: 0, empty: true, role: "manager" });
+    renderWithApi(
+      <Routes>
+        <Route path="/deliveries" element={<DeliveriesPage />} />
+      </Routes>,
+      api,
+      { route: "/deliveries" },
+    );
+
+    expect(
+      await screen.findByText("No delivery times"),
+    ).toBeInTheDocument();
+  });
+
   it("lets a manager move a scheduled order to another slot", async () => {
     const user = userEvent.setup();
     renderDeliveries();

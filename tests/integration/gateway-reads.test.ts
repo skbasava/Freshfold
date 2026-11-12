@@ -2,7 +2,8 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import type { Role } from "../../packages/contracts/src/auth";
 import {
   INTERNAL_CONTEXT_HEADER,
   INTERNAL_KEY_ID_HEADER,
@@ -10,35 +11,25 @@ import {
 } from "../../packages/contracts/src/http";
 import { verifyInternalContext } from "../../packages/shared/src/internal-context";
 import gateway from "../../workers/gateway/src/index";
+import type { GatewayBindings } from "../../workers/gateway/src/types";
+import {
+  createTestKey,
+  jwksFetch,
+  signSupabaseToken,
+  SUPABASE_AUDIENCE,
+  SUPABASE_ISSUER,
+  SUPABASE_JWKS_URL,
+  SUPABASE_NOW_MS,
+  testClaims,
+  type TestKey,
+} from "../helpers/supabase";
 
 const INTERNAL_CONTEXT_SECRET = "test-internal-context-secret-32-bytes";
+let key: TestKey;
 
-type Role = "front_desk" | "manager" | "service";
-
-function authContext(role: Role) {
-  return {
-    actorId: role === "service" ? "system:calendar" : `user-${role}`,
-    actorType: role === "service" ? "system" : "user",
-    role,
-    tenantId: "tenant-1",
-    hubId: "hub-1",
-    exp: Date.now() + 60_000,
-  };
-}
-
-function createAuthBinding(): Fetcher {
-  return {
-    fetch: async (request: Request) => {
-      const cookie = request.headers.get("cookie") ?? "";
-      const role: Role = cookie.includes("role=manager")
-        ? "manager"
-        : cookie.includes("role=service")
-          ? "service"
-          : "front_desk";
-      return Response.json(authContext(role));
-    },
-  } as Fetcher;
-}
+beforeAll(async () => {
+  key = await createTestKey("key-reads", "RS256");
+});
 
 function createLaundryBinding(captured: Request[]): Fetcher {
   return {
@@ -49,27 +40,44 @@ function createLaundryBinding(captured: Request[]): Fetcher {
   } as Fetcher;
 }
 
+async function tokenForRole(role: Role): Promise<string> {
+  return signSupabaseToken(
+    key,
+    testClaims({
+      sub: `user-${role}`,
+      app_metadata: {
+        role,
+        tenant_id: "tenant-1",
+        hub_id: "hub-1",
+        status: "active",
+      },
+    }),
+  );
+}
+
 async function requestGateway(
   path: string,
-  options: { cookie?: string; headers?: Record<string, string> },
+  options: { role?: Role; headers?: Record<string, string> },
   laundry: Fetcher,
 ): Promise<Response> {
   const headers = new Headers(options.headers);
-  if (options.cookie) {
-    headers.set("cookie", options.cookie);
+  if (options.role) {
+    headers.set("authorization", `Bearer ${await tokenForRole(options.role)}`);
   }
+  const jwks = jwksFetch([key]);
+  const bindings: GatewayBindings = {
+    LAUNDRY: laundry,
+    INTERNAL_CONTEXT_SECRET,
+    INTERNAL_CONTEXT_KEY_ID: "v1",
+    SUPABASE_JWKS_URL,
+    SUPABASE_JWT_ISSUER: SUPABASE_ISSUER,
+    SUPABASE_JWT_AUDIENCE: SUPABASE_AUDIENCE,
+    SUPABASE_JWKS_FETCH: jwks.fetchImpl,
+    SUPABASE_CLOCK: () => SUPABASE_NOW_MS,
+  };
   const request = new Request(`https://gateway.test${path}`, { headers });
   const ctx = createExecutionContext();
-  const response = await gateway.fetch(
-    request,
-    {
-      AUTH: createAuthBinding(),
-      LAUNDRY: laundry,
-      INTERNAL_CONTEXT_SECRET,
-      INTERNAL_CONTEXT_KEY_ID: "v1",
-    },
-    ctx,
-  );
+  const response = await gateway.fetch(request, bindings, ctx);
   await waitOnExecutionContext(ctx);
   return response;
 }
@@ -80,7 +88,7 @@ describe("gateway read routes", () => {
     const response = await requestGateway(
       "/api/orders?limit=2",
       {
-        cookie: "laundry_session=x; role=front_desk",
+        role: "front_desk",
         headers: { "x-hub-id": "hub-2", "x-role": "manager" },
       },
       createLaundryBinding(captured),
@@ -115,7 +123,7 @@ describe("gateway read routes", () => {
     const captured: Request[] = [];
     const response = await requestGateway(
       "/api/customers/cust-1",
-      { cookie: "laundry_session=x; role=manager" },
+      { role: "manager" },
       createLaundryBinding(captured),
     );
 
@@ -125,21 +133,11 @@ describe("gateway read routes", () => {
     );
   });
 
-  it("does not require CSRF for safe read requests", async () => {
-    const response = await requestGateway(
-      "/api/orders",
-      { cookie: "laundry_session=x; role=front_desk" },
-      createLaundryBinding([]),
-    );
-
-    expect(response.status).toBe(200);
-  });
-
   it("denies service roles without view_orders and does not forward", async () => {
     const captured: Request[] = [];
     const response = await requestGateway(
       "/api/orders",
-      { cookie: "laundry_session=x; role=service" },
+      { role: "service" },
       createLaundryBinding(captured),
     );
 
@@ -162,12 +160,12 @@ describe("gateway read routes", () => {
     const binding = createLaundryBinding(captured);
     const feed = await requestGateway(
       "/api/changes?since=0&limit=5",
-      { cookie: "laundry_session=x; role=front_desk" },
+      { role: "front_desk" },
       binding,
     );
     const events = await requestGateway(
       "/api/orders/order-1/events?limit=10",
-      { cookie: "laundry_session=x; role=front_desk" },
+      { role: "front_desk" },
       binding,
     );
 

@@ -65,7 +65,7 @@ config_for() {
   fi
 }
 
-for worker in auth laundry; do
+for worker in laundry; do
   config="$(config_for "$worker")"
   if rg -q '00000000-0000-0000-0000-000000000000' "$config"; then
     echo "D1 database_id is still a placeholder in $config." >&2
@@ -88,14 +88,11 @@ run_wrangler() {
 }
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  echo "Applying auth migrations for $ENVIRONMENT"
-  pnpm exec wrangler d1 migrations apply laundry-auth --remote --config "$(config_for auth)"
-
   echo "Applying laundry migrations for $ENVIRONMENT"
   pnpm exec wrangler d1 migrations apply laundry-core --remote --config "$(config_for laundry)"
 fi
 
-for worker in auth laundry calendar notifications scheduler gateway; do
+for worker in laundry calendar notifications scheduler gateway; do
   config="$(config_for "$worker")"
   echo "Deploying $worker for $ENVIRONMENT using $config"
   run_wrangler deploy --config "$config" --var "ENVIRONMENT:$ENVIRONMENT"

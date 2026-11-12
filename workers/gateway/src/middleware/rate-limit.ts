@@ -34,32 +34,6 @@ function rateLimitResponse(
   return errorResponse(c, 503, "rate_limit_unavailable");
 }
 
-export async function loginIpRateLimit(
-  c: Context<GatewayEnv>,
-): Promise<Response | null> {
-  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-  const result = await checkRateLimit(
-    c.env.LOGIN_RATE_LIMITER,
-    `login:ip:${ip}`,
-    c.env.ENVIRONMENT,
-  );
-
-  return result === "allowed" ? null : rateLimitResponse(c, result);
-}
-
-export async function loginAccountRateLimit(
-  c: Context<GatewayEnv>,
-  email: string,
-): Promise<Response | null> {
-  const result = await checkRateLimit(
-    c.env.LOGIN_RATE_LIMITER,
-    `login:account:${email}`,
-    c.env.ENVIRONMENT,
-  );
-
-  return result === "allowed" ? null : rateLimitResponse(c, result);
-}
-
 export const mutationRateLimit: MiddlewareHandler<GatewayEnv> = async (
   c,
   next,

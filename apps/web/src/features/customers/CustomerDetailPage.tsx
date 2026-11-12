@@ -5,9 +5,11 @@ import {
   DataTable,
   EmptyState,
   LoadingState,
+  OrdersIcon,
   PageContainer,
   PageHeader,
   StatusBadge,
+  UsersIcon,
   type DataTableColumn,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
@@ -109,7 +111,7 @@ export function CustomerDetailPage() {
     return (
       <PageContainer className="flex flex-col gap-6">
         <PageHeader eyebrow="Customer" title="Customer details" />
-        <LoadingState label="Loading customer" rows={3} />
+        <LoadingState label="Loading customer" variant="detail" rows={3} />
       </PageContainer>
     );
   }
@@ -142,6 +144,7 @@ export function CustomerDetailPage() {
       <PageContainer className="flex flex-col gap-6">
         <PageHeader eyebrow="Customer" title="Customer details" />
         <EmptyState
+          icon={<UsersIcon className="h-6 w-6" />}
           title="Customer not found"
           description="Go back to the customer list to find the right person."
           action={
@@ -216,6 +219,8 @@ export function CustomerDetailPage() {
           getRowKey={(order) => order.id}
           emptyState={
             <EmptyState
+              compact
+              icon={<OrdersIcon className="h-5 w-5" />}
               title="No orders yet"
               description="This customer has not placed an order."
             />

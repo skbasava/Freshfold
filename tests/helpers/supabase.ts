@@ -69,6 +69,13 @@ export function testClaims(overrides: TestClaims = {}): TestClaims {
     nbf: SUPABASE_NOW_SECONDS - 30,
     role: "authenticated",
     session_id: "session-1",
+    app_metadata: {
+      role: "front_desk",
+      tenant_id: "tenant-1",
+      hub_id: "hub-1",
+      status: "active",
+      display_name: "Desk User",
+    },
     ...overrides,
   };
 }
@@ -110,56 +117,4 @@ export function jwksFetch(keys: TestKey[]): {
       return Response.json({ keys: keys.map((key) => key.publicJwk) });
     },
   };
-}
-
-export async function seedEmployee(
-  db: D1Database,
-  input: {
-    id: string;
-    subject: string;
-    email?: string;
-    displayName?: string;
-    status?: "active" | "inactive" | "revoked";
-    memberships: Array<{
-      tenantId: string;
-      hubId: string;
-      role: "front_desk" | "manager" | "service";
-      createdAt?: number;
-    }>;
-  },
-): Promise<void> {
-  const now = 1;
-  await db
-    .prepare(
-      `INSERT INTO employees
-        (id, supabase_subject, email, display_name, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      input.id,
-      input.subject,
-      input.email ?? `${input.id}@example.com`,
-      input.displayName ?? `Employee ${input.id}`,
-      input.status ?? "active",
-      now,
-      now,
-    )
-    .run();
-
-  for (const membership of input.memberships) {
-    await db
-      .prepare(
-        `INSERT INTO employee_hub_memberships
-          (employee_id, tenant_id, hub_id, role, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        input.id,
-        membership.tenantId,
-        membership.hubId,
-        membership.role,
-        membership.createdAt ?? now,
-      )
-      .run();
-  }
 }

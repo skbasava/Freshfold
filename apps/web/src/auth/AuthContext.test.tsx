@@ -27,6 +27,9 @@ function Probe() {
       >
         Sign in
       </button>
+      <button type="button" onClick={() => void auth.loginWithGoogle()}>
+        Sign in with Google
+      </button>
       <button type="button" onClick={() => void auth.logout()}>
         Sign out
       </button>
@@ -51,6 +54,16 @@ describe("AuthProvider", () => {
 
     expect(await screen.findByText("unauthenticated")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("Riya Sharma · front_desk")).toBeInTheDocument();
+  });
+
+  it("bootstraps a signed-out session and signs in with Google demo mode", async () => {
+    const user = userEvent.setup();
+    renderAuth();
+
+    expect(await screen.findByText("unauthenticated")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign in with Google" }));
 
     expect(await screen.findByText("Riya Sharma · front_desk")).toBeInTheDocument();
   });

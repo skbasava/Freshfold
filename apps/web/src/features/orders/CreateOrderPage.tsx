@@ -1,7 +1,9 @@
 import {
   Alert,
   Button,
+  CalendarIcon,
   Card,
+  EmptyState,
   Input,
   LoadingState,
   PageContainer,
@@ -188,7 +190,7 @@ export function CreateOrderPage({ online }: CreateOrderPageProps) {
       />
 
       {state.status === "loading" ? (
-        <LoadingState label="Loading order form" rows={3} />
+        <LoadingState label="Loading order form" variant="detail" rows={3} />
       ) : null}
 
       {state.status === "error" ? (
@@ -266,19 +268,28 @@ export function CreateOrderPage({ online }: CreateOrderPageProps) {
               title="Delivery time"
               description="Full and closed times cannot be chosen."
             >
-              <Select
-                label="Delivery time"
-                placeholder="Choose a delivery time"
-                options={options.slots.map((slot) => ({
-                  value: slot.id,
-                  label: slotOptionLabel(slot),
-                  disabled: slot.status !== "open",
-                }))}
-                value={deliverySlotId}
-                onChange={(event) => setDeliverySlotId(event.target.value)}
-                error={fieldErrors.deliverySlotId}
-                required
-              />
+              {options.slots.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<CalendarIcon className="h-5 w-5" />}
+                  title="No delivery times available"
+                  description="Delivery slots are not configured on the server yet."
+                />
+              ) : (
+                <Select
+                  label="Delivery time"
+                  placeholder="Choose a delivery time"
+                  options={options.slots.map((slot) => ({
+                    value: slot.id,
+                    label: slotOptionLabel(slot),
+                    disabled: slot.status !== "open",
+                  }))}
+                  value={deliverySlotId}
+                  onChange={(event) => setDeliverySlotId(event.target.value)}
+                  error={fieldErrors.deliverySlotId}
+                  required
+                />
+              )}
             </Card>
 
             <Card

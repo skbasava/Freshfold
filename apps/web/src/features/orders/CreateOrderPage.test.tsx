@@ -208,4 +208,25 @@ describe("CreateOrderPage", () => {
       }),
     ).toBeDisabled();
   });
+
+  it("shows an empty state when no delivery times are available", async () => {
+    const api = createMockApi({ latencyMs: 0, syncIssues: false });
+    api.getCreateOrderOptions = async () => ({
+      customers: [],
+      services: ["Wash and fold"],
+      slots: [],
+    });
+
+    renderWithApi(
+      <Routes>
+        <Route path="/orders/new" element={<CreateOrderPage />} />
+      </Routes>,
+      api,
+      { route: "/orders/new" },
+    );
+
+    expect(
+      await screen.findByText("No delivery times available"),
+    ).toBeInTheDocument();
+  });
 });

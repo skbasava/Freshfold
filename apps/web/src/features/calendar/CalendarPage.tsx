@@ -2,16 +2,18 @@ import {
   Alert,
   Badge,
   Button,
+  CalendarIcon,
   Card,
   DatePicker,
   EmptyState,
   LoadingState,
   PageContainer,
   PageHeader,
+  PlusIcon,
   StatusBadge,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import {
   formatDateKey,
@@ -32,6 +34,7 @@ type CalendarState =
 
 export function CalendarPage() {
   const api = useMockApi();
+  const navigate = useNavigate();
   const online = useOnlineStatus();
   const [date, setDate] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
@@ -179,8 +182,20 @@ export function CalendarPage() {
         >
           {orders.length === 0 ? (
             <EmptyState
+              compact
+              icon={<CalendarIcon className="h-5 w-5" />}
               title="No orders on this date"
               description="Choose another date or add a new order for this day."
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<PlusIcon className="h-4 w-4" />}
+                  onClick={() => navigate("/orders/new")}
+                >
+                  New order
+                </Button>
+              }
             />
           ) : (
             <ul

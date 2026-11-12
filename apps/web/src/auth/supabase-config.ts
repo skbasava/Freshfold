@@ -139,3 +139,11 @@ export function defaultResetRedirectUrl(
   }
   return origin ? `${origin}/reset-password` : undefined;
 }
+
+export function defaultOAuthCallbackUrl(
+  origin: string | undefined = typeof window === "undefined"
+    ? undefined
+    : window.location.origin,
+): string | undefined {
+  return origin ? `${origin.replace(/\/$/, "")}/login/callback` : undefined;
+}

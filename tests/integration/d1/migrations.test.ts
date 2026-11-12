@@ -17,8 +17,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const tables = [
-    "employee_hub_memberships",
-    "employees",
     "calendar_repairs",
     "notifications",
     "sync_state",
@@ -84,8 +82,6 @@ describe("laundry migrations", () => {
       "changes",
       "customers",
       "delivery_slots",
-      "employee_hub_memberships",
-      "employees",
       "hubs",
       "notifications",
       "order_events",

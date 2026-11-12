@@ -74,6 +74,7 @@ export function laundryBinding(
           LAUNDRY_DB: db,
           INTERNAL_CONTEXT_SECRET: TEST_SECRET,
           SERVICE_TOKEN: TEST_SERVICE_TOKEN,
+          LAUNDRY_CLOCK: () => SCENARIO_NOW,
           ...(options.queues ?? {}),
         } as never,
         ctx,
@@ -125,6 +126,7 @@ export async function managerRequest(
       LAUNDRY_DB: db,
       INTERNAL_CONTEXT_SECRET: TEST_SECRET,
       SERVICE_TOKEN: TEST_SERVICE_TOKEN,
+      LAUNDRY_CLOCK: () => SCENARIO_NOW,
     } as never,
     ctx,
   );

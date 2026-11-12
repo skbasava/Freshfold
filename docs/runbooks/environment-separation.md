@@ -5,7 +5,7 @@
 | Resource | Local | Staging | Production |
 | --- | --- | --- | --- |
 | D1 `LAUNDRY_DB` | Wrangler local state | Dedicated staging database | Dedicated production database |
-| D1 `AUTH_DB` | Wrangler local state | Dedicated staging database | Dedicated production database |
+| Supabase Auth project | Local/dev project or test JWKS | Dedicated staging project | Dedicated production project |
 | Calendar queues and DLQs | Local simulation | Dedicated staging queues | Dedicated production queues |
 | Notification queues and DLQs | Local simulation | Dedicated staging queues | Dedicated production queues |
 | Google Calendar | Fake provider in tests | Dedicated staging calendar | Production calendar |
@@ -18,7 +18,8 @@ Staging must never share D1 databases, queues, calendars, or messaging credentia
 Store secrets with Wrangler per environment:
 
 ```bash
-pnpm exec wrangler secret put AUTH_SESSION_SECRET --config workers/auth/wrangler.jsonc
+pnpm exec wrangler secret put INTERNAL_CONTEXT_SECRET --config workers/gateway/wrangler.jsonc
+pnpm exec wrangler secret put INTERNAL_CONTEXT_SECRET --config workers/laundry/wrangler.jsonc
 pnpm exec wrangler secret put GOOGLE_PRIVATE_KEY --config workers/calendar/wrangler.jsonc
 pnpm exec wrangler secret put WHATSAPP_API_TOKEN --config workers/notifications/wrangler.jsonc
 pnpm exec wrangler secret put WHATSAPP_PHONE_NUMBER_ID --config workers/notifications/wrangler.jsonc

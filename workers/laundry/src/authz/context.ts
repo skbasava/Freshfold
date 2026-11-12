@@ -25,6 +25,8 @@ export type LaundryBindings = {
   SERVICE_TOKEN?: string;
   CALENDAR_QUEUE?: Queue<OutboxQueueMessage>;
   NOTIFY_QUEUE?: Queue<OutboxQueueMessage>;
+  // Test hook for deterministic business-time evaluation.
+  LAUNDRY_CLOCK?: () => number;
 };
 
 export type LaundryVariables = {

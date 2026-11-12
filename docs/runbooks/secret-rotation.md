@@ -1,6 +1,6 @@
 # Secret Rotation Runbook
 
-**Scope:** Rotating Cloudflare Worker secrets such as `INTERNAL_CONTEXT_SECRET`, `SERVICE_TOKEN`, `DLQ_ADMIN_TOKEN`, `GOOGLE_PRIVATE_KEY`, `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `SMS_API_TOKEN`, `SMS_API_URL`, `SMS_SENDER_ID`, and `AUTH_SESSION_SECRET`.
+**Scope:** Rotating Cloudflare Worker secrets such as `INTERNAL_CONTEXT_SECRET`, `SERVICE_TOKEN`, `DLQ_ADMIN_TOKEN`, `GOOGLE_PRIVATE_KEY`, `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `SMS_API_TOKEN`, `SMS_API_URL`, and `SMS_SENDER_ID`.
 
 **Status:** Procedure only; no staging or production rotation has been performed in this repository.
 

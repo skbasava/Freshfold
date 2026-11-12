@@ -7,10 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AUTH_FAILURE_EVENT,
   GatewayApiError,
-  createCookieCsrfStore,
   createGatewayClient,
-  createMemoryCsrfStore,
-  readCookieValue,
   type AuthFailureDetail,
   type FetchLike,
 } from "./client";
@@ -79,105 +76,6 @@ function fetchCalls(fetchImpl: ReturnType<typeof vi.fn>) {
   }));
 }
 
-describe("gateway client authentication", () => {
-  it("logs in with credentials, stores the CSRF token and reuses it on writes", async () => {
-    const csrfStore = createMemoryCsrfStore();
-    const fetchImpl = vi.fn<FetchLike>(async (input) => {
-      if (String(input) === "/auth/login") {
-        return jsonResponse({
-          ...session,
-          csrfToken: "csrf-from-login",
-          expiresAt: 2_000,
-        });
-      }
-      if (String(input) === "/api/orders/apply-change") {
-        return jsonResponse({ order, replayed: false, customerCreated: false });
-      }
-      return jsonResponse({ error: "not_found" }, 404);
-    });
-    const client = createGatewayClient({
-      fetchImpl,
-      csrfStore,
-      requestIdFactory: () => "request-1",
-    });
-
-    const login = await client.login({
-      email: "desk@example.com",
-      password: "correct horse",
-    });
-    const result = await client.applyChange(markProcessing);
-
-    expect(login.role).toBe("front_desk");
-    expect(csrfStore.get()).toBe("csrf-from-login");
-    expect(result.order.id).toBe("order-1");
-
-    const calls = fetchCalls(fetchImpl);
-    expect(calls[0]).toMatchObject({
-      input: "/auth/login",
-      init: {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({
-          email: "desk@example.com",
-          password: "correct horse",
-        }),
-      },
-    });
-    expect(calls[1]?.init.headers).toMatchObject({
-      "content-type": "application/json",
-      "x-csrf-token": "csrf-from-login",
-      "x-request-id": "request-1",
-    });
-    expect(calls[1]?.init.credentials).toBe("include");
-  });
-
-  it("reads the CSRF cookie after a reload", () => {
-    expect(readCookieValue("a=1; laundry_csrf=token-2; b=2", "laundry_csrf")).toBe(
-      "token-2",
-    );
-
-    const store = createCookieCsrfStore({
-      get cookie() {
-        return "laundry_csrf=cookie-token";
-      },
-    });
-    expect(store.get()).toBe("cookie-token");
-  });
-
-  it("does not attach CSRF to safe reads", async () => {
-    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(session));
-    const client = createGatewayClient({
-      fetchImpl,
-      csrfStore: createMemoryCsrfStore("csrf-token"),
-    });
-
-    await client.getSession();
-
-    const [call] = fetchCalls(fetchImpl);
-    expect(call?.init.method).toBe("GET");
-    expect(call?.init.headers).not.toHaveProperty("x-csrf-token");
-  });
-
-  it("logs out with the CSRF header", async () => {
-    const fetchImpl = vi.fn<FetchLike>(
-      async () => new Response(null, { status: 204 }),
-    );
-    const client = createGatewayClient({
-      fetchImpl,
-      csrfStore: createMemoryCsrfStore("csrf-token"),
-    });
-
-    await client.logout();
-
-    const [call] = fetchCalls(fetchImpl);
-    expect(call?.input).toBe("/auth/logout");
-    expect(call?.init.method).toBe("POST");
-    expect(call?.init.headers).toMatchObject({
-      "x-csrf-token": "csrf-token",
-    });
-  });
-});
-
 describe("gateway client bearer authentication", () => {
   it("sends an Authorization bearer header without cookies or CSRF", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () =>
@@ -186,7 +84,7 @@ describe("gateway client bearer authentication", () => {
     const client = createGatewayClient({
       fetchImpl,
       getAccessToken: () => "access-token-1",
-      csrfStore: createMemoryCsrfStore("legacy-csrf"),
+      requestIdFactory: () => "request-1",
     });
 
     await client.listOrders();
@@ -194,12 +92,13 @@ describe("gateway client bearer authentication", () => {
     const [call] = fetchCalls(fetchImpl);
     expect(call?.init.headers).toMatchObject({
       authorization: "Bearer access-token-1",
+      "x-request-id": "request-1",
     });
     expect(call?.init.headers).not.toHaveProperty("x-csrf-token");
     expect(call?.init.credentials).toBe("omit");
   });
 
-  it("resolves the authenticated session from /api/me in bearer mode", async () => {
+  it("resolves the authenticated session from /api/me", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(session));
     const client = createGatewayClient({
       fetchImpl,
@@ -235,9 +134,15 @@ describe("gateway client bearer authentication", () => {
   it("announces revoked access and clears the bearer after a 403", async () => {
     const cleared: Array<string | null> = [];
     const listener = vi.fn<(event: CustomEvent<AuthFailureDetail>) => void>();
-    window.addEventListener(AUTH_FAILURE_EVENT, listener as unknown as EventListener);
+    window.addEventListener(
+      AUTH_FAILURE_EVENT,
+      listener as unknown as EventListener,
+    );
     const fetchImpl = vi.fn<FetchLike>(async () =>
-      jsonResponse({ error: "membership_inactive", code: "membership_inactive" }, 403),
+      jsonResponse(
+        { error: "membership_inactive", code: "membership_inactive" },
+        403,
+      ),
     );
     const client = createGatewayClient({
       fetchImpl,
@@ -250,7 +155,10 @@ describe("gateway client bearer authentication", () => {
     const detail = listener.mock.calls[0]?.[0]?.detail;
     expect(detail).toMatchObject({ status: 403, code: "membership_inactive" });
     expect(cleared).toContain(null);
-    window.removeEventListener(AUTH_FAILURE_EVENT, listener as unknown as EventListener);
+    window.removeEventListener(
+      AUTH_FAILURE_EVENT,
+      listener as unknown as EventListener,
+    );
   });
 });
 
@@ -299,7 +207,7 @@ describe("gateway client error mapping", () => {
     const client = createGatewayClient({
       fetchImpl: async () =>
         jsonResponse({ error: "VERSION_CONFLICT", order }, 409),
-      csrfStore: createMemoryCsrfStore("csrf-token"),
+      getAccessToken: () => "access-token-1",
     });
 
     await expect(client.applyChange(markProcessing)).rejects.toMatchObject({

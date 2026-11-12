@@ -1,4 +1,7 @@
-import type { InternalContext } from "../../../packages/contracts/src/auth";
+import type {
+  InternalContext,
+  SessionResponse,
+} from "../../../packages/contracts/src/auth";
 import type { SupabaseJwksFetch } from "./auth/supabase-jwt";
 
 export type RateLimitBinding = {
@@ -6,14 +9,12 @@ export type RateLimitBinding = {
 };
 
 export type GatewayBindings = {
-  AUTH?: Fetcher;
   LAUNDRY?: Fetcher;
   ASSETS?: Fetcher;
   ENVIRONMENT?: string;
+  DEV_FRONTEND_URL?: string;
   INTERNAL_CONTEXT_SECRET?: string;
   INTERNAL_CONTEXT_KEY_ID?: string;
-  SERVICE_TOKEN?: string;
-  AUTH_FALLBACK_ENABLED?: string;
   SUPABASE_URL?: string;
   SUPABASE_JWKS_URL?: string;
   SUPABASE_JWT_ISSUER?: string;
@@ -24,15 +25,12 @@ export type GatewayBindings = {
   // Dependency-injection seams for deterministic tests; Wrangler does not set these.
   SUPABASE_JWKS_FETCH?: SupabaseJwksFetch;
   SUPABASE_CLOCK?: () => number;
-  LOGIN_RATE_LIMITER?: RateLimitBinding;
   MUTATION_RATE_LIMITER?: RateLimitBinding;
 };
 
-export type AuthSource = "supabase" | "legacy";
-
 export type GatewayVariables = {
   auth: InternalContext;
-  authSource: AuthSource;
+  session: SessionResponse;
   requestId: string;
   internalHeaders: Record<string, string>;
 };

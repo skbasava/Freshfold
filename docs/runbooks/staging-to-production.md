@@ -43,7 +43,7 @@ pnpm exec wrangler tail <staging-worker> --config workers/<worker>/wrangler.json
 3. Deploy in dependency order:
 
 ```text
-Auth → Laundry → Calendar → Notifications → Scheduler → Gateway
+Laundry → Calendar → Notifications → Scheduler → Gateway
 ```
 
 4. For each Worker, use the environment-specific config and verify health after deploy:

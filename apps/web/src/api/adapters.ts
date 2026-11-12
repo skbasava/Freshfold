@@ -46,9 +46,7 @@ import {
 import type { LocalOrder } from "../sync/types";
 import {
   createGatewayClient,
-  createMemoryCsrfStore,
   isGatewayApiError,
-  type CsrfTokenStore,
   type FetchLike,
   type GatewayClient,
   type GatewayApiError,
@@ -75,7 +73,6 @@ export type { ApiConfig, ApiCapabilities, AppApi } from "./types";
 
 export interface CreateAppApiDependencies {
   fetchImpl?: FetchLike;
-  csrfStore?: CsrfTokenStore;
   backend?: StorageBackend;
   backendFactory?: (accountKey: string | null) => StorageBackend;
   getAccessToken?: () => string | null;
@@ -176,8 +173,21 @@ function mockCode(error: GatewayApiError): MockApiError["code"] {
 }
 
 export function describeGatewayError(error: GatewayApiError): string {
-  if (error.status === 0 || error.code === "NETWORK_ERROR") {
+  if (
+    error.status === 0 ||
+    error.code === "NETWORK_ERROR" ||
+    error.code === "gateway_unreachable"
+  ) {
     return "Cannot reach the local Gateway. Start the backend with `pnpm dev:live` and try again.";
+  }
+  if (error.code === "identity_provider_unavailable") {
+    return "The server could not verify your sign-in right now. Check your Supabase and local worker configuration, then try again.";
+  }
+  if (
+    error.code === "membership_missing" ||
+    error.code === "membership_inactive"
+  ) {
+    return "Your Google account is not enabled for a FreshFold hub yet. Ask your hub manager to assign your role and hub.";
   }
   switch (error.status) {
     case 401:
@@ -343,9 +353,6 @@ function createLiveApi(
     baseUrl: config.baseUrl,
     timeoutMs: config.timeoutMs,
     fetchImpl: dependencies.fetchImpl,
-    csrfStore:
-      dependencies.csrfStore ??
-      (typeof document === "undefined" ? createMemoryCsrfStore() : undefined),
     requestIdFactory: dependencies.requestIdFactory,
     getAccessToken: dependencies.getAccessToken,
     setAccessToken: dependencies.setAccessToken,
@@ -779,29 +786,15 @@ function createLiveApi(
     mode: "live",
     capabilities: liveCapabilities(config),
 
-    async login(input: LoginRequest) {
-      try {
-        const response = await client.login(input);
-        cachedSession = {
-          user: {
-            name: response.user.displayName,
-            role: response.role,
-          },
-          hub: { id: response.hub.id, name: response.hub.id },
-          today: now(),
-        };
-        return cachedSession;
-      } catch (error) {
-        throw toMockApiError(error);
-      }
+    async login(_input: LoginRequest) {
+      throw new MockApiError("Use Google sign-in with Supabase Auth.", {
+        status: 400,
+        code: "VALIDATION_ERROR",
+      });
     },
 
     async logout() {
-      try {
-        await client.logout();
-      } catch {
-        // Clearing local auth state is the safest outcome if the server is down.
-      }
+      dependencies.setAccessToken?.(null);
       cachedSession = null;
     },
 

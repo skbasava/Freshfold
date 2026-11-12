@@ -3,12 +3,8 @@ import {
   applyChangeInputSchema,
   applyChangeResultSchema,
   changeFeedResponseSchema,
-  CSRF_COOKIE,
-  CSRF_HEADER,
   customerListResponseSchema,
   customerSchema,
-  loginRequestSchema,
-  loginResponseSchema,
   orderDetailSchema,
   orderEventsResponseSchema,
   orderListResponseSchema,
@@ -19,8 +15,6 @@ import {
   type ChangeFeedResponse,
   type Customer,
   type CustomerListResponse,
-  type LoginRequest,
-  type LoginResponse,
   type OrderDetail,
   type OrderEventsResponse,
   type OrderListResponse,
@@ -41,67 +35,6 @@ export interface AuthFailureDetail {
 
 export interface RequestOptions {
   signal?: AbortSignal;
-}
-
-export interface CsrfTokenStore {
-  get(): string | null;
-  set(token: string | null): void;
-  clear(): void;
-}
-
-export interface CookieDocumentLike {
-  readonly cookie: string;
-}
-
-export function readCookieValue(
-  cookie: string | null | undefined,
-  name: string,
-): string | null {
-  if (!cookie) {
-    return null;
-  }
-  for (const part of cookie.split(";")) {
-    const [rawKey, ...rest] = part.split("=");
-    if (rawKey?.trim() === name) {
-      return decodeURIComponent(rest.join("=").trim());
-    }
-  }
-  return null;
-}
-
-export function createCookieCsrfStore(
-  documentLike: CookieDocumentLike | null | undefined = typeof document ===
-  "undefined"
-    ? null
-    : document,
-): CsrfTokenStore {
-  let override: string | null = null;
-  return {
-    get() {
-      return override ?? readCookieValue(documentLike?.cookie, CSRF_COOKIE);
-    },
-    set(token) {
-      override = token;
-    },
-    clear() {
-      override = null;
-    },
-  };
-}
-
-export function createMemoryCsrfStore(
-  initial: string | null = null,
-): CsrfTokenStore {
-  let token = initial;
-  return {
-    get: () => token,
-    set(next) {
-      token = next;
-    },
-    clear() {
-      token = null;
-    },
-  };
 }
 
 export interface GatewayApiErrorOptions {
@@ -144,13 +77,7 @@ export interface GatewayClientOptions {
   baseUrl?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
-  csrfStore?: CsrfTokenStore;
   requestIdFactory?: () => string;
-  credentials?: "same-origin" | "include" | "omit";
-  /**
-   * When provided, protected requests are authenticated with a Supabase access
-   * token instead of the legacy cookie/CSRF session.
-   */
   getAccessToken?: () => string | null;
   setAccessToken?: (token: string | null) => void;
 }
@@ -175,8 +102,6 @@ export interface GetOrderEventsOptions extends RequestOptions {
 }
 
 export interface GatewayClient {
-  login(input: LoginRequest, options?: RequestOptions): Promise<LoginResponse>;
-  logout(options?: RequestOptions): Promise<void>;
   getSession(options?: RequestOptions): Promise<SessionResponse>;
   listCustomers(
     options?: ListCustomersOptions,
@@ -195,8 +120,6 @@ export interface GatewayClient {
   ): Promise<ApplyChangeResult>;
 }
 
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
 function buildPath(path: string, query?: URLSearchParams): string {
   if (!query || [...query.keys()].length === 0) {
     return path;
@@ -213,8 +136,9 @@ function buildUrl(baseUrl: string | undefined, path: string): string {
 
 function isAbortError(error: unknown): boolean {
   return (
-    error instanceof DOMException && error.name === "AbortError"
-  ) || (error instanceof Error && error.name === "AbortError");
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 export function createGatewayClient(
@@ -222,10 +146,8 @@ export function createGatewayClient(
 ): GatewayClient {
   const fetchImpl = options.fetchImpl ?? defaultFetch();
   const timeoutMs = options.timeoutMs ?? 15_000;
-  const csrfStore = options.csrfStore ?? createCookieCsrfStore();
   const requestIdFactory =
     options.requestIdFactory ?? (() => crypto.randomUUID());
-  const credentials = options.credentials ?? "include";
   const baseUrl = options.baseUrl;
 
   async function request<T>(
@@ -267,18 +189,13 @@ export function createGatewayClient(
     }
     if (accessToken) {
       headers.authorization = `Bearer ${accessToken}`;
-    } else if (!SAFE_METHODS.has(method)) {
-      const csrfToken = csrfStore.get();
-      if (csrfToken) {
-        headers[CSRF_HEADER] = csrfToken;
-      }
     }
 
     let response: Response;
     try {
       response = await fetchImpl(buildUrl(baseUrl, path), {
         method,
-        credentials: accessToken ? "omit" : credentials,
+        credentials: "omit",
         headers,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: controller.signal,
@@ -383,50 +300,14 @@ export function createGatewayClient(
   }
 
   return {
-    async login(input, requestOptions) {
-      const parsed = loginRequestSchema.safeParse(input);
-      if (!parsed.success) {
-        throw new GatewayApiError({
-          status: 400,
-          code: "invalid_request",
-          message: "Enter a valid email address and password.",
-          details: parsed.error.issues.map((issue) => ({
-            path: issue.path.join("."),
-            message: issue.message,
-          })),
-        });
-      }
-
-      const response = await request(
-        "/auth/login",
-        "POST",
-        loginResponseSchema,
-        parsed.data,
-        requestOptions,
-      );
-      csrfStore.set(response.csrfToken);
-      return response;
-    },
-
-    async logout(requestOptions) {
-      if (options.getAccessToken?.()) {
-        options.setAccessToken?.(null);
-        csrfStore.clear();
-        return;
-      }
-      await request(
-        "/auth/logout",
-        "POST",
-        { parse: () => undefined },
+    getSession(requestOptions) {
+      return request(
+        "/api/me",
+        "GET",
+        sessionResponseSchema,
         undefined,
         requestOptions,
       );
-      csrfStore.clear();
-    },
-
-    getSession(requestOptions) {
-      const path = options.getAccessToken?.() ? "/api/me" : "/auth/session";
-      return request(path, "GET", sessionResponseSchema, undefined, requestOptions);
     },
 
     listCustomers(listOptions = {}) {

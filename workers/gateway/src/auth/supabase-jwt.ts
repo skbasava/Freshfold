@@ -34,6 +34,12 @@ export type SupabaseJwksFetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+export type SupabaseJwksErrorDetail = {
+  reason: "http_error" | "invalid_payload" | "empty_keys" | "fetch_threw";
+  status?: number;
+  error?: unknown;
+};
+
 export type SupabaseJwtVerifierOptions = {
   jwksUrl: string;
   issuer: string;
@@ -43,6 +49,7 @@ export type SupabaseJwtVerifierOptions = {
   cacheTtlMs?: number;
   fetchImpl?: SupabaseJwksFetch;
   now?: () => number;
+  onJwksError?: (detail: SupabaseJwksErrorDetail) => void;
 };
 
 export type SupabaseJwtVerifier = {
@@ -87,14 +94,17 @@ export function createSupabaseJwtVerifier(
     try {
       const response = await fetchImpl(options.jwksUrl, {
         headers: { accept: "application/json" },
-        redirect: "error",
+        redirect: "manual",
       });
-      if (!response.ok) {
+      // Cloudflare Workers rejects redirect: "error"; fail closed on any 3xx or opaque redirect.
+      if (!response.ok || (response.status >= 300 && response.status < 400)) {
+        options.onJwksError?.({ reason: "http_error", status: response.status });
         return null;
       }
 
       const body = (await response.json()) as { keys?: unknown };
       if (!Array.isArray(body.keys)) {
+        options.onJwksError?.({ reason: "invalid_payload" });
         return null;
       }
 
@@ -107,11 +117,13 @@ export function createSupabaseJwtVerifier(
       }
 
       if (keys.size === 0) {
+        options.onJwksError?.({ reason: "empty_keys" });
         return null;
       }
 
       return { fetchedAt: now(), keys };
-    } catch {
+    } catch (error) {
+      options.onJwksError?.({ reason: "fetch_threw", error });
       return null;
     }
   }

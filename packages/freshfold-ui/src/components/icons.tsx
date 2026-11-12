@@ -160,3 +160,45 @@ export function CalendarIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function ShieldCheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3.5l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9v-5l7-3z" />
+      <path d="M9 12l2 2 4-4" />
+    </Icon>
+  );
+}
+
+/**
+ * Official Google "G" identity mark for the Google SSO button.
+ * Brand palette exception kept strictly inside the @freshfold/ui icon system.
+ */
+export function GoogleIcon(props: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 24 24"
+      fill="none"
+      {...props}
+    >
+      <path
+        d="M21.8 12.23c0-.71-.06-1.4-.18-2.05H12v3.88h5.49a4.7 4.7 0 01-2.04 3.08v2.56h3.3c1.93-1.78 3.05-4.4 3.05-7.47z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 22c2.75 0 5.06-.91 6.75-2.47l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2H2.89v2.64A9.99 9.99 0 0012 22z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.3 13.74A5.99 5.99 0 015.98 12c0-.61.11-1.2.32-1.74V7.62H2.89A10 10 0 002 12c0 1.61.39 3.14 1.08 4.38l3.22-2.64z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 6.06c1.5 0 2.84.51 3.9 1.52l2.92-2.92C17.05 3.02 14.74 2 12 2a9.99 9.99 0 00-9.11 5.62l3.41 2.64c.8-2.41 3.05-4.2 5.7-4.2z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}

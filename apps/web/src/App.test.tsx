@@ -22,6 +22,7 @@ function renderApp(initialEntries: string[] = ["/"]) {
 describe("App authentication flow", () => {
   it("flushes pending mutations when the browser reconnects", async () => {
     const api = createMockApi({ latencyMs: 0, syncIssues: false });
+    const getPendingCount = vi.spyOn(api, "getPendingCount");
     const flush = vi
       .spyOn(api, "syncPendingMutations")
       .mockResolvedValue(undefined);
@@ -32,6 +33,7 @@ describe("App authentication flow", () => {
     );
 
     await screen.findByRole("heading", { name: "Today at FreshFold" });
+    await waitFor(() => expect(getPendingCount).toHaveBeenCalled());
     window.dispatchEvent(new Event("online"));
 
     await waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
@@ -45,16 +47,16 @@ describe("App authentication flow", () => {
       await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
     ).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
-    await user.type(screen.getByLabelText(/^Password/), "demo password");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
 
     expect(
       await screen.findByRole("heading", { name: "Orders" }),
     ).toBeInTheDocument();
   });
 
-  it("bootstraps to the login screen, signs in and signs out", async () => {
+  it("bootstraps to the login screen, signs in with Google, and signs out", async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -62,9 +64,9 @@ describe("App authentication flow", () => {
       await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
     ).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/^Email/), "desk@example.com");
-    await user.type(screen.getByLabelText(/^Password/), "demo password");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await user.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
 
     expect(
       await screen.findByRole("heading", { name: "Today at FreshFold" }),
@@ -75,6 +77,16 @@ describe("App authentication flow", () => {
 
     expect(
       await screen.findByRole("heading", { name: "Sign in to FreshFold" }),
+    ).toBeInTheDocument();
+  });
+
+  it("handles cancelled Google callback redirects cleanly", async () => {
+    renderApp(["/login/callback?error=access_denied"]);
+
+    expect(
+      await screen.findByText(
+        "Google sign-in was cancelled. Try again when you are ready.",
+      ),
     ).toBeInTheDocument();
   });
 });

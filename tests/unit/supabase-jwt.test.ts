@@ -321,6 +321,43 @@ describe("Supabase JWT verification", () => {
     ).resolves.toEqual({ ok: false, reason: "jwks_unavailable" });
   });
 
+  it("requests manual redirect handling and rejects JWKS redirects without following them", async () => {
+    const key = await createKey("key-rs", "RS256");
+    const token = await signToken(key, claims());
+    const inits: Array<RequestInit | undefined> = [];
+    const errors: Array<{ reason: string; status?: number }> = [];
+
+    const redirectFetch = async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      inits.push(init);
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://evil.example/jwks.json" },
+      });
+    };
+
+    const instance = createSupabaseJwtVerifier({
+      jwksUrl: JWKS_URL,
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      now: () => NOW_MS,
+      fetchImpl: redirectFetch,
+      onJwksError: (detail) => {
+        errors.push({ reason: detail.reason, status: detail.status });
+      },
+    });
+
+    await expect(instance.verify(token)).resolves.toEqual({
+      ok: false,
+      reason: "jwks_unavailable",
+    });
+    expect(inits).toHaveLength(1);
+    expect(inits[0]?.redirect).toBe("manual");
+    expect(errors).toEqual([{ reason: "http_error", status: 302 }]);
+  });
+
   it("refreshes after the bounded cache interval and does not reuse stale keys", async () => {
     const key = await createKey("key-rs", "RS256");
     let now = NOW_MS;

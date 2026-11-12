@@ -28,7 +28,7 @@ The interface is for non-technical laundry staff: simple language, few steps, pr
 
 - Use Cloudflare Workers, D1, Queues, Cron Triggers, service bindings, Secrets, Workers Static Asseets, and browser IndexedDB. Durable Objects require a documented justification. Do not add Workers KV, external databases, Redis, external brokers, Node servers, Kubernetes, or third-party sync engines.
 - Use TypeScript. Planned tooling: Wrangler, Hono, Zod, Vitest and the Cloudflare Workers test pool; verify supported versions before installing.
-- **D1 ownership:** only the Laundry Worker may bind `LAUNDRY_DB`. Other Workers interact through authenticated service bindings. A separate Auth Worker may use its own `AUTH_DB`, not as an order source of truth.
+- **D1 ownership:** only the Laundry Worker may bind `LAUNDRY_DB`. Other Workers interact through authenticated service bindings. No other Worker owns a D1 database.
 - **Order mutations:** `applyChange()` is the only authoritative order-state mutation path. Use explicit business intents; reject arbitrary status patches. Enforce trusted tenant/hub/actor context at the server boundary.
 - **Atomic writes:** accepted changes must atomically update canonical order/capacity state, `order_events`, `changes`, and required `outbox` records. A conditional UPDATE affecting zero rows does **not** abort `db.batch()`. Prove a fail-closed rollback mechanism with D1 integration tests before implementation approval.
 - **Concurrency:** enforce delivery-slot capacity on the server in the same atomic operation; never use an unprotected read-count-then-write. Rescheduling must release/acquire capacity atomically.
@@ -41,13 +41,14 @@ The interface is for non-technical laundry staff: simple language, few steps, pr
 
 ## Authentication
 
-Follow the authentication architecture in `specs/constitution.md` §13 and
-`docs/adr/ADR-014-supabase-auth.md`. Supabase Auth is the approved external staff identity provider. Phase B
-implementation is authorized; production deployment remains separately gated.
+Follow the authentication and authorization architecture in `specs/constitution.md` §13 and
+`docs/adr/ADR-015-supabase-full-authz.md`. Supabase Auth is the sole staff identity and
+authorization provider; `workers/auth`, `AUTH_DB`, and D1 employee/membership tables are removed.
+Production deployment remains separately gated.
 
-Do not implement a parallel authentication system, run the Auth Worker or
-`AUTH_DB` as a production identity source, store business records in Supabase,
-or bypass Cloudflare Worker authorization.
+Do not implement a parallel authentication system, store business records in Supabase,
+trust client-editable `user_metadata` for roles/tenants/hubs, or bypass Cloudflare Worker
+JWT verification and authorization.
 
 Every protected feature must include authentication, authorization, and
 cross-tenant/hub tests.

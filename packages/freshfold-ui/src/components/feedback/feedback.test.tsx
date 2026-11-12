@@ -113,12 +113,28 @@ describe("EmptyState", () => {
 });
 
 describe("LoadingState", () => {
-  it("announces that content is loading", () => {
-    render(<LoadingState label="Loading today's orders" rows={3} />);
+  it("announces that content is loading across layout variants", () => {
+    const { rerender } = render(
+      <LoadingState label="Loading today's orders" rows={3} />,
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Loading today's orders",
     );
     expect(screen.getAllByTestId("loading-row")).toHaveLength(3);
+
+    for (const variant of ["cards", "table", "detail"] as const) {
+      rerender(
+        <LoadingState
+          label={`Loading ${variant}`}
+          description="Please wait."
+          variant={variant}
+          rows={2}
+        />,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(`Loading ${variant}`);
+      expect(screen.getByRole("status")).toHaveTextContent("Please wait.");
+      expect(screen.getAllByTestId("loading-row")).toHaveLength(2);
+    }
   });
 });

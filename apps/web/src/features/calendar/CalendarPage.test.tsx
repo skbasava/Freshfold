@@ -125,8 +125,8 @@ describe("CalendarPage", () => {
     renderCalendar();
 
     const date = await screen.findByLabelText("Calendar date");
-    expect(date).toHaveValue("2026-11-11");
     expect(await screen.findByText("Karan Shah")).toBeInTheDocument();
+    expect(date).toHaveValue("2026-11-11");
 
     fireEvent.change(date, { target: { value: "2026-11-12" } });
 

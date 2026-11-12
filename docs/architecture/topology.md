@@ -1,15 +1,14 @@
 # Worker Topology
 
-**Status:** Proposed Phase 1
+**Status:** Active (amended by ADR-015)
 
 ```
-Browser (IndexedDB)
-   | HTTPS, secure session cookie
+Browser (IndexedDB + Supabase PKCE session)
+   | HTTPS + Authorization: Bearer <jwt>
    v
-Gateway Worker ---------------------> Auth Worker
-   | service binding                    | AUTH_DB (separate D1)
+Gateway Worker ---------------------> Supabase JWKS (authn + authz claims)
    |
-   | service binding
+   | service binding (HMAC-signed internal context)
    v
 Laundry Worker ---------------------> LAUNDRY_DB (sole D1)
    |
@@ -22,8 +21,7 @@ Laundry Worker ---------------------> LAUNDRY_DB (sole D1)
 
 | Worker | Public | D1 | Responsibilities |
 |---|---|---|---|
-| Gateway | Yes | None | Session validation, CSRF, rate limiting, validation, correlation ID, SPA serving, trusted context forwarding |
-| Auth | Internal | `AUTH_DB` | Login/logout, password verification, sessions, roles, hub membership, revocation |
+| Gateway | Yes | None | Supabase JWT verification (JWKS), claim-based authorization (`role`, `tenantId`, `hubId`), mutation rate limiting, validation, correlation ID, SPA serving, trusted context forwarding |
 | Laundry | Internal | `LAUNDRY_DB` | Orders, customers, `applyChange()`, state machine, capacity, audit, change feed, outbox, Calendar metadata, notification ledger |
 | Calendar | Internal | None | Calendar outbox consumer, poller, classification, revert, reconciliation |
 | Notifications | Internal | None | Delayed send, re-check, claim, provider call, outcome recording |
@@ -32,7 +30,7 @@ Laundry Worker ---------------------> LAUNDRY_DB (sole D1)
 ## Ownership rules
 
 - Only Laundry holds `LAUNDRY_DB`.
-- Gateway and Auth never access `LAUNDRY_DB`.
+- Gateway never accesses `LAUNDRY_DB`; Supabase Auth owns all staff identity, session validation, and role/tenant/hub claims (`ADR-015`).
 - Calendar and Notifications persist state only through Laundry service bindings.
 - Internal Workers are not publicly routable.
 - Service-binding targets deploy before callers.

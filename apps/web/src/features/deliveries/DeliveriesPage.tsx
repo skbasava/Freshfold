@@ -8,6 +8,7 @@ import {
   LoadingState,
   PageContainer,
   PageHeader,
+  TruckIcon,
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -219,10 +220,45 @@ export function DeliveriesPage() {
           </Card>
 
           {schedule.slots.length === 0 ? (
-            <EmptyState
-              title="No delivery times"
-              description="Choose another date or ask a manager to open a time."
-            />
+            <div className="flex flex-col gap-4">
+              <EmptyState
+                icon={<TruckIcon className="h-6 w-6" />}
+                title="No delivery times"
+                description={
+                  api.capabilities.deliverySlots === "unavailable"
+                    ? "Delivery slots are not provided by the server yet."
+                    : "Choose another date or ask a manager to open a time."
+                }
+              />
+              {schedule.orders.length > 0 ? (
+                <Card
+                  title="Scheduled orders"
+                  description="Orders due on this day."
+                >
+                  <ul className="flex flex-col gap-2">
+                    {schedule.orders.map((order) => (
+                      <li
+                        key={order.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            to={`/orders/${order.id}`}
+                            className="font-semibold text-primary-strong underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                          >
+                            {order.customerName}
+                          </Link>
+                          <p className="mt-1 text-xs text-text-muted">
+                            {order.id} · {order.totalItems} item
+                            {order.totalItems === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
+            </div>
           ) : (
             <ul className="flex flex-col gap-4">
               {schedule.slots.map((slot) => {
@@ -259,9 +295,12 @@ export function DeliveriesPage() {
                       </div>
 
                       {orders.length === 0 ? (
-                        <p className="text-sm text-text-muted">
-                          No orders in this time.
-                        </p>
+                        <EmptyState
+                          compact
+                          icon={<TruckIcon className="h-5 w-5" />}
+                          title="No orders in this time"
+                          description="Orders booked into this delivery time will appear here."
+                        />
                       ) : (
                         <ul className="flex flex-col gap-2">
                           {orders.map((order) => (

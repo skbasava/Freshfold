@@ -22,15 +22,17 @@ export interface AuthStateChange {
 export type AuthClientErrorCode =
   | "invalid_credentials"
   | "email_not_confirmed"
+  | "oauth_denied"
   | "rate_limited"
   | "weak_password"
   | "refresh_failed"
   | "provider_unavailable";
 
 export interface AuthClient {
-  readonly provider: "supabase" | "legacy";
+  readonly provider: "supabase" | "mock";
   getSession(): Promise<AuthClientSession | null>;
   signIn(email: string, password: string): Promise<void>;
+  signInWithGoogle(redirectTo?: string): Promise<void>;
   signOut(): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
   updatePassword(password: string): Promise<void>;
