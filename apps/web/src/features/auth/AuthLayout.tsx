@@ -1,80 +1,60 @@
-import { SparkleIcon } from "@freshfold/ui";
 import type { ReactNode } from "react";
 
 export interface AuthLayoutProps {
   children: ReactNode;
-  aside?: ReactNode;
 }
 
-export function FreshFoldBrandMark({
-  compact = false,
-}: {
-  compact?: boolean;
-}) {
+export function FreshFoldBrandMark() {
   return (
     <div className="inline-flex items-center gap-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary text-surface shadow-card">
-        <SparkleIcon className="h-5 w-5" />
-      </span>
-      <span className="flex flex-col text-left">
-        <span className="text-lg font-semibold leading-tight tracking-tight text-text">
-          FreshFold
-        </span>
-        {!compact ? (
-          <span className="text-xs font-medium text-text-muted">
-            Hub operations
-          </span>
-        ) : null}
-      </span>
+      <div className="flex justify-center">
+        <img
+          alt="FreshFold Logo"
+          src="/assets/img/logo.webp"
+          className="h-25 w-80 object-contain"
+        />
+      </div>
     </div>
   );
 }
 
-export function AuthLayout({ children, aside }: AuthLayoutProps) {
-  if (!aside) {
-    return (
-      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 py-10 sm:px-6 sm:py-14">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl sm:h-96 sm:w-96"
-        />
-        <div className="relative w-full max-w-md">
-          <div className="mb-7 flex justify-center">
-            <FreshFoldBrandMark />
-          </div>
+export function AuthLayout({ children }: AuthLayoutProps) {
+  return (
+    <main className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-[#F7F8F3] px-4 py-10 sm:px-6">
+
+      {/* Ambient background */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-48 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-[#DCECC7]/50 blur-[100px]"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-52 -right-40 h-[450px] w-[450px] rounded-full bg-[#DCEBD4]/50 blur-[110px]"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-52 -left-40 h-[400px] w-[400px] rounded-full bg-[#EEF0D9]/60 blur-[100px]"
+      />
+
+      {/* Centered content */}
+      <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center">
+
+        {/* Brand */}
+        <div className="mb-9 flex justify-center">
+          <FreshFoldBrandMark />
+        </div>
+
+        {/* Login content */}
+        <div className="w-full">
           {children}
         </div>
-      </main>
-    );
-  }
 
-  return (
-    <main className="relative min-h-screen overflow-hidden bg-canvas">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-36 -left-24 h-96 w-96 rounded-full bg-primary/10 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -bottom-36 h-96 w-96 rounded-full bg-primary/5 blur-3xl"
-      />
-
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-        <div className="grid w-full items-center gap-10 lg:grid-cols-12 lg:gap-12">
-          <section
-            aria-label="FreshFold workspace overview"
-            className="hidden lg:col-span-6 lg:flex lg:flex-col lg:justify-between"
-          >
-            {aside}
-          </section>
-
-          <section className="mx-auto w-full max-w-md lg:col-span-6 lg:max-w-lg">
-            <div className="mb-6 flex justify-center lg:hidden">
-              <FreshFoldBrandMark />
-            </div>
-            {children}
-          </section>
-        </div>
+        {/* Minimal footer */}
+        <p className="mt-8 text-center text-xs text-[#A0A69A]">
+          © {new Date().getFullYear()} FreshFold
+        </p>
       </div>
     </main>
   );
