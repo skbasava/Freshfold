@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { cors } from "hono/cors";
 import {
   createLogger,
   safeError,
@@ -16,6 +17,16 @@ import type { GatewayEnv } from "./types";
 const app = new Hono<GatewayEnv>();
 
 app.use("*", requestId);
+
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin) => origin,
+    allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true,
+  }),
+);
 
 app.get("/health", (c) =>
   c.json({ status: "ok" as const, service: "gateway" }),

@@ -8,13 +8,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p packages/freshfold-ui/tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p workers/gateway/tsconfig.json && tsc -p workers/laundry/tsconfig.json && tsc -p workers/calendar/tsconfig.json && tsc -p workers/notifications/tsconfig.json && tsc -p workers/scheduler/tsconfig.json",
-    "typecheck:web": "tsc -p apps/web/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p frontend/tsconfig.json && tsc -p workers/gateway/tsconfig.json && tsc -p workers/laundry/tsconfig.json && tsc -p workers/calendar/tsconfig.json && tsc -p workers/notifications/tsconfig.json && tsc -p workers/scheduler/tsconfig.json",
+    "typecheck:web": "tsc -p frontend/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:web": "pnpm --filter @laundry/web test",
-    "build:web": "pnpm --filter @laundry/web build",
-    "dev:web": "pnpm --filter @laundry/web dev",
+    "test:web": "pnpm --filter @laundry/frontend test",
+    "build:web": "pnpm --filter @laundry/frontend build",
+    "dev:web": "pnpm --filter @laundry/frontend dev",
     "dev:live": "node scripts/run-bash.mjs scripts/dev-live.sh",
     "deploy:cloudflare": "node scripts/run-bash.mjs scripts/deploy-cloudflare.sh",
     "check": "pnpm typecheck && pnpm test && pnpm test:web && pnpm build:web",

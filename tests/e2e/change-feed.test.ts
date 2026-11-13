@@ -8,14 +8,14 @@ import {
   applyOrderSnapshot,
   pullChangeFeed,
   type ChangeFeedClient,
-} from "../../apps/web/src/sync/change-feed";
+} from "../../frontend/src/sync/change-feed";
 import {
   describeOrderSync,
   summarizeSyncState,
-} from "../../apps/web/src/orders/conflicts";
-import { createMutationQueue } from "../../apps/web/src/sync/mutation-queue";
-import { createPendingMutation } from "../../apps/web/src/sync/mutation-queue";
-import { isServerConfirmed } from "../../apps/web/src/sync/types";
+} from "../../frontend/src/orders/conflicts";
+import { createMutationQueue } from "../../frontend/src/sync/mutation-queue";
+import { createPendingMutation } from "../../frontend/src/sync/mutation-queue";
+import { isServerConfirmed } from "../../frontend/src/sync/types";
 import {
   createMemoryBackend,
   makeLocalOrder,

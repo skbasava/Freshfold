@@ -3,12 +3,12 @@ import {
   createMutationId,
   createMutationQueue,
   createPendingMutation,
-} from "../../apps/web/src/sync/mutation-queue";
-import { isServerConfirmed } from "../../apps/web/src/sync/types";
+} from "../../frontend/src/sync/mutation-queue";
+import { isServerConfirmed } from "../../frontend/src/sync/types";
 import type {
   LocalOrder,
   PendingMutation,
-} from "../../apps/web/src/sync/types";
+} from "../../frontend/src/sync/types";
 
 import {
   createMemoryBackend,

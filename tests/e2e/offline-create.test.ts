@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { ApplyChangeInput } from "../../packages/contracts/src/mutations";
 import type { OrderDetail } from "../../packages/contracts/src/orders";
-import { createMutationQueue } from "../../apps/web/src/sync/mutation-queue";
+import { createMutationQueue } from "../../frontend/src/sync/mutation-queue";
 import {
   createOfflineOrder,
   updateOfflineOrder,
-} from "../../apps/web/src/orders/offline";
+} from "../../frontend/src/orders/offline";
 import {
   createReconnectFlush,
   flushPendingMutations,
   type MutationTransport,
   type MutationTransportResult,
-} from "../../apps/web/src/sync/submit";
-import { isServerConfirmed } from "../../apps/web/src/sync/types";
+} from "../../frontend/src/sync/submit";
+import { isServerConfirmed } from "../../frontend/src/sync/types";
 import {
   createMemoryBackend,
   makeLocalOrder,

@@ -3,11 +3,11 @@ import type {
   StoreName,
   TransactionContext,
   TransactionMode,
-} from "../../apps/web/src/db/types";
+} from "../../frontend/src/db/types";
 import type {
   LocalOrder,
   PendingMutation,
-} from "../../apps/web/src/sync/types";
+} from "../../frontend/src/sync/types";
 
 export interface MemoryStats {
   transactions: number;

@@ -1,26 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { ApplyChangeInput } from "../../packages/contracts/src/mutations";
 import type { OrderDetail } from "../../packages/contracts/src/orders";
-import { createMutationQueue, createPendingMutation } from "../../apps/web/src/sync/mutation-queue";
+import { createMutationQueue, createPendingMutation } from "../../frontend/src/sync/mutation-queue";
 import {
   createInMemoryLockManager,
   createLockCoordinator,
-} from "../../apps/web/src/sync/locks";
+} from "../../frontend/src/sync/locks";
 import {
   createSyncBroadcast,
   type BroadcastChannelLike,
   type SyncEvent,
-} from "../../apps/web/src/sync/broadcast";
+} from "../../frontend/src/sync/broadcast";
 import {
   createPendingMutationWarning,
   rebuildFromSnapshot,
   requestStoragePersistence,
-} from "../../apps/web/src/sync/recovery";
+} from "../../frontend/src/sync/recovery";
 import {
   flushPendingMutations,
   type MutationTransport,
   type MutationTransportResult,
-} from "../../apps/web/src/sync/submit";
+} from "../../frontend/src/sync/submit";
 import {
   createMemoryBackend,
   makeLocalOrder,

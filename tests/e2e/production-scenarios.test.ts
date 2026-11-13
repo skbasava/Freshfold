@@ -16,14 +16,14 @@ import {
   type NotificationConsumerEnv,
 } from "../../workers/notifications/src/consumer";
 import { ProviderSendError } from "../../packages/notification-client/src/index";
-import { createOfflineOrder } from "../../apps/web/src/orders/offline";
-import { createMutationQueue } from "../../apps/web/src/sync/mutation-queue";
+import { createOfflineOrder } from "../../frontend/src/orders/offline";
+import { createMutationQueue } from "../../frontend/src/sync/mutation-queue";
 import {
   createHttpMutationTransport,
   createReconnectFlush,
   type FlushSummary,
-} from "../../apps/web/src/sync/submit";
-import { isServerConfirmed } from "../../apps/web/src/sync/types";
+} from "../../frontend/src/sync/submit";
+import { isServerConfirmed } from "../../frontend/src/sync/types";
 import { createMemoryBackend } from "../helpers/memory-storage";
 import {
   CALENDAR_NOW,

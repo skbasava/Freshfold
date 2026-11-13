@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
-import webPackageJson from "../../apps/web/package.json";
+import webPackageJson from "../../frontend/package.json";
 
 declare global {
   interface ImportMeta {
@@ -30,7 +30,7 @@ const sharedSources = Object.values(
 ).join("\n");
 
 const webSources = Object.values(
-  import.meta.glob("../../apps/web/src/**/*.{ts,tsx}", {
+  import.meta.glob("../../frontend/src/**/*.{ts,tsx}", {
     query: "?raw",
     import: "default",
     eager: true,
@@ -38,7 +38,7 @@ const webSources = Object.values(
 ).join("\n");
 
 const webEnvSources = Object.values(
-  import.meta.glob("../../apps/web/.env*", {
+  import.meta.glob("../../frontend/.env*", {
     query: "?raw",
     import: "default",
     eager: true,

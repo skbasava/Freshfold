@@ -1,7 +1,0 @@
-/*
- * Tailwind resolves CSS @imports relative to the filesystem, not package
- * exports, so the workspace stylesheet is imported by its stable source path.
- */
-@import "../../../packages/freshfold-ui/src/styles/globals.css";
-
-@source "../../../packages/freshfold-ui/src";

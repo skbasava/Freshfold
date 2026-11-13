@@ -1,0 +1,59 @@
+/*
+ * FreshFold semantic design tokens.
+ * Clean, Fresh, Modern and Professional palette: Deep Navy + Fresh Teal + Neutral Surfaces.
+ * These values are the single source of truth for colour, type, spacing,
+ * radii, shadows, focus treatments, breakpoints, and the desktop sidebar.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Brand & Structural Palette */
+  --color-primary: #172f46;
+  --color-primary-hover: #102336;
+  --color-accent: #159d91;
+  --color-accent-hover: #10877e;
+
+  /* Neutrals & Surfaces */
+  --color-canvas: #f5f8fa;
+  --color-surface: #ffffff;
+  --color-text: #172f46;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+
+  /* Semantic Status Colors */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+
+  /* Accessible dark variants for small text/badges on light (#FFFFFF / #F5F8FA) surfaces */
+  --color-primary-strong: #172f46;
+  --color-accent-strong: #0d7369;
+  --color-success-strong: #15803d;
+  --color-warning-strong: #b45309;
+  --color-danger-strong: #b91c1c;
+  --color-info-strong: #0369a1;
+
+  --spacing: 4px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-card: 0 1px 2px rgba(23, 47, 70, 0.05),
+    0 10px 28px rgba(23, 47, 70, 0.05);
+  --shadow-raised: 0 18px 45px rgba(23, 47, 70, 0.16);
+  --shadow-focus: 0 0 0 2px var(--color-canvas),
+    0 0 0 4px var(--color-accent-hover);
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 72px;
+
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+}
