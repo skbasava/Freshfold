@@ -1,4 +1,13 @@
 export type LogSeverity = "debug" | "info" | "warn" | "error";
+export type LogLevel = LogSeverity | "silent";
+
+export const LOG_LEVEL_WEIGHTS: Record<LogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 100,
+};
 
 export const OBSERVABILITY_EVENTS = {
   metric: "observability_metric",
@@ -14,6 +23,19 @@ export const OBSERVABILITY_EVENTS = {
   mutationConflict: "mutation_conflict",
   offlinePendingMutations: "offline_pending_mutations",
   capacityRejection: "capacity_rejection",
+  // Workflow events
+  httpRequestReceived: "http_request_received",
+  httpRequestCompleted: "http_request_completed",
+  authSuccess: "auth_success",
+  authFailure: "auth_failure",
+  forwardUpstream: "forward_upstream",
+  applyChangeStarted: "apply_change_started",
+  applyChangeAccepted: "apply_change_accepted",
+  applyChangeRejected: "apply_change_rejected",
+  applyChangeReplayed: "apply_change_replayed",
+  applyChangeConflict: "apply_change_conflict",
+  syncFeedPolled: "sync_feed_polled",
+  outboxBatchDispatched: "outbox_batch_dispatched",
 } as const;
 
 export type ObservabilityEvent =
@@ -46,6 +68,8 @@ export type LoggerOptions = {
   correlationId?: string;
   sink?: (line: string) => void;
   now?: () => number;
+  level?: LogLevel;
+  enabled?: boolean;
 };
 
 export type Logger = {
@@ -250,15 +274,83 @@ function reservedField(name: string): boolean {
   return name === "level" || name === "event" || name === "timestamp";
 }
 
+export function readLogLevelFromEnv(env?: Record<string, unknown>): {
+  level: LogLevel;
+  enabled: boolean;
+} {
+  const proc = (
+    globalThis as unknown as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process;
+
+  const getVal = (key: string): unknown => {
+    if (env && key in env) return env[key];
+    if (proc?.env && key in proc.env) {
+      return proc.env[key];
+    }
+    return undefined;
+  };
+
+  const rawEnabled = getVal("ENABLE_LOGS") ?? getVal("VITE_ENABLE_LOGS");
+  const enabled =
+    rawEnabled === undefined || rawEnabled === null
+      ? true
+      : String(rawEnabled).toLowerCase() === "true" || rawEnabled === "1";
+
+  if (!enabled) {
+    return { level: "silent", enabled: false };
+  }
+
+  const rawLevel = getVal("LOG_LEVEL") ?? getVal("VITE_LOG_LEVEL");
+  if (typeof rawLevel === "string") {
+    const lower = rawLevel.toLowerCase().trim();
+    if (
+      lower === "silent" ||
+      lower === "none" ||
+      lower === "off" ||
+      lower === "false"
+    ) {
+      return { level: "silent", enabled: false };
+    }
+    if (
+      lower === "debug" ||
+      lower === "info" ||
+      lower === "warn" ||
+      lower === "error"
+    ) {
+      return { level: lower as LogSeverity, enabled: true };
+    }
+  }
+
+  return { level: "info", enabled: true };
+}
+
 export function createLogger(options: LoggerOptions): Logger {
   const sink = options.sink;
   const now = options.now ?? Date.now;
+
+  const envConfig = readLogLevelFromEnv();
+  const enabled = options.enabled ?? envConfig.enabled;
+  const configuredLevel: LogLevel = !enabled
+    ? "silent"
+    : options.level ?? envConfig.level;
+  const minWeight =
+    LOG_LEVEL_WEIGHTS[configuredLevel] ?? LOG_LEVEL_WEIGHTS.info;
 
   const emit = (
     severity: LogSeverity,
     event: string,
     fields: LogFields = {},
   ): void => {
+    if (configuredLevel === "silent" || !enabled) {
+      return;
+    }
+    const currentWeight = LOG_LEVEL_WEIGHTS[severity] ?? LOG_LEVEL_WEIGHTS.info;
+    if (currentWeight < minWeight) {
+      return;
+    }
+
     const correlationId = options.correlationId ?? options.requestId;
     const base: LogFields = {
       service: options.service,
@@ -305,6 +397,8 @@ export function createLogger(options: LoggerOptions): Logger {
       createLogger({
         ...options,
         ...overrides,
+        level: overrides.level ?? options.level,
+        enabled: overrides.enabled ?? options.enabled,
         sink: overrides.sink ?? options.sink,
         now: overrides.now ?? options.now,
       }),

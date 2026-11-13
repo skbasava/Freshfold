@@ -11,6 +11,9 @@ export type LocalOrderSyncState =
 export interface LocalOrder {
   id: string;
   hubId: string;
+  branchId?: string;
+  tenantId?: string;
+  orderNumber?: string;
   customerId: string;
   customerName: string;
   customerPhone: string;

@@ -5,9 +5,9 @@ import type {
   TransactionContext,
   TransactionMode,
 } from "./types";
+import { syncLogger } from "../lib/logger";
 
 const DB_NAME = "freshfold-laundry";
-const DB_VERSION = 1;
 
 interface MetaRecord {
   key: string;
@@ -131,13 +131,24 @@ function createTransactionContext(tx: IDBTransaction): TransactionContext {
 function openDatabase(
   factory: IDBFactory,
   databaseName: string,
+  onVersionChange?: () => void,
 ): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let request: IDBOpenDBRequest;
     try {
-      request = factory.open(databaseName, DB_VERSION);
+      // Open without specifying a version so that:
+      // 1) If the database is newly created, it creates version 1 with onupgradeneeded.
+      // 2) If the database already exists (e.g. Dexie upgraded to version 2), it opens
+      //    at the current version without throwing a VersionError.
+      request = factory.open(databaseName);
     } catch (error) {
-      reject(error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      syncLogger.error("indexeddb_open_failed", {
+        databaseName,
+        error: err.message,
+        name: err.name,
+      });
+      reject(err);
       return;
     }
 
@@ -156,11 +167,38 @@ function openDatabase(
         db.createObjectStore("meta", { keyPath: "key" });
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error("Failed to open IndexedDB"));
-    request.onblocked = () =>
+
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        syncLogger.info("indexeddb_versionchange_closing", {
+          databaseName,
+          version: db.version,
+        });
+        db.close();
+        onVersionChange?.();
+      };
+      syncLogger.info("indexeddb_ready", {
+        databaseName,
+        version: db.version,
+      });
+      resolve(db);
+    };
+
+    request.onerror = () => {
+      const err = request.error ?? new Error("Failed to open IndexedDB");
+      syncLogger.error("indexeddb_open_failed", {
+        databaseName,
+        error: err.message,
+        name: err.name,
+      });
+      reject(err);
+    };
+
+    request.onblocked = () => {
+      syncLogger.warn("indexeddb_open_blocked", { databaseName });
       reject(new Error("IndexedDB open blocked by another connection"));
+    };
   });
 }
 
@@ -169,21 +207,36 @@ export interface IndexedDbBackendOptions {
 }
 
 export function createIndexedDbBackend(
-  factory: IDBFactory | undefined = globalThis.indexedDB,
+  factory?: IDBFactory | null,
   options: IndexedDbBackendOptions = {},
 ): StorageBackend {
-  if (!factory) {
+  const effectiveFactory =
+    factory === null ? null : (factory ?? globalThis.indexedDB);
+  if (!effectiveFactory) {
     throw new Error("IndexedDB is not available in this environment");
   }
 
-  const database = openDatabase(factory, options.databaseName ?? DB_NAME);
+  const databaseName = options.databaseName ?? DB_NAME;
+  let activeDbPromise: Promise<IDBDatabase> | null = null;
+
+  function getDatabase(): Promise<IDBDatabase> {
+    if (!activeDbPromise) {
+      activeDbPromise = openDatabase(effectiveFactory!, databaseName, () => {
+        activeDbPromise = null;
+      }).catch((err) => {
+        activeDbPromise = null;
+        throw err;
+      });
+    }
+    return activeDbPromise;
+  }
 
   function run<T>(
     stores: StoreName[],
     mode: TransactionMode,
     fn: (tx: IDBTransaction) => Promise<T> | T,
   ): Promise<T> {
-    return database.then((db) => transact(db, stores, mode, fn));
+    return getDatabase().then((db) => transact(db, stores, mode, fn));
   }
 
   return {

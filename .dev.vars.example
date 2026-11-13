@@ -25,3 +25,10 @@ SUPABASE_ANON_KEY=replace-with-public-anon-key
 # Server-only and only if a separate administrative operation is approved.
 # Never expose this value to the frontend or commit a real value.
 SUPABASE_SERVICE_ROLE_KEY=replace-with-server-only-service-role-key
+
+# Workflow & Sync Observability Logs
+# Set ENABLE_LOGS=false to mute all worker console logging
+ENABLE_LOGS=true
+# Log severity filter: debug | info | warn | error | silent
+LOG_LEVEL=debug
+

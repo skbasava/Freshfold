@@ -81,3 +81,26 @@ export const listQuerySchema = z.object({
 });
 
 export type ListQuery = z.infer<typeof listQuerySchema>;
+
+export const deliverySlotSchema = z.object({
+  id: z.string().min(1),
+  hubId: z.string().min(1),
+  slotKey: z.string().min(1),
+  localDate: z.string().min(1),
+  localStart: z.string().min(1),
+  startsAt: z.number().int(),
+  endsAt: z.number().int(),
+  capacity: z.number().int().positive(),
+  active: z.number().int(),
+  createdAt: z.number().int(),
+});
+
+export type DeliverySlot = z.infer<typeof deliverySlotSchema>;
+
+export const deliverySlotListResponseSchema = z.object({
+  items: z.array(deliverySlotSchema),
+});
+
+export type DeliverySlotListResponse = z.infer<
+  typeof deliverySlotListResponseSchema
+>;

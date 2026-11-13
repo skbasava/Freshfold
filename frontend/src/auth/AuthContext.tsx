@@ -10,6 +10,7 @@ import {
 } from "react";
 import { AUTH_FAILURE_EVENT, UNAUTHORIZED_EVENT } from "../api/client";
 import type { AuthFailureDetail } from "../api/client";
+import { authLogger } from "../lib/logger";
 import { useApi } from "../api/context";
 import type { AppApi } from "../api/types";
 import { isMockApiError } from "../mocks/errors";
@@ -224,6 +225,7 @@ export function AuthProvider({
 
   const clearLocalSession = useCallback(
     async (reason?: AuthFailureReason) => {
+      authLogger.info("session_cleared", { reason: reason ?? "user_action" });
       tokenStore.set(null);
       try {
         await api.setAccountScope?.(null);
@@ -265,6 +267,11 @@ export function AuthProvider({
         const response = await api.getSession();
         const mapped = mapServerSession(response, clock);
         await api.setAccountScope?.(accountScopeKey(mapped));
+        authLogger.info("session_resolved", {
+          userId: mapped.user.id,
+          role: mapped.user.role,
+          hubId: mapped.hub.id,
+        });
         setState({ status: "authenticated", session: mapped });
         return mapped;
       } catch (error) {
@@ -444,6 +451,7 @@ export function AuthProvider({
 
   const login = useCallback(
     async (input: LoginRequest) => {
+      authLogger.info("login_started", { email: input.email });
       if (!client) {
         throw new Error("Sign-in is unavailable.");
       }
@@ -453,6 +461,7 @@ export function AuthProvider({
         const mapped = mapServerSession(response, clock);
         await api.setAccountScope?.(accountScopeKey(mapped));
         setPendingSetup(false);
+        authLogger.info("login_completed", { provider: "mock" });
         setState({ status: "authenticated", session: mapped });
         return mapped;
       }
@@ -461,12 +470,14 @@ export function AuthProvider({
       const session = await client.getSession();
       const mapped = await resolveSupabaseSession(session);
       setPendingSetup(false);
+      authLogger.info("login_completed", { provider: "supabase" });
       return mapped;
     },
     [api, client, clock, resolveSupabaseSession],
   );
 
   const loginWithGoogle = useCallback(async () => {
+    authLogger.info("google_oauth_started");
     if (!client) {
       throw new AuthClientError(
         "provider_unavailable",
@@ -485,6 +496,7 @@ export function AuthProvider({
   }, [client, resolveMockSession]);
 
   const logout = useCallback(async () => {
+    authLogger.info("logout_started");
     try {
       await client?.signOut();
     } finally {

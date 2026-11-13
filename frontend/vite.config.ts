@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type ProxyOptions } from "vite";
+import { terminalLoggerPlugin } from "./src/plugins/terminal-logger";
 
 function fromRoot(relativePath: string): string {
   return decodeURIComponent(
@@ -43,7 +44,7 @@ function gatewayProxy(target: string): ProxyOptions {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), terminalLoggerPlugin()],
   resolve: {
     alias: {
       "@freshfold/ui": fromRoot("./src/ui/index.ts"),

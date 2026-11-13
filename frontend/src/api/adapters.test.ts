@@ -5,6 +5,7 @@ import type {
 } from "@laundry/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStorageBackend } from "../db/memory";
+import { getDatabase } from "../database/db";
 import { createMockApi } from "../mocks/api";
 import { createMutationQueue, createPendingMutation } from "../sync/mutation-queue";
 import type { LocalOrder } from "../sync/types";
@@ -98,6 +99,9 @@ function liveFetch(): {
     if (path.startsWith("/api/customers?") || path === "/api/customers") {
       return jsonResponse({ items: [detail.customer], nextCursor: null });
     }
+    if (path.startsWith("/api/delivery-slots?") || path === "/api/delivery-slots") {
+      return jsonResponse({ items: [] });
+    }
     if (path === "/api/customers/cust-1") {
       return jsonResponse(detail.customer);
     }
@@ -121,16 +125,16 @@ function liveConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
 }
 
 describe("API mode configuration", () => {
-  it("defaults to the mock adapter and opts into live explicitly", () => {
+  it("defaults to the live adapter and opts into mock explicitly", () => {
     expect(readApiConfig({})).toMatchObject({
-      mode: "mock",
+      mode: "live",
       demoFallbacks: false,
       requireAuth: false,
     });
-    expect(readApiConfig({ VITE_API_MODE: "live" })).toMatchObject({
-      mode: "live",
+    expect(readApiConfig({ VITE_API_MODE: "mock" })).toMatchObject({
+      mode: "mock",
     });
-    expect(readApiConfig({ VITE_API_MODE: "LIVE" }).mode).toBe("live");
+    expect(readApiConfig({ VITE_API_MODE: "MOCK" }).mode).toBe("mock");
   });
 
   it("keeps mock and live adapters separate", async () => {
@@ -362,6 +366,46 @@ describe("live adapter offline queue", () => {
       status: "processing",
       version: 2,
     });
+  });
+
+  it("caches remote orders into the storage backend on fetch", async () => {
+    const { fetchImpl } = liveFetch();
+    const backend = createMemoryStorageBackend();
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      getAccessToken: () => "access-token-1",
+    });
+
+    expect(await backend.listOrders()).toHaveLength(0);
+
+    const result = await api.listOrders();
+    expect(result.items.length).toBeGreaterThan(0);
+
+    const cached = await backend.listOrders();
+    expect(cached.length).toBeGreaterThan(0);
+    expect(cached[0]).toMatchObject({
+      id: "order-1",
+      syncState: "synced",
+    });
+  });
+
+  it("reads orders from the Dexie local replica after sync from remote D1", async () => {
+    const { fetchImpl } = liveFetch();
+    const backend = createMemoryStorageBackend();
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      getAccessToken: () => "access-token-1",
+    });
+
+    const result = await api.listOrders();
+    expect(result.items.length).toBeGreaterThan(0);
+
+    const dexieDb = getDatabase();
+    const dexieOrders = await dexieDb.orders.toArray();
+    expect(dexieOrders.length).toBeGreaterThan(0);
+    expect(dexieOrders.some((o) => o.id === "order-1")).toBe(true);
   });
 
   it("preserves a live version conflict and exposes the canonical order", async () => {

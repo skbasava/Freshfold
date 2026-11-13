@@ -5,6 +5,7 @@ import { ConflictResolver, type ResolveTransportFn } from './conflict-resolver';
 import { OutboxScheduler } from './scheduler';
 import { connectivity, ConnectivityManager, type ConnectivityListener } from './connectivity';
 import { syncEvents, type SyncEventType } from './sync-events';
+import { syncLogger } from '../lib/logger';
 import {
   createSyncLockCoordinator,
   type SyncLockCoordinator,
@@ -131,11 +132,15 @@ export class SyncEngine {
     this.unsubscribeConnectivity = this.connectivityManager.onStatusChange(
       (online) => {
         if (online) {
+          syncLogger.info('network_online');
           syncEvents.emit('sync:online');
           this.sync().catch((err) =>
-            console.error('Auto-sync on reconnect failed:', err)
+            syncLogger.error('auto_sync_reconnect_failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
           );
         } else {
+          syncLogger.warn('network_offline');
           syncEvents.emit('sync:offline');
         }
       }
@@ -209,6 +214,10 @@ export class SyncEngine {
 
     const lockResult = await this.lockCoordinator.withSyncLock(
       async () => {
+        syncLogger.info('sync_cycle_started', {
+          datasets: options?.datasets,
+          branchId: this.branchId,
+        });
         syncEvents.emit('sync:start');
 
         let totalPushed = 0;
@@ -242,10 +251,16 @@ export class SyncEngine {
             conflicts: totalConflicts,
           };
 
+          syncLogger.info('sync_cycle_completed', {
+            pushedOps: totalPushed,
+            pulledChanges: pullResult.totalApplied,
+            conflicts: totalConflicts,
+          });
           syncEvents.emit('sync:complete', result);
           return result;
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
+          syncLogger.error('sync_cycle_failed', { error: errMsg });
           syncEvents.emit('sync:error', { error: errMsg });
 
           return {

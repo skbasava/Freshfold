@@ -10,6 +10,7 @@ import {
   OBSERVABILITY_EVENTS,
   createLogger,
 } from "../../../packages/shared/src/observability";
+import { syncLogger } from "../lib/logger";
 import { defaultFetch, type FetchLike } from "./fetch";
 import type { MutationQueue } from "./mutation-queue";
 import type { PendingMutation } from "./types";
@@ -195,6 +196,13 @@ export async function flushPendingMutations(
     logger.info(OBSERVABILITY_EVENTS.offlinePendingMutations, {
       pendingCount: pending.length,
     });
+    syncLogger.info("flush_started", {
+      pendingCount: pending.length,
+      ordersCount: new Set(pending.map((p) => p.orderId)).size,
+    });
+  } else {
+    syncLogger.info("flush_idle", { pendingCount: 0 });
+    return summary;
   }
   const groups = new Map<string, PendingMutation[]>();
   for (const mutation of pending) {
@@ -225,6 +233,12 @@ export async function flushPendingMutations(
 
       summary.attempted += 1;
       await options.queue.recordAttempt(mutation.mutationId);
+      syncLogger.debug("mutation_sending", {
+        orderId: mutation.orderId,
+        intent: mutation.intent,
+        mutationId: mutation.mutationId,
+        baseVersion: mutation.baseVersion,
+      });
       const result = await options.transport.send(
         buildApplyChangeInput(mutation),
       );
@@ -234,6 +248,12 @@ export async function flushPendingMutations(
           serverOrder: result.order,
         });
         summary.synced += 1;
+        syncLogger.info("mutation_synced", {
+          orderId: mutation.orderId,
+          intent: mutation.intent,
+          mutationId: mutation.mutationId,
+          version: result.order.version,
+        });
         continue;
       }
 
@@ -246,21 +266,42 @@ export async function flushPendingMutations(
             : null,
         );
         summary.conflicts += 1;
+        syncLogger.warn("mutation_conflict", {
+          orderId: mutation.orderId,
+          mutationId: mutation.mutationId,
+          error: result.error ?? "VERSION_CONFLICT",
+        });
         return "stop-order";
       }
 
       if (result.kind === "rejected") {
         await options.queue.markRejected(mutation.mutationId, result.error);
         summary.rejected += 1;
+        syncLogger.warn("mutation_rejected", {
+          orderId: mutation.orderId,
+          mutationId: mutation.mutationId,
+          error: result.error,
+          status: result.status,
+        });
         return "stop-order";
       }
 
       if (result.kind === "auth") {
         summary.paused += 1;
+        syncLogger.warn("mutation_auth_paused", {
+          orderId: mutation.orderId,
+          mutationId: mutation.mutationId,
+          status: result.status,
+        });
         return "stop-all";
       }
 
       summary.retryable += 1;
+      syncLogger.warn("mutation_retryable", {
+        orderId: mutation.orderId,
+        mutationId: mutation.mutationId,
+        error: result.error,
+      });
       return "stop-all";
     }
 
@@ -276,6 +317,10 @@ export async function flushPendingMutations(
     if (outcome === "stop-all") {
       break;
     }
+  }
+
+  if (summary.attempted > 0) {
+    syncLogger.info("flush_completed", { ...summary });
   }
 
   return summary;

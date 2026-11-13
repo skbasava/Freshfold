@@ -2,6 +2,8 @@ import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import {
   createLogger,
+  OBSERVABILITY_EVENTS,
+  readLogLevelFromEnv,
   safeError,
 } from "../../../packages/shared/src/observability";
 import { requireSession } from "./auth/session";
@@ -17,6 +19,45 @@ import type { GatewayEnv } from "./types";
 const app = new Hono<GatewayEnv>();
 
 app.use("*", requestId);
+
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  const path = c.req.path;
+  const method = c.req.method;
+
+  if (path !== "/health") {
+    const logger = createLogger({
+      service: "gateway",
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: c.get("requestId"),
+      ...readLogLevelFromEnv(c.env),
+    });
+    logger.debug(OBSERVABILITY_EVENTS.httpRequestReceived, {
+      method,
+      path,
+    });
+  }
+
+  await next();
+
+  if (path !== "/health") {
+    const durationMs = Date.now() - start;
+    const session = c.get("session");
+    const logger = createLogger({
+      service: "gateway",
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: c.get("requestId"),
+      ...readLogLevelFromEnv(c.env),
+    });
+    logger.info(OBSERVABILITY_EVENTS.httpRequestCompleted, {
+      method,
+      path,
+      status: c.res.status,
+      durationMs,
+      ...(session ? { role: session.role, hubId: session.hub.id } : {}),
+    });
+  }
+});
 
 app.use(
   "/api/*",

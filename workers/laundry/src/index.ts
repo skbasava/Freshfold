@@ -10,6 +10,7 @@ import { REQUEST_ID_HEADER } from "../../../packages/contracts/src/http";
 import {
   customerListResponseSchema,
   customerSchema,
+  deliverySlotListResponseSchema,
   orderDetailSchema,
   orderListResponseSchema,
 } from "../../../packages/contracts/src/orders";
@@ -91,6 +92,8 @@ import {
   METRICS,
   OBSERVABILITY_EVENTS,
   createLogger,
+  readLogLevelFromEnv,
+  safeError,
 } from "../../../packages/shared/src/observability";
 
 function nowMs(env: LaundryBindings): number {
@@ -103,7 +106,45 @@ app.use("*", async (c, next) => {
   const id = c.req.header(REQUEST_ID_HEADER) ?? crypto.randomUUID();
   c.set("requestId", id);
   c.header(REQUEST_ID_HEADER, id);
+
+  const start = Date.now();
+  const path = c.req.path;
+  const method = c.req.method;
+
+  if (path !== "/health") {
+    const logger = createLogger({
+      service: "laundry",
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: id,
+      ...readLogLevelFromEnv(c.env),
+    });
+    logger.debug(OBSERVABILITY_EVENTS.httpRequestReceived, {
+      method,
+      path,
+    });
+  }
+
   await next();
+
+  if (path !== "/health") {
+    const durationMs = Date.now() - start;
+    const actor = c.get("actor");
+    const logger = createLogger({
+      service: "laundry",
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: id,
+      ...readLogLevelFromEnv(c.env),
+    });
+    logger.info(OBSERVABILITY_EVENTS.httpRequestCompleted, {
+      method,
+      path,
+      status: c.res.status,
+      durationMs,
+      ...(actor
+        ? { actorType: actor.actorType, actorId: actor.actorId, hubId: actor.hubId }
+        : {}),
+    });
+  }
 });
 
 app.get("/health", (c) =>
@@ -279,6 +320,18 @@ app.post("/internal/outbox/sweep", requireActor, async (c) => {
     parsed.data,
   );
 
+  const sweepLogger = createLogger({
+    service: "laundry",
+    ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+    requestId: c.get("requestId"),
+    ...readLogLevelFromEnv(c.env),
+  });
+  sweepLogger.info(OBSERVABILITY_EVENTS.outboxBatchDispatched, {
+    claimed: result.claimed,
+    sent: result.sent,
+    failed: result.failed,
+  });
+
   return c.json(outboxSweepResponseSchema.parse(result));
 });
 
@@ -442,6 +495,63 @@ app.get(
 );
 
 app.get(
+  "/api/delivery-slots",
+  requireActor,
+  requirePermission("view_orders"),
+  async (c) => {
+    const db = c.env.LAUNDRY_DB;
+    if (!db) {
+      return c.json({ error: "database_unavailable" }, 503);
+    }
+
+    const actor = c.get("actor");
+    const date = c.req.query("date");
+
+    let query =
+      "SELECT id, hub_id, slot_key, local_date, local_start, starts_at, ends_at, capacity, active, created_at FROM delivery_slots WHERE hub_id = ? AND active = 1";
+    const bindings: Array<string | number> = [actor.hubId];
+
+    if (date) {
+      query += " AND local_date = ?";
+      bindings.push(date);
+    }
+
+    query += " ORDER BY starts_at ASC";
+
+    const rows = await db
+      .prepare(query)
+      .bind(...bindings)
+      .all<{
+        id: string;
+        hub_id: string;
+        slot_key: string;
+        local_date: string;
+        local_start: string;
+        starts_at: number;
+        ends_at: number;
+        capacity: number;
+        active: number;
+        created_at: number;
+      }>();
+
+    const items = (rows.results ?? []).map((row) => ({
+      id: row.id,
+      hubId: row.hub_id,
+      slotKey: row.slot_key,
+      localDate: row.local_date,
+      localStart: row.local_start,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      capacity: row.capacity,
+      active: row.active,
+      createdAt: row.created_at,
+    }));
+
+    return c.json(deliverySlotListResponseSchema.parse({ items }));
+  },
+);
+
+app.get(
   "/api/changes",
   requireActor,
   requirePermission("view_orders"),
@@ -540,15 +650,52 @@ async function applyChangeHandler(c: Context<LaundryEnv>) {
     service: "laundry",
     ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
     requestId: c.get("requestId"),
+    ...readLogLevelFromEnv(c.env),
+  });
+
+  logger.info(OBSERVABILITY_EVENTS.applyChangeStarted, {
+    orderId: parsed.data.orderId,
+    intent: parsed.data.intent,
+    mutationId: parsed.data.mutationId,
+    baseVersion:
+      "baseVersion" in parsed.data ? parsed.data.baseVersion : undefined,
+    actorType: actor.actorType,
+    actorId: actor.actorId,
+    hubId: actor.hubId,
   });
 
   try {
     const result = await applyChange(db, actor, parsed.data, {
       now: nowMs(c.env),
     });
+
+    if (result.replayed) {
+      logger.info(OBSERVABILITY_EVENTS.applyChangeReplayed, {
+        orderId: result.order.id,
+        version: result.order.version,
+        mutationId: parsed.data.mutationId,
+      });
+    } else {
+      logger.info(OBSERVABILITY_EVENTS.applyChangeAccepted, {
+        orderId: result.order.id,
+        version: result.order.version,
+        status: result.order.status,
+        mutationId: parsed.data.mutationId,
+        customerCreated: result.customerCreated,
+      });
+    }
+
     return c.json(result);
   } catch (error) {
     if (error instanceof ApplyChangeError) {
+      logger.warn(OBSERVABILITY_EVENTS.applyChangeRejected, {
+        orderId: parsed.data.orderId,
+        code: error.code,
+        status: error.status,
+        intent: parsed.data.intent,
+        mutationId: parsed.data.mutationId,
+      });
+
       if (
         error.code === "VERSION_CONFLICT" ||
         error.code === "MUTATION_PAYLOAD_MISMATCH"
@@ -893,6 +1040,20 @@ app.post("/internal/calendar/enqueue", requireActor, async (c) => {
 });
 
 app.notFound((c) => c.json({ error: "not_found" }, 404));
+
+app.onError((error, c) => {
+  createLogger({
+    service: "laundry",
+    ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+    requestId: c.get("requestId"),
+    ...readLogLevelFromEnv(c.env),
+  }).error("internal_error", {
+    error: safeError(error),
+    path: c.req.path,
+    method: c.req.method,
+  });
+  return c.json({ error: "internal_error" }, 500);
+});
 
 export { TenantRealtime } from "./durable-objects/tenant-realtime";
 export default app;

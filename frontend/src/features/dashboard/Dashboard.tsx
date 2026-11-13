@@ -10,7 +10,6 @@ import { useNavigate } from "react-router-dom";
 import { useOptionalApi } from "../../api/context";
 import type { AppApi } from "../../api/types";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
-import { createMockApi } from "../../mocks/api";
 import type { MockOrderIntent, MockOrderSummary } from "../../mocks/types";
 import {
   AttentionQueueCard,
@@ -22,8 +21,6 @@ import {
 } from "./components";
 import { useDashboardData } from "./useDashboardData";
 
-const defaultApi = createMockApi();
-
 export interface DashboardProps {
   api?: AppApi;
   online?: boolean;
@@ -34,7 +31,12 @@ export function Dashboard({ api, online }: DashboardProps) {
   const isOnline = online ?? detectedOnline;
   const navigate = useNavigate();
   const contextApi = useOptionalApi();
-  const client = api ?? contextApi ?? defaultApi;
+  const client = api ?? contextApi;
+  if (!client) {
+    throw new Error(
+      "Dashboard must be rendered within an ApiProvider or supplied with an api prop",
+    );
+  }
   const { state, todayLabel, pendingCount, conflictCount, reload } =
     useDashboardData(client);
 

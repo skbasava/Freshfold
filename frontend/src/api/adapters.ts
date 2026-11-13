@@ -7,9 +7,11 @@ import {
   type OrderSummary,
 } from "@laundry/contracts";
 import { createIndexedDbBackend } from "../db/indexeddb";
+import { DB_NAME } from "../database/schema";
+import { getDatabase } from "../database/db";
 import { createMemoryStorageBackend } from "../db/memory";
 import type { StorageBackend } from "../db/types";
-import { formatDateKey, localDateKey } from "../lib/format";
+import { formatDateKey, formatDeliveryTime, localDateKey } from "../lib/format";
 import { isMockApiError, MockApiError } from "../mocks/errors";
 import { createMockApi } from "../mocks/api";
 import type {
@@ -59,6 +61,7 @@ import {
   orderDetailToMock,
   orderSummaryToMock,
 } from "./mappers";
+import { syncLogger, workflowLogger } from "../lib/logger";
 import type {
   ApiCapabilities,
   ApiConfig,
@@ -90,14 +93,14 @@ export function readApiConfig(
   env: Record<string, string | boolean | undefined> = import.meta.env,
 ): ApiConfig {
   const mode =
-    String(env.VITE_API_MODE ?? "mock").toLowerCase() === "live"
-      ? "live"
-      : "mock";
+    String(env.VITE_API_MODE ?? "live").toLowerCase() === "mock"
+      ? "mock"
+      : "live";
   const rawTimeout = Number(env.VITE_API_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
 
   return {
     mode,
-    baseUrl: String(env.VITE_API_BASE_URL ?? ""),
+    baseUrl: String(env.VITE_API_BASE_URL ?? env.VITE_API_URL ?? ""),
     timeoutMs:
       Number.isFinite(rawTimeout) && rawTimeout > 0
         ? rawTimeout
@@ -123,7 +126,10 @@ export function createAppApi(
 function defaultBackend(): StorageBackend {
   try {
     return createIndexedDbBackend();
-  } catch {
+  } catch (error) {
+    syncLogger.warn("indexeddb_default_backend_fallback", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return createMemoryStorageBackend();
   }
 }
@@ -245,6 +251,33 @@ function clientTransport(client: GatewayClient): MutationTransport {
     async send(input): Promise<MutationTransportResult> {
       try {
         const result = await client.applyChange(input);
+        try {
+          const db = getDatabase();
+          await db.orders.put({
+            id: result.order.id,
+            tenantId: result.order.hubId,
+            branchId: result.order.hubId,
+            orderNumber: result.order.id,
+            customerId: result.order.customer.id,
+            customerName: result.order.customer.name,
+            customerPhone: result.order.customer.phone,
+            status: result.order.status as any,
+            serviceType: result.order.serviceType,
+            deliverySlotId: result.order.deliverySlotId,
+            deliveryAt: result.order.deliveryAt,
+            version: result.order.version,
+            holdComment: result.order.holdComment,
+            createdAt: result.order.createdAt,
+            updatedAt: result.order.updatedAt,
+            syncState: "synced",
+          } as any);
+          syncLogger.info("order_written_to_dexie", {
+            orderId: result.order.id,
+            version: result.order.version,
+          });
+        } catch {
+          // Ignore Dexie write failure in non-browser environments
+        }
         return {
           kind: "accepted",
           order: result.order,
@@ -402,9 +435,13 @@ function createLiveApi(
     }
     try {
       return createIndexedDbBackend(undefined, {
-        databaseName: accountDatabaseName(accountKey),
+        databaseName: DB_NAME,
       });
-    } catch {
+    } catch (error) {
+      syncLogger.warn("indexeddb_account_backend_fallback", {
+        accountKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return createMemoryStorageBackend();
     }
   }
@@ -450,16 +487,29 @@ function createLiveApi(
   async function fetchAllOrders(): Promise<OrderSummary[]> {
     const all: OrderSummary[] = [];
     let cursor: string | null = null;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      const response = await client.listOrders({
-        limit: PAGE_LIMIT,
-        cursor,
-      });
-      all.push(...response.items);
-      if (!response.nextCursor) {
-        break;
+    try {
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const response = await client.listOrders({
+          limit: PAGE_LIMIT,
+          cursor,
+        });
+        all.push(...response.items);
+        if (!response.nextCursor) {
+          break;
+        }
+        cursor = response.nextCursor;
       }
-      cursor = response.nextCursor;
+    } catch (error) {
+      if (
+        (isGatewayApiError(error) && (error.status === 0 || error.code === "NETWORK_ERROR")) ||
+        (error instanceof Error && error.message.includes("fetch"))
+      ) {
+        syncLogger.warn("fetch_orders_offline_using_cache", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+      }
+      throw error;
     }
     return all;
   }
@@ -467,16 +517,26 @@ function createLiveApi(
   async function fetchAllCustomers(): Promise<Customer[]> {
     const all: Customer[] = [];
     let cursor: string | null = null;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      const response = await client.listCustomers({
-        limit: PAGE_LIMIT,
-        cursor,
-      });
-      all.push(...response.items);
-      if (!response.nextCursor) {
-        break;
+    try {
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const response = await client.listCustomers({
+          limit: PAGE_LIMIT,
+          cursor,
+        });
+        all.push(...response.items);
+        if (!response.nextCursor) {
+          break;
+        }
+        cursor = response.nextCursor;
       }
-      cursor = response.nextCursor;
+    } catch (error) {
+      if (
+        (isGatewayApiError(error) && (error.status === 0 || error.code === "NETWORK_ERROR")) ||
+        (error instanceof Error && error.message.includes("fetch"))
+      ) {
+        return [];
+      }
+      throw error;
     }
     return all;
   }
@@ -499,28 +559,88 @@ function createLiveApi(
     }
   }
 
+  async function syncRemoteOrdersToDexie(): Promise<OrderSummary[]> {
+    const serverOrders = await fetchAllOrders();
+    if (serverOrders.length > 0) {
+      // 1. Commit to Dexie's orders store in IndexedDB
+      try {
+        const db = getDatabase();
+        const dexieItems = serverOrders.map((order) => ({
+          id: order.id,
+          tenantId: order.hubId || "tenant-default",
+          branchId: order.hubId,
+          orderNumber: order.id,
+          customerId: order.customerId,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          status: order.status,
+          serviceType: order.serviceType,
+          deliverySlotId: order.deliverySlotId,
+          deliveryAt: order.deliveryAt,
+          version: order.version,
+          holdComment: order.holdComment,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+          cancelledAt: order.cancelledAt,
+          syncState: "synced",
+        }));
+        await db.orders.bulkPut(dexieItems as any);
+        syncLogger.info("orders_synced_to_dexie", { count: serverOrders.length });
+      } catch (err) {
+        syncLogger.warn("dexie_bulk_put_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // 2. Also commit to backend
+      try {
+        await backend.runTransaction(["orders"], "readwrite", async (tx) => {
+          for (const order of serverOrders) {
+            await tx.putOrder(localOrderFromServer(order));
+          }
+        });
+        syncLogger.info("orders_cached_to_indexeddb", {
+          count: serverOrders.length,
+        });
+      } catch (err) {
+        syncLogger.warn("orders_cache_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return serverOrders;
+  }
+
+  async function fetchOrdersFromDexie(): Promise<LocalOrder[]> {
+    try {
+      const db = getDatabase();
+      const dexieOrders = await db.orders.toArray();
+      if (dexieOrders && dexieOrders.length > 0) {
+        syncLogger.info("orders_read_from_dexie", { count: dexieOrders.length });
+        return dexieOrders as unknown as LocalOrder[];
+      }
+    } catch (err) {
+      syncLogger.warn("dexie_read_failed_fallback_backend", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return backend.listOrders();
+  }
+
   async function mergedSummaries(): Promise<MockOrderSummary[]> {
-    const [serverOrders, localOrders] = await Promise.all([
-      fetchAllOrders(),
-      backend.listOrders(),
-    ]);
+    // 1. Sync remote D1 data into IndexedDB (if online)
+    const serverOrders = await syncRemoteOrdersToDexie();
+
+    // 2. Fetch directly from IndexedDB using DexieJS (Local Replica has the Reads)
+    const localOrders = await fetchOrdersFromDexie();
     const localById = new Map(localOrders.map((order) => [order.id, order]));
     const serverIds = new Set(serverOrders.map((order) => order.id));
-    const summaries = serverOrders.map((order) => {
-      const local = localById.get(order.id);
-      const base = orderSummaryToMock(order);
-      return local && local.syncState !== "synced"
-        ? orderSummaryToMock(order, {
-            syncState: local.syncState,
-            lastError: local.lastError,
-          })
-        : base;
-    });
+
+    const summaries: MockOrderSummary[] = [];
+    const seenIds = new Set<string>();
 
     for (const local of localOrders) {
-      if (serverIds.has(local.id)) {
-        continue;
-      }
+      seenIds.add(local.id);
       const mutations = await queue.listMutations(local.id);
       const detail = localOrderToMockDetail(local, mutations);
       summaries.push({
@@ -541,6 +661,12 @@ function createLiveApi(
         syncState: local.syncState,
         lastError: local.lastError ?? null,
       });
+    }
+
+    for (const server of serverOrders) {
+      if (!seenIds.has(server.id)) {
+        summaries.push(orderSummaryToMock(server));
+      }
     }
 
     return summaries;
@@ -650,6 +776,7 @@ function createLiveApi(
     }
 
     if (mutation.status === "synced") {
+      workflowLogger.info("mutation_settled_synced", { orderId, mutationId });
       const detail = await loadOrderDetail(orderId);
       if (detail) {
         return detail;
@@ -657,6 +784,7 @@ function createLiveApi(
     }
 
     if (mutation.status === "conflict") {
+      workflowLogger.warn("mutation_settled_conflict", { orderId, mutationId });
       const current = await localDetail(orderId);
       throw new MockApiError(
         "This order changed on another device. Review the latest details.",
@@ -669,6 +797,11 @@ function createLiveApi(
     }
 
     if (mutation.status === "rejected") {
+      workflowLogger.warn("mutation_settled_rejected", {
+        orderId,
+        mutationId,
+        error: mutation.lastError,
+      });
       const current = await localDetail(orderId);
       const code =
         mutation.lastError === "HOLD_COMMENT_REQUIRED"
@@ -775,6 +908,40 @@ function createLiveApi(
     date: string,
     orders: MockOrderSummary[],
   ): Promise<MockDeliverySlot[]> {
+    try {
+      const response = await client.listDeliverySlots({ date });
+      if (response && response.items && response.items.length > 0) {
+        const todayKey = localDateKey(now());
+        return response.items.map((slot) => {
+          const booked = orders.filter(
+            (order) =>
+              order.deliverySlotId === slot.id &&
+              order.status !== "cancelled" &&
+              order.status !== "delivered",
+          ).length;
+          const status: MockDeliverySlot["status"] =
+            slot.localDate < todayKey
+              ? "past"
+              : booked >= slot.capacity
+                ? "full"
+                : "open";
+          return {
+            id: slot.id,
+            label: `${formatDeliveryTime(slot.startsAt)} - ${formatDeliveryTime(slot.endsAt)}`,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
+            capacity: slot.capacity,
+            booked,
+            available: Math.max(0, slot.capacity - booked),
+            localDate: slot.localDate,
+            status,
+            closedReason: null,
+          };
+        });
+      }
+    } catch {
+      // Fall through to fallback if database slot retrieval is unavailable
+    }
     if (!config.demoFallbacks) {
       return [];
     }
@@ -985,13 +1152,19 @@ function createLiveApi(
     },
 
     async getCreateOrderOptions(): Promise<CreateOrderOptions> {
-      const result = await api.listCustomers({ pageSize: 100 });
+      const [customerResult, summaries] = await Promise.all([
+        api.listCustomers({ pageSize: 100 }),
+        mergedSummaries(),
+      ]);
+      const realSlots = await slotsFor(localDateKey(now()), summaries);
       const slots =
-        config.demoFallbacks
-          ? (await getDemoFallbackApi().getCreateOrderOptions()).slots
-          : [];
+        realSlots.length > 0
+          ? realSlots
+          : config.demoFallbacks
+            ? (await getDemoFallbackApi().getCreateOrderOptions()).slots
+            : [];
       return {
-        customers: result.items,
+        customers: customerResult.items,
         services: [...FALLBACK_SERVICES],
         slots,
       };
@@ -1086,6 +1259,13 @@ function createLiveApi(
         now: now(),
       });
 
+      workflowLogger.info("order_created", {
+        orderId: created.order.id,
+        mutationId: created.mutation.mutationId,
+        serviceType: input.serviceType,
+        slotId: slot.id,
+      });
+
       const detail = await settleMutation(
         created.order.id,
         created.mutation.mutationId,
@@ -1117,6 +1297,12 @@ function createLiveApi(
         intent,
         payload,
         now: now(),
+      });
+      workflowLogger.info("order_intent_applied", {
+        orderId,
+        intent,
+        baseVersion,
+        mutationId: updated.mutation.mutationId,
       });
       return settleMutation(
         orderId,

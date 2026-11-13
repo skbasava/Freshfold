@@ -46,6 +46,8 @@ export function localOrderFromServer(
   return {
     id: order.id,
     hubId: order.hubId,
+    branchId: order.hubId,
+    orderNumber: order.id,
     customerId: order.customerId,
     customerName: order.customerName,
     customerPhone: order.customerPhone,

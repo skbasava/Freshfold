@@ -12,6 +12,7 @@ for (const path of [
   "/orders/:id",
   "/customers",
   "/customers/:id",
+  "/delivery-slots",
 ]) {
   reads.get(
     path,

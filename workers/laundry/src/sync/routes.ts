@@ -2,6 +2,11 @@ import { Hono } from 'hono';
 import type { LaundryEnv } from '../authz';
 import { requireActor, requirePermission } from '../authz';
 import {
+  createLogger,
+  OBSERVABILITY_EVENTS,
+  readLogLevelFromEnv,
+} from '../../../../packages/shared/src/observability';
+import {
   syncPushRequestSchema,
   syncPullQuerySchema,
   registerDeviceRequestSchema,
@@ -47,6 +52,20 @@ syncRoutes.post(
 
     const actor = c.get('actor');
     const result = await handleSyncPush(db, actor, parsed.data.operations);
+
+    const syncLogger = createLogger({
+      service: 'laundry',
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: c.get('requestId'),
+      ...readLogLevelFromEnv(c.env),
+    });
+    syncLogger.info('sync_push_completed', {
+      operationsCount: parsed.data.operations.length,
+      acknowledgedCount: result.acknowledged.length,
+      conflictsCount: result.conflicts.length,
+      errorsCount: result.errors.length,
+      hubId: actor.hubId,
+    });
 
     // Notify connected realtime clients if mutations were committed
     if (c.env.TENANT_REALTIME && result.acknowledged.length > 0) {
@@ -96,6 +115,19 @@ syncRoutes.get(
 
     const actor = c.get('actor');
     const result = await handleSyncPull(db, actor, parsedQuery.data);
+
+    const pullLogger = createLogger({
+      service: 'laundry',
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: c.get('requestId'),
+      ...readLogLevelFromEnv(c.env),
+    });
+    pullLogger.debug(OBSERVABILITY_EVENTS.syncFeedPolled, {
+      cursor: parsedQuery.data.cursor,
+      changesCount: result.changes.length,
+      hubId: actor.hubId,
+    });
+
     return c.json(result);
   }
 );

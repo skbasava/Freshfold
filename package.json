@@ -27,7 +27,8 @@
     "dev:notifications": "wrangler dev --config workers/notifications/wrangler.jsonc --port 8791 --inspector-port 9234 --local",
     "dev:scheduler": "wrangler dev --config workers/scheduler/wrangler.jsonc --port 8792 --inspector-port 9235 --test-scheduled --local",
     "db:laundry:migrate:local": "wrangler d1 migrations apply laundry-core --local --config workers/laundry/wrangler.jsonc",
-    "db:laundry:migrate:remote": "wrangler d1 migrations apply laundry-core --remote --config workers/laundry/wrangler.jsonc"
+    "db:laundry:migrate:remote": "wrangler d1 migrations apply laundry-core --remote --config workers/laundry/wrangler.jsonc",
+    "db:seed": "node scripts/seed-d1.mjs"
   },
   "dependencies": {
     "hono": "4.13.17",

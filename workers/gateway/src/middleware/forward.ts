@@ -11,6 +11,11 @@ import {
   SERVICE_TENANT_HEADER,
   SERVICE_TOKEN_HEADER,
 } from "../../../../packages/contracts/src/http";
+import {
+  createLogger,
+  OBSERVABILITY_EVENTS,
+  readLogLevelFromEnv,
+} from "../../../../packages/shared/src/observability";
 import { errorResponse } from "./errors";
 import type { GatewayEnv } from "../types";
 
@@ -62,6 +67,22 @@ export const forwardToLaundry: MiddlewareHandler<GatewayEnv> = async (c) => {
     return errorResponse(c, 413, "payload_too_large");
   }
 
+  const start = Date.now();
+  const requestId = c.get("requestId");
+  const session = c.get("session");
+  const logger = createLogger({
+    service: "gateway",
+    ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+    requestId,
+    ...readLogLevelFromEnv(c.env),
+  });
+
+  logger.debug(OBSERVABILITY_EVENTS.forwardUpstream, {
+    method,
+    target: `${target.pathname}${target.search}`,
+    ...(session ? { hubId: session.hub.id, role: session.role } : {}),
+  });
+
   const upstream = await laundry.fetch(
     new Request(target, {
       method,
@@ -69,6 +90,13 @@ export const forwardToLaundry: MiddlewareHandler<GatewayEnv> = async (c) => {
       body: body && body.byteLength > 0 ? body : undefined,
     }),
   );
+
+  logger.info(OBSERVABILITY_EVENTS.forwardUpstream, {
+    method,
+    target: `${target.pathname}${target.search}`,
+    status: upstream.status,
+    durationMs: Date.now() - start,
+  });
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.delete("content-encoding");
   responseHeaders.delete("content-length");

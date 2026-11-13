@@ -49,14 +49,29 @@ import {
 } from "./features/shell";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { formatToday } from "./lib/format";
+import { syncLogger } from "./lib/logger";
 
 function useReconnectFlush(api: AppApi) {
   useEffect(() => {
     const flush = () => {
-      void api.syncPendingMutations().catch(() => undefined);
+      syncLogger.info("network_online_flushing");
+      void api.syncPendingMutations().catch((err) => {
+        syncLogger.error("flush_reconnect_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     };
     window.addEventListener("online", flush);
-    void api.getPendingCount().catch(() => undefined);
+    void api
+      .getPendingCount()
+      .then((pendingCount) => {
+        syncLogger.info("offline_storage_ready", { pendingCount });
+      })
+      .catch((err) => {
+        syncLogger.error("offline_storage_check_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     return () => {
       window.removeEventListener("online", flush);
     };

@@ -5,6 +5,7 @@ import {
   changeFeedResponseSchema,
   customerListResponseSchema,
   customerSchema,
+  deliverySlotListResponseSchema,
   orderDetailSchema,
   orderEventsResponseSchema,
   orderListResponseSchema,
@@ -15,11 +16,13 @@ import {
   type ChangeFeedResponse,
   type Customer,
   type CustomerListResponse,
+  type DeliverySlotListResponse,
   type OrderDetail,
   type OrderEventsResponse,
   type OrderListResponse,
   type SessionResponse,
 } from "@laundry/contracts";
+import { apiLogger } from "../lib/logger";
 import { defaultFetch, type FetchLike } from "../sync/fetch";
 
 export type { FetchLike };
@@ -92,6 +95,10 @@ export interface ListCustomersOptions extends RequestOptions {
   cursor?: string | null;
 }
 
+export interface ListDeliverySlotsOptions extends RequestOptions {
+  date?: string;
+}
+
 export interface GetChangesOptions extends RequestOptions {
   since: number;
   limit?: number;
@@ -108,6 +115,9 @@ export interface GatewayClient {
   ): Promise<CustomerListResponse>;
   getCustomer(id: string, options?: RequestOptions): Promise<Customer>;
   listOrders(options?: ListOrdersOptions): Promise<OrderListResponse>;
+  listDeliverySlots(
+    options?: ListDeliverySlotsOptions,
+  ): Promise<DeliverySlotListResponse>;
   getOrder(id: string, options?: RequestOptions): Promise<OrderDetail>;
   getChanges(options: GetChangesOptions): Promise<ChangeFeedResponse>;
   getOrderEvents(
@@ -191,6 +201,10 @@ export function createGatewayClient(
       headers.authorization = `Bearer ${accessToken}`;
     }
 
+    const reqStart = Date.now();
+    const reqId = headers[REQUEST_ID_HEADER];
+    apiLogger.debug(`-> ${method} ${path}`, { requestId: reqId });
+
     let response: Response;
     try {
       response = await fetchImpl(buildUrl(baseUrl, path), {
@@ -201,6 +215,12 @@ export function createGatewayClient(
         signal: controller.signal,
       });
     } catch (error) {
+      const durationMs = Date.now() - reqStart;
+      apiLogger.error(`xx ${method} ${path} (${durationMs}ms)`, {
+        durationMs,
+        requestId: reqId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (isAbortError(error)) {
         throw new GatewayApiError({
           status: 0,
@@ -224,7 +244,13 @@ export function createGatewayClient(
       requestOptions.signal?.removeEventListener("abort", abortFromCaller);
     }
 
+    const durationMs = Date.now() - reqStart;
+
     if (response.status === 204) {
+      apiLogger.info(`<- ${method} ${path} 204 (${durationMs}ms)`, {
+        durationMs,
+        requestId: reqId,
+      });
       return schema.parse(undefined);
     }
 
@@ -240,6 +266,16 @@ export function createGatewayClient(
       const errorCode = parsedError.success
         ? parsedError.data.error
         : `HTTP_${response.status}`;
+
+      apiLogger.warn(
+        `<- ${method} ${path} ${response.status} [${errorCode}] (${durationMs}ms)`,
+        {
+          durationMs,
+          requestId: reqId,
+          status: response.status,
+          code: errorCode,
+        },
+      );
       const isAuthFailure =
         response.status === 401 ||
         (response.status === 403 &&
@@ -286,6 +322,12 @@ export function createGatewayClient(
           parsedOrder && parsedOrder.success ? parsedOrder.data : undefined,
       });
     }
+
+    apiLogger.info(`<- ${method} ${path} ${response.status} (${durationMs}ms)`, {
+      durationMs,
+      requestId: reqId,
+      status: response.status,
+    });
 
     try {
       return schema.parse(rawBody);
@@ -345,6 +387,20 @@ export function createGatewayClient(
         buildPath("/api/orders", query),
         "GET",
         orderListResponseSchema,
+        undefined,
+        listOptions,
+      );
+    },
+
+    listDeliverySlots(listOptions = {}) {
+      const query = new URLSearchParams();
+      if (listOptions.date) {
+        query.set("date", listOptions.date);
+      }
+      return request(
+        buildPath("/api/delivery-slots", query),
+        "GET",
+        deliverySlotListResponseSchema,
         undefined,
         listOptions,
       );

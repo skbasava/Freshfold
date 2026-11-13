@@ -163,6 +163,34 @@ describe("gateway client bearer authentication", () => {
 });
 
 describe("gateway client read queries", () => {
+  it("fetches delivery slots with optional date query", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      jsonResponse({
+        items: [
+          {
+            id: "slot-1",
+            hubId: "hub-1",
+            slotKey: "2026-11-13_09:00",
+            localDate: "2026-11-13",
+            localStart: "09:00",
+            startsAt: 1000,
+            endsAt: 2000,
+            capacity: 10,
+            active: 1,
+            createdAt: 500,
+          },
+        ],
+      }),
+    );
+    const client = createGatewayClient({ fetchImpl });
+    const response = await client.listDeliverySlots({ date: "2026-11-13" });
+
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.id).toBe("slot-1");
+    const [call] = fetchCalls(fetchImpl);
+    expect(call?.input).toBe("/api/delivery-slots?date=2026-11-13");
+  });
+
   it("builds change-feed and order-event queries", async () => {
     const fetchImpl = vi.fn<FetchLike>(async (input) => {
       if (String(input).startsWith("/api/changes")) {

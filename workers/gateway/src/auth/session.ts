@@ -8,7 +8,11 @@ import {
   resolveSupabaseAuthorization,
   type SupabaseAuthErrorCode,
 } from "../../../../packages/contracts/src/supabase-auth";
-import { createLogger } from "../../../../packages/shared/src/observability";
+import {
+  createLogger,
+  OBSERVABILITY_EVENTS,
+  readLogLevelFromEnv,
+} from "../../../../packages/shared/src/observability";
 import { getSupabaseJwtVerifier } from "./supabase-config";
 import type { GatewayEnv } from "../types";
 
@@ -81,6 +85,19 @@ export const requireSession: MiddlewareHandler<GatewayEnv> = async (
 
   c.set("auth", auth);
   c.set("session", session);
+
+  createLogger({
+    service: "gateway",
+    ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+    requestId: c.get("requestId"),
+    ...readLogLevelFromEnv(c.env),
+  }).info(OBSERVABILITY_EVENTS.authSuccess, {
+    actorId: verified.identity.subject,
+    role: authz.authorization.role,
+    tenantId: authz.authorization.tenantId,
+    hubId: authz.authorization.hubId,
+  });
+
   await next();
 };
 
@@ -99,7 +116,8 @@ function authFailure(
     service: "gateway",
     ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
     requestId: c.get("requestId"),
-  }).warn("gateway_auth_failed", {
+    ...readLogLevelFromEnv(c.env),
+  }).warn(OBSERVABILITY_EVENTS.authFailure, {
     status,
     code,
     reason,
