@@ -11,9 +11,12 @@ usage() {
   cat <<'EOF'
 Usage: scripts/deploy-cloudflare.sh [staging|production] [options]
 
+Deploy backend Cloudflare Workers (laundry, calendar, notifications, scheduler, gateway).
+Note: Frontend is hosted and deployed separately (e.g. on Vercel).
+
 Options:
   --dry-run        Validate builds and Wrangler deploys without publishing.
-  --skip-checks    Skip pnpm check and web build before deployment.
+  --skip-checks    Skip typecheck before deployment.
   -h, --help       Show this help.
 
 Production deployments additionally require:
@@ -75,8 +78,8 @@ for worker in laundry; do
 done
 
 if [[ "$SKIP_CHECKS" -eq 0 ]]; then
-  pnpm check
-  pnpm build:web
+  echo "Running backend workers typecheck before deployment..."
+  pnpm check:workers
 fi
 
 run_wrangler() {
@@ -103,4 +106,4 @@ if [[ -n "${GATEWAY_HEALTH_URL:-}" && "$DRY_RUN" -eq 0 ]]; then
   curl -fsS "$GATEWAY_HEALTH_URL" >/dev/null
 fi
 
-echo "Deployment complete for $ENVIRONMENT"
+echo "Cloudflare backend workers deployment complete for $ENVIRONMENT"

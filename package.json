@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p frontend/tsconfig.json && tsc -p workers/gateway/tsconfig.json && tsc -p workers/laundry/tsconfig.json && tsc -p workers/calendar/tsconfig.json && tsc -p workers/notifications/tsconfig.json && tsc -p workers/scheduler/tsconfig.json",
     "typecheck:web": "tsc -p frontend/tsconfig.json",
+    "typecheck:workers": "tsc -p tsconfig.json && tsc -p workers/gateway/tsconfig.json && tsc -p workers/laundry/tsconfig.json && tsc -p workers/calendar/tsconfig.json && tsc -p workers/notifications/tsconfig.json && tsc -p workers/scheduler/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:web": "pnpm --filter @laundry/frontend test",
@@ -17,7 +18,9 @@
     "dev:web": "pnpm --filter @laundry/frontend dev",
     "dev:live": "node scripts/run-bash.mjs scripts/dev-live.sh",
     "deploy:cloudflare": "node scripts/run-bash.mjs scripts/deploy-cloudflare.sh",
+    "deploy:vercel": "node scripts/deploy-vercel.mjs",
     "check": "pnpm typecheck && pnpm test && pnpm test:web && pnpm build:web",
+    "check:workers": "pnpm typecheck:workers",
     "dev:gateway": "wrangler dev --config workers/gateway/wrangler.jsonc --port 8787 --inspector-port 9230 --local",
     "dev:laundry": "wrangler dev --config workers/laundry/wrangler.jsonc --port 8789 --inspector-port 9232 --local",
     "dev:calendar": "wrangler dev --config workers/calendar/wrangler.jsonc --port 8790 --inspector-port 9233 --test-scheduled --local",

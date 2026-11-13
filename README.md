@@ -70,9 +70,9 @@ Missing backend endpoints stay isolated:
 - customer create/update: not implemented;
 - customer order history: composed from the existing hub-scoped order list and labelled as a fallback.
 
-## Deploy to Cloudflare
+## Deploy Backend to Cloudflare
 
-The deploy script validates the workspace, builds the frontend, applies remote D1 migrations, and deploys the internal Workers before the Gateway.
+The deploy script validates the backend workers, applies remote D1 migrations, and deploys the internal Workers before the Gateway. (The frontend is hosted and deployed separately to Vercel).
 
 ```bash
 pnpm deploy:cloudflare staging
@@ -92,12 +92,35 @@ Before deploying:
 - Use environment-specific `workers/<worker>/wrangler.<environment>.jsonc` files when they exist; otherwise the script uses `workers/<worker>/wrangler.jsonc`.
 - Set `GATEWAY_HEALTH_URL` to run an optional post-deploy health check.
 
-The script runs `pnpm check` and `pnpm build:web` unless `--skip-checks` is passed. It deploys Laundry, Calendar, Notifications, and Scheduler first, then the Gateway. It never deploys to production without `CONFIRM_PRODUCTION=DEPLOY_PRODUCTION`.
+The script runs backend typechecks (`pnpm check:workers`) unless `--skip-checks` is passed. It deploys Laundry, Calendar, Notifications, and Scheduler first, then the Gateway. It never deploys to production without `CONFIRM_PRODUCTION=DEPLOY_PRODUCTION`.
+
+## Deploy Frontend to Vercel
+
+Deploy the web application to Vercel by supplying an access token via CLI:
+
+```bash
+# Preview deployment:
+pnpm deploy:vercel --token <VERCEL_TOKEN>
+
+# Production deployment:
+pnpm deploy:vercel --prod --token <VERCEL_TOKEN>
+
+# Production deployment with specific Gateway Worker URL:
+pnpm deploy:vercel --prod --token <VERCEL_TOKEN> --api-url https://api.freshfold.com
+```
+
+Options:
+- `--token <token>`, `-t <token>`: Vercel access token (or set `VERCEL_TOKEN` in env)
+- `--prod`: Deploy to production
+- `--api-url <url>`: Sets `VITE_API_URL` during build and deployment
+- `--scope <slug>`: Vercel team/account scope
+- `--dry-run`: Validates the build and outputs the CLI command without uploading
+- `--skip-checks`: Skips typechecking before building
 
 ## Layout
 
-- `apps/web` React + TypeScript + Vite + Tailwind frontend; typed Gateway client in `src/api/`, mock adapter in `src/mocks/`
-- `packages/freshfold-ui` mandatory `@freshfold/ui` design-system package
+- `frontend/` React + TypeScript + Vite + Tailwind frontend and `@freshfold/ui` design system; configured for Vercel deployment
+- `workers/<name>` Cloudflare Worker entry points and Wrangler config (gateway, laundry, calendar, notifications, scheduler)
 - `workers/<name>` Worker entry points and Wrangler config
 - `packages/*` shared TypeScript packages
 - `specs/*` constitution, plan, and task register

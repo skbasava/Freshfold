@@ -13,7 +13,7 @@
     {
       "binding": "LAUNDRY_DB",
       "database_name": "laundry-core",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "382ef6b2-19c9-47f3-a09f-3bf1dc7a227b",
       "migrations_dir": "../../migrations/laundry"
     }
   ],

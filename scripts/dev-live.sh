@@ -3,6 +3,31 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+WITH_FRONTEND=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --with-frontend|--frontend|--web) WITH_FRONTEND=1 ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: scripts/dev-live.sh [options]
+
+Starts all local Cloudflare backend workers:
+  - Gateway (port 8787)
+  - Laundry Core (port 8789)
+  - Notifications (port 8791)
+  - Scheduler (port 8792)
+  - Calendar Sync (port 8790, when Google credentials are set)
+
+Options:
+  --with-frontend, --web    Also launch the Vite dev server for the frontend.
+  -h, --help                Show this help message.
+EOF
+      exit 0
+      ;;
+  esac
+done
+
 if [ ! -f .dev.vars ]; then
   cp .dev.vars.example .dev.vars
 fi
@@ -110,7 +135,7 @@ delete config.$schema;
 delete config.assets;
 config.vars = {
   ...(config.vars ?? {}),
-  DEV_FRONTEND_URL: "http://localhost:5173",
+  DEV_FRONTEND_URL: process.env.DEV_FRONTEND_URL || "http://localhost:5173",
 };
 fs.writeFileSync("workers/gateway/.wrangler-live.json", `${JSON.stringify(config, null, 2)}\n`);
 NODE
@@ -175,6 +200,30 @@ if [ "$google_ready" -eq 1 ]; then
   pids+=("$!")
 fi
 
-echo "Open http://localhost:5173 for the live Vite app (http://localhost:8787 redirects there)." >&2
+echo "" >&2
+echo "==========================================================" >&2
+echo " FreshFold Local Cloudflare Backend Workers are Ready" >&2
+echo "==========================================================" >&2
+echo "  - Gateway API:      http://127.0.0.1:8787" >&2
+echo "    Health Check:     http://127.0.0.1:8787/health" >&2
+echo "  - Laundry Service:  http://127.0.0.1:8789" >&2
+echo "  - Notifications:    http://127.0.0.1:8791" >&2
+echo "  - Scheduler:        http://127.0.0.1:8792" >&2
+if [ "$google_ready" -eq 1 ]; then
+  echo "  - Calendar:         http://127.0.0.1:8790" >&2
+else
+  echo "  - Calendar:         Inactive (Google credentials not set)" >&2
+fi
+echo "==========================================================" >&2
+echo "Frontend is deployed separately on Vercel." >&2
+echo "To run frontend locally, run 'pnpm dev:web' in another terminal" >&2
+echo "with VITE_API_URL=http://127.0.0.1:8787 in frontend/.env.local." >&2
+echo "Press Ctrl+C to stop all backend workers." >&2
+echo "" >&2
 
-VITE_API_MODE=live pnpm dev:web
+if [ "$WITH_FRONTEND" -eq 1 ]; then
+  echo "Starting frontend dev server..." >&2
+  VITE_API_MODE=live pnpm dev:web
+else
+  wait
+fi
