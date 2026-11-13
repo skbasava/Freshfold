@@ -2,6 +2,7 @@ import {
   deriveCustomerId,
   normalizePhone,
   type Customer,
+  type DeliverySlot,
   type LoginRequest,
   type OrderDetail,
   type OrderSummary,
@@ -413,6 +414,7 @@ function createLiveApi(
   const now = dependencies.now ?? (() => Date.now());
   const details = new Map<string, OrderDetail>();
   const customers = new Map<string, Customer>();
+  const slotsCache = new Map<string, DeliverySlot[]>();
   let cachedSession: MockSession | null = null;
 
   function accountDatabaseName(accountKey: string): string {
@@ -515,6 +517,38 @@ function createLiveApi(
   }
 
   async function fetchAllCustomers(): Promise<Customer[]> {
+    // 1. Try reading from Dexie local replica first
+    try {
+      const db = getDatabase();
+      const dexieCustomers = await db.customers.toArray();
+      if (dexieCustomers && dexieCustomers.length > 0) {
+        const mapped: Customer[] = dexieCustomers.map((c) => ({
+          id: c.id,
+          hubId: c.branchId || c.tenantId || "hub-default",
+          name: c.name,
+          phone: c.phone,
+          notes: c.notes ?? null,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+        }));
+        for (const c of mapped) {
+          customers.set(c.id, c);
+        }
+        syncLogger.info("customers_served_from_indexeddb", {
+          count: mapped.length,
+          bypassedGateway: true,
+        });
+        return mapped;
+      }
+    } catch {
+      // Fall through to memory / remote
+    }
+
+    if (customers.size > 0) {
+      return Array.from(customers.values());
+    }
+
+    // 2. Fetch from Gateway D1 only on cold start
     const all: Customer[] = [];
     let cursor: string | null = null;
     try {
@@ -529,12 +563,37 @@ function createLiveApi(
         }
         cursor = response.nextCursor;
       }
+      if (all.length > 0) {
+        for (const c of all) {
+          customers.set(c.id, c);
+        }
+        try {
+          const db = getDatabase();
+          const toSave = all.map((c) => ({
+            id: c.id,
+            tenantId: c.hubId || "tenant-default",
+            branchId: c.hubId || "hub-default",
+            name: c.name,
+            phone: c.phone,
+            email: null,
+            notes: c.notes ?? null,
+            version: 1,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            deletedAt: null,
+          }));
+          await db.customers.bulkPut(toSave as any);
+          syncLogger.info("customers_synced_to_dexie", { count: all.length });
+        } catch {
+          // ignore
+        }
+      }
     } catch (error) {
       if (
         (isGatewayApiError(error) && (error.status === 0 || error.code === "NETWORK_ERROR")) ||
         (error instanceof Error && error.message.includes("fetch"))
       ) {
-        return [];
+        return Array.from(customers.values());
       }
       throw error;
     }
@@ -585,7 +644,11 @@ function createLiveApi(
           syncState: "synced",
         }));
         await db.orders.bulkPut(dexieItems as any);
-        syncLogger.info("orders_synced_to_dexie", { count: serverOrders.length });
+        syncLogger.info("orders_synced_to_dexie", {
+          count: serverOrders.length,
+          from: "remote_d1",
+          into: "dexie_indexeddb",
+        });
       } catch (err) {
         syncLogger.warn("dexie_bulk_put_failed", {
           error: err instanceof Error ? err.message : String(err),
@@ -601,6 +664,7 @@ function createLiveApi(
         });
         syncLogger.info("orders_cached_to_indexeddb", {
           count: serverOrders.length,
+          storage: "indexeddb_raw_store",
         });
       } catch (err) {
         syncLogger.warn("orders_cache_failed", {
@@ -612,11 +676,20 @@ function createLiveApi(
   }
 
   async function fetchOrdersFromDexie(): Promise<LocalOrder[]> {
+    if (dependencies.backend) {
+      const backendOrders = await backend.listOrders();
+      if (backendOrders && backendOrders.length > 0) {
+        return backendOrders;
+      }
+    }
     try {
       const db = getDatabase();
       const dexieOrders = await db.orders.toArray();
       if (dexieOrders && dexieOrders.length > 0) {
-        syncLogger.info("orders_read_from_dexie", { count: dexieOrders.length });
+        syncLogger.info("orders_read_from_dexie", {
+          count: dexieOrders.length,
+          source: "dexie_indexeddb_replica",
+        });
         return dexieOrders as unknown as LocalOrder[];
       }
     } catch (err) {
@@ -624,23 +697,34 @@ function createLiveApi(
         error: err instanceof Error ? err.message : String(err),
       });
     }
-    return backend.listOrders();
+    const backendOrders = await backend.listOrders();
+    if (backendOrders && backendOrders.length > 0) {
+      syncLogger.info("orders_read_from_backend", {
+        count: backendOrders.length,
+        source: "storage_backend_fallback",
+      });
+    }
+    return backendOrders;
   }
 
   async function mergedSummaries(): Promise<MockOrderSummary[]> {
-    // 1. Sync remote D1 data into IndexedDB (if online)
-    const serverOrders = await syncRemoteOrdersToDexie();
+    // 1. Fetch directly from IndexedDB using DexieJS (Local Replica has the Reads)
+    let localOrders = await fetchOrdersFromDexie();
 
-    // 2. Fetch directly from IndexedDB using DexieJS (Local Replica has the Reads)
-    const localOrders = await fetchOrdersFromDexie();
-    const localById = new Map(localOrders.map((order) => [order.id, order]));
-    const serverIds = new Set(serverOrders.map((order) => order.id));
+    // 2. Only go to Gateway if IndexedDB is completely empty (cold start)
+    if (localOrders.length === 0) {
+      syncLogger.info("indexeddb_empty_syncing_from_d1");
+      await syncRemoteOrdersToDexie();
+      localOrders = await fetchOrdersFromDexie();
+    } else {
+      syncLogger.info("orders_served_from_indexeddb", {
+        count: localOrders.length,
+        bypassedGateway: true,
+      });
+    }
 
     const summaries: MockOrderSummary[] = [];
-    const seenIds = new Set<string>();
-
     for (const local of localOrders) {
-      seenIds.add(local.id);
       const mutations = await queue.listMutations(local.id);
       const detail = localOrderToMockDetail(local, mutations);
       summaries.push({
@@ -663,12 +747,6 @@ function createLiveApi(
       });
     }
 
-    for (const server of serverOrders) {
-      if (!seenIds.has(server.id)) {
-        summaries.push(orderSummaryToMock(server));
-      }
-    }
-
     return summaries;
   }
 
@@ -677,6 +755,13 @@ function createLiveApi(
   ): Promise<MockOrderSummary> {
     if (summary.totalItems > 0) {
       return summary;
+    }
+    const cached = details.get(summary.id);
+    if (cached) {
+      return {
+        ...summary,
+        totalItems: orderDetailToMock(cached).totalItems,
+      };
     }
     try {
       const detail = await client.getOrder(summary.id);
@@ -699,6 +784,26 @@ function createLiveApi(
     let customer = customers.get(local.customerId);
     if (!customer) {
       try {
+        const db = getDatabase();
+        const localCust = await db.customers.get(local.customerId);
+        if (localCust) {
+          customer = {
+            id: localCust.id,
+            hubId: localCust.branchId || localCust.tenantId || "hub-default",
+            name: localCust.name,
+            phone: localCust.phone,
+            notes: localCust.notes ?? null,
+            createdAt: localCust.createdAt,
+            updatedAt: localCust.updatedAt,
+          };
+          customers.set(customer.id, customer);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!customer) {
+      try {
         customer = await client.getCustomer(local.customerId);
         customers.set(customer.id, customer);
       } catch {
@@ -710,6 +815,23 @@ function createLiveApi(
 
   async function loadOrderDetail(orderId: string): Promise<MockOrderDetail | null> {
     const local = await queue.getOrder(orderId);
+    if (local) {
+      const cached = details.get(orderId);
+      if (cached && cached.version === local.version) {
+        syncLogger.info("order_detail_served_from_cache", {
+          orderId,
+          bypassedGateway: true,
+        });
+        if (local.syncState === "synced") {
+          return orderDetailToMock(cached);
+        }
+        return mergeLocalOrderIntoDetail(orderDetailToMock(cached), local);
+      }
+      if (local.syncState !== "synced") {
+        return localDetail(orderId);
+      }
+    }
+
     let server: OrderDetail | null = null;
     try {
       server = await client.getOrder(orderId);
@@ -731,7 +853,7 @@ function createLiveApi(
       return mergeLocalOrderIntoDetail(orderDetailToMock(server), local);
     }
 
-    if (local && local.syncState !== "synced") {
+    if (local) {
       return localDetail(orderId);
     }
     return null;
@@ -908,40 +1030,49 @@ function createLiveApi(
     date: string,
     orders: MockOrderSummary[],
   ): Promise<MockDeliverySlot[]> {
-    try {
-      const response = await client.listDeliverySlots({ date });
-      if (response && response.items && response.items.length > 0) {
-        const todayKey = localDateKey(now());
-        return response.items.map((slot) => {
-          const booked = orders.filter(
-            (order) =>
-              order.deliverySlotId === slot.id &&
-              order.status !== "cancelled" &&
-              order.status !== "delivered",
-          ).length;
-          const status: MockDeliverySlot["status"] =
-            slot.localDate < todayKey
-              ? "past"
-              : booked >= slot.capacity
-                ? "full"
-                : "open";
-          return {
-            id: slot.id,
-            label: `${formatDeliveryTime(slot.startsAt)} - ${formatDeliveryTime(slot.endsAt)}`,
-            startsAt: slot.startsAt,
-            endsAt: slot.endsAt,
-            capacity: slot.capacity,
-            booked,
-            available: Math.max(0, slot.capacity - booked),
-            localDate: slot.localDate,
-            status,
-            closedReason: null,
-          };
-        });
+    let rawSlots = slotsCache.get(date);
+    if (!rawSlots || rawSlots.length === 0) {
+      try {
+        const response = await client.listDeliverySlots({ date });
+        if (response && response.items && response.items.length > 0) {
+          rawSlots = response.items;
+          slotsCache.set(date, rawSlots);
+        }
+      } catch {
+        // Fall through to fallback if database slot retrieval is unavailable
       }
-    } catch {
-      // Fall through to fallback if database slot retrieval is unavailable
     }
+
+    if (rawSlots && rawSlots.length > 0) {
+      const todayKey = localDateKey(now());
+      return rawSlots.map((slot) => {
+        const booked = orders.filter(
+          (order) =>
+            order.deliverySlotId === slot.id &&
+            order.status !== "cancelled" &&
+            order.status !== "delivered",
+        ).length;
+        const status: MockDeliverySlot["status"] =
+          slot.localDate < todayKey
+            ? "past"
+            : booked >= slot.capacity
+              ? "full"
+              : "open";
+        return {
+          id: slot.id,
+          label: `${formatDeliveryTime(slot.startsAt)} - ${formatDeliveryTime(slot.endsAt)}`,
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          capacity: slot.capacity,
+          booked,
+          available: Math.max(0, slot.capacity - booked),
+          localDate: slot.localDate,
+          status,
+          closedReason: null,
+        };
+      });
+    }
+
     if (!config.demoFallbacks) {
       return [];
     }
@@ -1364,15 +1495,37 @@ function createLiveApi(
     async getCustomer(
       customerId: string,
     ): Promise<MockCustomerDetail | null> {
-      let customer: Customer;
-      try {
-        customer = await client.getCustomer(customerId);
-        customers.set(customer.id, customer);
-      } catch (error) {
-        if (isGatewayApiError(error) && error.status === 404) {
-          return null;
+      let customer: Customer | undefined = customers.get(customerId);
+      if (!customer) {
+        try {
+          const db = getDatabase();
+          const localCust = await db.customers.get(customerId);
+          if (localCust) {
+            customer = {
+              id: localCust.id,
+              hubId: localCust.branchId || localCust.tenantId || "hub-default",
+              name: localCust.name,
+              phone: localCust.phone,
+              notes: localCust.notes ?? null,
+              createdAt: localCust.createdAt,
+              updatedAt: localCust.updatedAt,
+            };
+            customers.set(customer.id, customer);
+          }
+        } catch {
+          // ignore
         }
-        throw toMockApiError(error);
+      }
+      if (!customer) {
+        try {
+          customer = await client.getCustomer(customerId);
+          customers.set(customer.id, customer);
+        } catch (error) {
+          if (isGatewayApiError(error) && error.status === 404) {
+            return null;
+          }
+          throw toMockApiError(error);
+        }
       }
 
       const summaries = await mergedSummaries();

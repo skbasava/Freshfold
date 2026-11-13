@@ -1,4 +1,8 @@
 import type { Context, MiddlewareHandler } from "hono";
+import {
+  createLogger,
+  readLogLevelFromEnv,
+} from "../../../../packages/shared/src/observability";
 import type { GatewayEnv, RateLimitBinding } from "../types";
 import { errorResponse } from "./errors";
 
@@ -50,6 +54,16 @@ export const mutationRateLimit: MiddlewareHandler<GatewayEnv> = async (
   );
 
   if (result !== "allowed") {
+    createLogger({
+      service: "gateway",
+      ...(c.env.ENVIRONMENT ? { environment: c.env.ENVIRONMENT } : {}),
+      requestId: c.get("requestId"),
+      ...readLogLevelFromEnv(c.env),
+    }).warn("mutation_rate_limited", {
+      actorId: actor.actorId,
+      hubId: actor.hubId,
+      result,
+    });
     return rateLimitResponse(c, result);
   }
 

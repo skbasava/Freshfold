@@ -31,4 +31,6 @@ SUPABASE_SERVICE_ROLE_KEY=replace-with-server-only-service-role-key
 ENABLE_LOGS=true
 # Log severity filter: debug | info | warn | error | silent
 LOG_LEVEL=debug
+# Log format: pretty (colorized inline terminal output) | json (structured JSON)
+LOG_FORMAT=pretty
 

@@ -3,6 +3,7 @@ import {
   METRICS,
   OBSERVABILITY_EVENTS,
   createLogger,
+  readLogLevelFromEnv,
   redactValue,
   safeError,
 } from "../../packages/shared/src/observability";
@@ -184,5 +185,36 @@ describe("structured observability helper", () => {
     value.self = value;
 
     expect(() => JSON.stringify(redactValue(value))).not.toThrow();
+  });
+
+  it("formats colorized inline terminal lines when format is pretty", () => {
+    const output = capture();
+    const logger = createLogger({
+      service: "laundry",
+      format: "pretty",
+      sink: output.sink,
+      now: () => NOW,
+    });
+
+    logger.info("apply_change_accepted", {
+      orderId: "order-123",
+      version: 2,
+    });
+
+    expect(output.lines).toHaveLength(1);
+    const line = output.lines[0];
+    expect(line).toContain("[FreshFold:Laundry]");
+    expect(line).toContain("apply_change_accepted");
+    expect(line).toContain("orderId=order-123");
+    expect(line).toContain("version=2");
+  });
+
+  it("reads LOG_FORMAT from environment", () => {
+    expect(readLogLevelFromEnv({ LOG_FORMAT: "pretty" })).toMatchObject({
+      format: "pretty",
+    });
+    expect(readLogLevelFromEnv({ LOG_FORMAT: "json" })).toMatchObject({
+      format: "json",
+    });
   });
 });

@@ -3,9 +3,9 @@ import type {
   OrderSummary,
   SessionResponse,
 } from "@laundry/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStorageBackend } from "../db/memory";
-import { getDatabase } from "../database/db";
+import { getDatabase, resetDatabase } from "../database/db";
 import { createMockApi } from "../mocks/api";
 import { createMutationQueue, createPendingMutation } from "../sync/mutation-queue";
 import type { LocalOrder } from "../sync/types";
@@ -123,6 +123,10 @@ function liveConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     ...overrides,
   };
 }
+
+beforeEach(async () => {
+  await resetDatabase(getDatabase());
+});
 
 describe("API mode configuration", () => {
   it("defaults to the live adapter and opts into mock explicitly", () => {
@@ -406,6 +410,48 @@ describe("live adapter offline queue", () => {
     const dexieOrders = await dexieDb.orders.toArray();
     expect(dexieOrders.length).toBeGreaterThan(0);
     expect(dexieOrders.some((o) => o.id === "order-1")).toBe(true);
+  });
+
+  it("does not call the Gateway if orders are already available in IndexedDB", async () => {
+    let gatewayCalled = false;
+    const fetchImpl: FetchLike = async (input) => {
+      const path = String(input);
+      if (path.startsWith("/api/orders")) {
+        gatewayCalled = true;
+      }
+      return jsonResponse({ items: [], nextCursor: null });
+    };
+
+    const backend = createMemoryStorageBackend();
+    await backend.runTransaction(["orders"], "readwrite", (tx) =>
+      tx.putOrder({
+        id: "order-local-only",
+        hubId: "hub-1",
+        customerId: "cust-1",
+        customerName: "Local Customer",
+        customerPhone: "+919000000001",
+        status: "confirmed",
+        serviceType: "Wash and fold",
+        deliverySlotId: "slot-1",
+        deliveryAt: 1700000000000,
+        version: 1,
+        holdComment: null,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        syncState: "synced",
+      }),
+    );
+
+    const api = createAppApi(liveConfig(), {
+      fetchImpl,
+      backend,
+      getAccessToken: () => "access-token-1",
+    });
+
+    const result = await api.listOrders();
+    expect(result.items.length).toBe(1);
+    expect(result.items[0]?.id).toBe("order-local-only");
+    expect(gatewayCalled).toBe(false);
   });
 
   it("preserves a live version conflict and exposes the canonical order", async () => {

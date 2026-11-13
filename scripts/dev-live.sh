@@ -221,6 +221,20 @@ echo "with VITE_API_URL=http://127.0.0.1:8787 in frontend/.env.local." >&2
 echo "Press Ctrl+C to stop all backend workers." >&2
 echo "" >&2
 
+# Stream live backend worker logs directly into terminal
+log_files=(
+  "$log_dir/laundry-gateway.log"
+  "$log_dir/laundry-laundry.log"
+  "$log_dir/laundry-notifications.log"
+  "$log_dir/laundry-scheduler.log"
+)
+if [ "$google_ready" -eq 1 ]; then
+  log_files+=("$log_dir/laundry-calendar.log")
+fi
+
+tail -n 0 -f "${log_files[@]}" 2>/dev/null &
+pids+=("$!")
+
 if [ "$WITH_FRONTEND" -eq 1 ]; then
   echo "Starting frontend dev server..." >&2
   VITE_API_MODE=live pnpm dev:web

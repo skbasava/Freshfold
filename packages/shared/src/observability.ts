@@ -1,5 +1,6 @@
 export type LogSeverity = "debug" | "info" | "warn" | "error";
 export type LogLevel = LogSeverity | "silent";
+export type LogFormat = "pretty" | "json";
 
 export const LOG_LEVEL_WEIGHTS: Record<LogLevel, number> = {
   debug: 10,
@@ -70,6 +71,7 @@ export type LoggerOptions = {
   now?: () => number;
   level?: LogLevel;
   enabled?: boolean;
+  format?: LogFormat;
 };
 
 export type Logger = {
@@ -258,6 +260,105 @@ export function safeError(error: unknown): SafeError {
   return { name: "Error", code: "unknown" };
 }
 
+export const ANSI = {
+  reset: "\x1b[0m",
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  gray: "\x1b[90m",
+} as const;
+
+export function formatPrettyRecord(record: Record<string, unknown>): string {
+  const service = String(record.service ?? "Backend");
+  const level = String(record.level ?? "info");
+  const event = String(record.event ?? "unknown");
+  const rawTimestamp = String(record.timestamp ?? "");
+
+  let timeStr = "";
+  if (rawTimestamp.length >= 19 && rawTimestamp.includes("T")) {
+    timeStr = rawTimestamp.slice(11, 19);
+  } else {
+    timeStr = new Date().toLocaleTimeString("en-US", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  const serviceLower = service.toLowerCase();
+  let catColor: string = ANSI.cyan;
+  let serviceName = "Gateway";
+
+  if (serviceLower.includes("laundry")) {
+    catColor = ANSI.blue;
+    serviceName = "Laundry";
+  } else if (serviceLower.includes("gateway")) {
+    catColor = ANSI.cyan;
+    serviceName = "Gateway";
+  } else if (serviceLower.includes("calendar")) {
+    catColor = ANSI.green;
+    serviceName = "Calendar";
+  } else if (serviceLower.includes("notification")) {
+    catColor = ANSI.magenta;
+    serviceName = "Notifications";
+  } else if (serviceLower.includes("scheduler")) {
+    catColor = ANSI.yellow;
+    serviceName = "Scheduler";
+  } else if (serviceLower.includes("sync")) {
+    catColor = ANSI.yellow;
+    serviceName = "Sync";
+  } else if (serviceLower.includes("auth")) {
+    catColor = ANSI.blue;
+    serviceName = "Auth";
+  } else {
+    catColor = ANSI.cyan;
+    serviceName = service.charAt(0).toUpperCase() + service.slice(1);
+  }
+
+  const sevColor =
+    level === "error"
+      ? `${ANSI.red}${ANSI.bold}`
+      : level === "warn"
+        ? ANSI.yellow
+        : level === "debug"
+          ? ANSI.gray
+          : ANSI.green;
+
+  const timePart = `${ANSI.gray}${timeStr}${ANSI.reset}`;
+  const catPart = `${catColor}${ANSI.bold}[FreshFold:${serviceName}]${ANSI.reset}`;
+  const eventPart = `${sevColor}${event}${ANSI.reset}`;
+
+  const ignoreKeys = new Set([
+    "level",
+    "event",
+    "timestamp",
+    "service",
+    "environment",
+  ]);
+
+  const detailEntries: string[] = [];
+  for (const [k, v] of Object.entries(record)) {
+    if (ignoreKeys.has(k) || v === undefined || v === null) {
+      continue;
+    }
+    const valStr = typeof v === "object" ? JSON.stringify(v) : String(v);
+    detailEntries.push(`${k}=${valStr}`);
+  }
+
+  const detailsPart =
+    detailEntries.length > 0
+      ? ` ${ANSI.dim}(${detailEntries.join(" ")})${ANSI.reset}`
+      : "";
+
+  return `${timePart} ${catPart} ${eventPart}${detailsPart}`;
+}
+
 function defaultSink(severity: LogSeverity, line: string): void {
   if (severity === "error") {
     console.error(line);
@@ -277,6 +378,7 @@ function reservedField(name: string): boolean {
 export function readLogLevelFromEnv(env?: Record<string, unknown>): {
   level: LogLevel;
   enabled: boolean;
+  format: LogFormat;
 } {
   const proc = (
     globalThis as unknown as {
@@ -299,7 +401,7 @@ export function readLogLevelFromEnv(env?: Record<string, unknown>): {
       : String(rawEnabled).toLowerCase() === "true" || rawEnabled === "1";
 
   if (!enabled) {
-    return { level: "silent", enabled: false };
+    return { level: "silent", enabled: false, format: "json" };
   }
 
   const rawLevel = getVal("LOG_LEVEL") ?? getVal("VITE_LOG_LEVEL");
@@ -311,7 +413,7 @@ export function readLogLevelFromEnv(env?: Record<string, unknown>): {
       lower === "off" ||
       lower === "false"
     ) {
-      return { level: "silent", enabled: false };
+      return { level: "silent", enabled: false, format: "json" };
     }
     if (
       lower === "debug" ||
@@ -319,11 +421,52 @@ export function readLogLevelFromEnv(env?: Record<string, unknown>): {
       lower === "warn" ||
       lower === "error"
     ) {
-      return { level: lower as LogSeverity, enabled: true };
+      const rawFormat = getVal("LOG_FORMAT") ?? getVal("VITE_LOG_FORMAT");
+      let format: LogFormat = "json";
+      if (typeof rawFormat === "string") {
+        const fLower = rawFormat.toLowerCase().trim();
+        if (
+          fLower === "pretty" ||
+          fLower === "inline" ||
+          fLower === "terminal" ||
+          fLower === "human"
+        ) {
+          format = "pretty";
+        }
+      } else {
+        const envVal = String(getVal("ENVIRONMENT") ?? proc?.env?.NODE_ENV ?? "").toLowerCase();
+        const isTest = envVal === "test" || Boolean(proc?.env?.VITEST);
+        const isProd = envVal === "production";
+        if (!isTest && !isProd) {
+          format = "pretty";
+        }
+      }
+      return { level: lower as LogSeverity, enabled: true, format };
     }
   }
 
-  return { level: "info", enabled: true };
+  const rawFormat = getVal("LOG_FORMAT") ?? getVal("VITE_LOG_FORMAT");
+  let format: LogFormat = "json";
+  if (typeof rawFormat === "string") {
+    const fLower = rawFormat.toLowerCase().trim();
+    if (
+      fLower === "pretty" ||
+      fLower === "inline" ||
+      fLower === "terminal" ||
+      fLower === "human"
+    ) {
+      format = "pretty";
+    }
+  } else {
+    const envVal = String(getVal("ENVIRONMENT") ?? proc?.env?.NODE_ENV ?? "").toLowerCase();
+    const isTest = envVal === "test" || Boolean(proc?.env?.VITEST);
+    const isProd = envVal === "production";
+    if (!isTest && !isProd) {
+      format = "pretty";
+    }
+  }
+
+  return { level: "info", enabled: true, format };
 }
 
 export function createLogger(options: LoggerOptions): Logger {
@@ -335,6 +478,7 @@ export function createLogger(options: LoggerOptions): Logger {
   const configuredLevel: LogLevel = !enabled
     ? "silent"
     : options.level ?? envConfig.level;
+  const configuredFormat: LogFormat = options.format ?? envConfig.format;
   const minWeight =
     LOG_LEVEL_WEIGHTS[configuredLevel] ?? LOG_LEVEL_WEIGHTS.info;
 
@@ -373,7 +517,11 @@ export function createLogger(options: LoggerOptions): Logger {
       timestamp: new Date(now()).toISOString(),
       ...sanitizedFields,
     };
-    const line = JSON.stringify(record);
+    const line =
+      configuredFormat === "pretty"
+        ? formatPrettyRecord(record)
+        : JSON.stringify(record);
+
     if (sink) {
       sink(line);
     } else {
@@ -399,6 +547,7 @@ export function createLogger(options: LoggerOptions): Logger {
         ...overrides,
         level: overrides.level ?? options.level,
         enabled: overrides.enabled ?? options.enabled,
+        format: overrides.format ?? options.format,
         sink: overrides.sink ?? options.sink,
         now: overrides.now ?? options.now,
       }),
