@@ -99,3 +99,9 @@ export type {
 } from "./components/data-display/StatusBadge";
 export { Tabs } from "./components/data-display/Tabs";
 export type { TabItem, TabsProps } from "./components/data-display/Tabs";
+
+export { SyncStatusBadge } from "./components/sync/SyncStatusBadge";
+export type { SyncStatusBadgeProps } from "./components/sync/SyncStatusBadge";
+export { OperatorOrderQueue } from "./components/sync/OperatorOrderQueue";
+export type { OperatorOrderQueueProps } from "./components/sync/OperatorOrderQueue";
+

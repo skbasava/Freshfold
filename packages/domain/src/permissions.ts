@@ -25,6 +25,21 @@ const rolePermissions: Record<Role, ReadonlySet<Permission>> = {
     "update_order_status",
     "view_calendar",
   ]),
+  counter_staff: new Set([
+    "view_orders",
+    "create_order",
+    "update_order_status",
+    "view_calendar",
+  ]),
+  operator: new Set([
+    "view_orders",
+    "update_order_status",
+  ]),
+  finance: new Set([
+    "view_orders",
+    "view_audit",
+  ]),
+  owner: new Set(PERMISSIONS),
   manager: new Set(PERMISSIONS),
   service: new Set(["internal_service"]),
 };

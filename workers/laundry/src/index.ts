@@ -26,6 +26,7 @@ import { applyChange, ApplyChangeError } from "./orders/apply-change";
 import { listOrderEvents } from "./orders/events";
 import { getOrder, listOrders } from "./orders/read";
 import { decodeCursor, parseListQuery } from "./pagination";
+import syncRoutes from "./sync/routes";
 import { listChanges } from "./sync/changes";
 import { dispatchOutboxBatch } from "./outbox";
 import {
@@ -587,6 +588,27 @@ async function applyChangeHandler(c: Context<LaundryEnv>) {
 
 app.post("/api/orders/apply-change", requireActor, applyChangeHandler);
 app.post("/internal/apply-change", requireActor, applyChangeHandler);
+app.route("/api/sync", syncRoutes);
+
+// Direct /api/realtime endpoint mapped to syncRoutes /realtime
+app.all("/api/realtime", requireActor, async (c) => {
+  const doNamespace = c.env.TENANT_REALTIME;
+  if (!doNamespace) {
+    return c.json({ error: "realtime_unavailable" }, 503);
+  }
+
+  const actor = c.get("actor");
+  const id = doNamespace.idFromName(actor.tenantId);
+  const stub = doNamespace.get(id);
+
+  const url = new URL(c.req.url);
+  url.searchParams.set("tenantId", actor.tenantId);
+  if (actor.hubId) url.searchParams.set("branchId", actor.hubId);
+  url.searchParams.set("userId", actor.actorId);
+
+  const forwardRequest = new Request(url.toString(), c.req.raw);
+  return stub.fetch(forwardRequest);
+});
 
 function isInternalCalendarActor(actor: { actorType: string }): boolean {
   return actor.actorType === "service" || actor.actorType === "system";
@@ -872,4 +894,5 @@ app.post("/internal/calendar/enqueue", requireActor, async (c) => {
 
 app.notFound((c) => c.json({ error: "not_found" }, 404));
 
+export { TenantRealtime } from "./durable-objects/tenant-realtime";
 export default app;

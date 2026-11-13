@@ -19,7 +19,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "../tests/integration/sync-worker.test.ts",
+      "../tests/integration/tenant-realtime.test.ts",
+    ],
     css: false,
     restoreMocks: true,
   },

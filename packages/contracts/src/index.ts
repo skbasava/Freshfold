@@ -10,6 +10,7 @@ export * from "./orders";
 export * from "./phone";
 export * from "./queue-messages";
 export * from "./supabase-auth";
+export * from "./sync";
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),

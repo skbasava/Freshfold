@@ -43,7 +43,8 @@ CREATE TABLE orders (
   hub_id TEXT NOT NULL REFERENCES hubs(id),
   customer_id TEXT NOT NULL REFERENCES customers(id),
   status TEXT NOT NULL CHECK (status IN (
-    'confirmed','processing','hold','out_for_delivery','delivered','cancelled'
+    'confirmed','processing','hold','out_for_delivery','delivered','cancelled',
+    'received','inspection','washing','drying','ironing','quality_check','ready'
   )),
   service_type TEXT NOT NULL,
   delivery_slot_id TEXT REFERENCES delivery_slots(id),

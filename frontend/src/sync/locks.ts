@@ -118,3 +118,51 @@ export function createLockCoordinator(
     },
   };
 }
+
+export interface SyncLockOptions {
+  tenantId: string;
+  manager?: WebLockManagerLike;
+}
+
+export interface SyncLockCoordinator {
+  withSyncLock<T>(
+    fn: () => Promise<T> | T,
+    options?: { ifAvailable?: boolean }
+  ): Promise<{ ran: boolean; result?: T }>;
+}
+
+export function createSyncLockCoordinator(
+  options: SyncLockOptions
+): SyncLockCoordinator {
+  const manager = options.manager ?? defaultManager() ?? createInMemoryLockManager();
+  const syncLockName = `freshfold:sync:${options.tenantId}`;
+
+  return {
+    async withSyncLock<T>(
+      fn: () => Promise<T> | T,
+      lockOpts?: { ifAvailable?: boolean }
+    ): Promise<{ ran: boolean; result?: T }> {
+      let ran = false;
+      let result: T | undefined;
+
+      await manager.request<T | undefined>(
+        syncLockName,
+        {
+          mode: 'exclusive',
+          ifAvailable: lockOpts?.ifAvailable ?? true,
+        },
+        async (lock) => {
+          if (!lock) {
+            return undefined;
+          }
+          ran = true;
+          result = await fn();
+          return result;
+        }
+      );
+
+      return ran ? { ran: true, result } : { ran: false };
+    },
+  };
+}
+

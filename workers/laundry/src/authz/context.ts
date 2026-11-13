@@ -20,6 +20,7 @@ import type { OutboxQueueMessage } from "../../../../packages/contracts/src/queu
 
 export type LaundryBindings = {
   LAUNDRY_DB?: D1Database;
+  TENANT_REALTIME?: DurableObjectNamespace;
   ENVIRONMENT?: string;
   INTERNAL_CONTEXT_SECRET?: string;
   SERVICE_TOKEN?: string;

@@ -17,6 +17,20 @@
       "migrations_dir": "../../migrations/laundry"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TENANT_REALTIME",
+        "class_name": "TenantRealtime"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TenantRealtime"]
+    }
+  ],
   "queues": {
     "producers": [
       { "binding": "CALENDAR_QUEUE", "queue": "laundry-calendar-queue" },

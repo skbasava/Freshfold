@@ -104,10 +104,17 @@ export function pageMeta(pathname: string): PageMeta {
 
 export function roleLabel(role: Role): string {
   switch (role) {
+    case "owner":
+      return "Owner";
     case "manager":
       return "Manager";
     case "front_desk":
+    case "counter_staff":
       return "Front desk";
+    case "operator":
+      return "Operator";
+    case "finance":
+      return "Finance";
     case "service":
       return "Service account";
   }

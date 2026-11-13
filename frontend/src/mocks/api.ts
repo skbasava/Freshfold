@@ -55,6 +55,33 @@ const rolePermissions: Record<Role, ReadonlySet<string>> = {
     "update_order_status",
     "view_calendar",
   ]),
+  counter_staff: new Set([
+    "view_orders",
+    "create_order",
+    "update_order_status",
+    "view_calendar",
+  ]),
+  operator: new Set([
+    "view_orders",
+    "update_order_status",
+  ]),
+  finance: new Set([
+    "view_orders",
+    "view_audit",
+  ]),
+  owner: new Set([
+    "view_orders",
+    "create_order",
+    "reschedule_order",
+    "update_order_status",
+    "cancel_order",
+    "view_calendar",
+    "manage_calendar",
+    "manage_users",
+    "replay_dlq",
+    "view_audit",
+    "internal_service",
+  ]),
   manager: new Set([
     "view_orders",
     "create_order",
