@@ -12,6 +12,8 @@ export const PERMISSIONS = [
   "replay_dlq",
   "view_audit",
   "internal_service",
+  "view_tenants",
+  "manage_tenants",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -41,6 +43,7 @@ const rolePermissions: Record<Role, ReadonlySet<Permission>> = {
   ]),
   owner: new Set(PERMISSIONS),
   manager: new Set(PERMISSIONS),
+  super_admin: new Set(PERMISSIONS),
   service: new Set(["internal_service"]),
 };
 

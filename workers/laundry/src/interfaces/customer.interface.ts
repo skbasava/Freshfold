@@ -5,17 +5,19 @@ export interface ICustomerRepository {
   list(
     hubId: string,
     options: { limit: number; cursor: Cursor | null },
+    tenantId?: string,
   ): Promise<CustomerListResponse>;
-  getById(hubId: string, id: string): Promise<Customer | null>;
-  findByPhone(hubId: string, phone: string): Promise<Customer | null>;
-  create(customer: Customer): Promise<void>;
+  getById(hubId: string, id: string, tenantId?: string): Promise<Customer | null>;
+  findByPhone(hubId: string, phone: string, tenantId?: string): Promise<Customer | null>;
+  create(customer: Customer, tenantId?: string): Promise<void>;
 }
 
 export interface ICustomerService {
   listCustomers(
     hubId: string,
     query: { limit: number; cursor: string | null },
+    tenantId?: string,
   ): Promise<CustomerListResponse>;
-  getCustomer(hubId: string, id: string): Promise<Customer | null>;
+  getCustomer(hubId: string, id: string, tenantId?: string): Promise<Customer | null>;
 }
 

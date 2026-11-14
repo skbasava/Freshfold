@@ -155,7 +155,15 @@ function safeEqual(left: string, right: string): boolean {
     return false;
   }
 
-  return crypto.subtle.timingSafeEqual(leftBytes, rightBytes);
+  if (typeof (crypto.subtle as { timingSafeEqual?: (a: Uint8Array, b: Uint8Array) => boolean }).timingSafeEqual === "function") {
+    return (crypto.subtle as { timingSafeEqual: (a: Uint8Array, b: Uint8Array) => boolean }).timingSafeEqual(leftBytes, rightBytes);
+  }
+
+  let mismatch = 0;
+  for (let i = 0; i < leftBytes.length; i++) {
+    mismatch |= leftBytes[i] ^ rightBytes[i];
+  }
+  return mismatch === 0;
 }
 
 function assertSecret(secret: string): void {

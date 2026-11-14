@@ -18,36 +18,44 @@ export class CustomerService implements ICustomerService {
   async listCustomers(
     hubId: string,
     query: { limit: number; cursor: string | null },
+    tenantId?: string,
   ): Promise<CustomerListResponse> {
     this.logger?.debug("customer_service_list_requested", {
       hubId,
       limit: query.limit,
       cursor: query.cursor,
+      tenantId,
     });
 
     const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-    const result = await this.customerRepo.list(hubId, {
-      limit: query.limit,
-      cursor,
-    });
+    const result = await this.customerRepo.list(
+      hubId,
+      {
+        limit: query.limit,
+        cursor,
+      },
+      tenantId,
+    );
 
     this.logger?.info("customer_service_list_success", {
       hubId,
       count: result.items.length,
       hasNext: Boolean(result.nextCursor),
+      tenantId,
     });
 
     return result;
   }
 
-  async getCustomer(hubId: string, id: string): Promise<Customer | null> {
-    this.logger?.debug("customer_service_get_requested", { hubId, customerId: id });
+  async getCustomer(hubId: string, id: string, tenantId?: string): Promise<Customer | null> {
+    this.logger?.debug("customer_service_get_requested", { hubId, customerId: id, tenantId });
 
-    const customer = await this.customerRepo.getById(hubId, id);
+    const customer = await this.customerRepo.getById(hubId, id, tenantId);
     if (!customer) {
       this.logger?.debug("customer_service_get_not_found", {
         hubId,
         customerId: id,
+        tenantId,
       });
       return null;
     }
@@ -55,6 +63,7 @@ export class CustomerService implements ICustomerService {
     this.logger?.info("customer_service_get_success", {
       hubId,
       customerId: id,
+      tenantId,
     });
     return customer;
   }

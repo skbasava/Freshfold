@@ -47,10 +47,14 @@ export async function listOrdersHandler(c: Context<LaundryEnv>) {
   logger.debug("handler_list_orders", { hubId: actor.hubId, query });
 
   const service = createOrderService(c);
-  const result = await service.listOrders(actor.hubId, {
-    limit: query.limit,
-    cursor: query.cursor ?? null,
-  });
+  const result = await service.listOrders(
+    actor.hubId,
+    {
+      limit: query.limit,
+      cursor: query.cursor ?? null,
+    },
+    actor.tenantId,
+  );
 
   return c.json(orderListResponseSchema.parse(result));
 }
@@ -64,10 +68,10 @@ export async function getOrderHandler(c: Context<LaundryEnv>) {
   const actor = c.get("actor");
   const id = c.req.param("id") ?? "";
   const logger = getLaundryLogger(c.env, c.get("requestId"), "handler");
-  logger.debug("handler_get_order", { hubId: actor.hubId, orderId: id });
+  logger.debug("handler_get_order", { hubId: actor.hubId, orderId: id, tenantId: actor.tenantId });
 
   const service = createOrderService(c);
-  const order = await service.getOrder(actor.hubId, id);
+  const order = await service.getOrder(actor.hubId, id, actor.tenantId);
   if (!order) {
     return c.json({ error: "not_found" }, 404);
   }
@@ -88,10 +92,10 @@ export async function getInternalOrderHandler(c: Context<LaundryEnv>) {
 
   const id = c.req.param("id") ?? "";
   const logger = getLaundryLogger(c.env, c.get("requestId"), "handler");
-  logger.debug("handler_get_internal_order", { hubId: actor.hubId, orderId: id });
+  logger.debug("handler_get_internal_order", { hubId: actor.hubId, orderId: id, tenantId: actor.tenantId });
 
   const service = createOrderService(c);
-  const order = await service.getOrder(actor.hubId, id);
+  const order = await service.getOrder(actor.hubId, id, actor.tenantId);
   if (!order) {
     return c.json({ error: "not_found" }, 404);
   }
@@ -114,12 +118,12 @@ export async function listOrderEventsHandler(c: Context<LaundryEnv>) {
   const orderId = c.req.param("id") ?? "";
   const service = createOrderService(c);
 
-  const order = await service.getOrder(actor.hubId, orderId);
+  const order = await service.getOrder(actor.hubId, orderId, actor.tenantId);
   if (!order) {
     return c.json({ error: "not_found" }, 404);
   }
 
-  const items = await service.listEvents(actor.hubId, orderId, query.data.limit);
+  const items = await service.listEvents(actor.hubId, orderId, query.data.limit, actor.tenantId);
   return c.json(orderEventsResponseSchema.parse({ items }));
 }
 

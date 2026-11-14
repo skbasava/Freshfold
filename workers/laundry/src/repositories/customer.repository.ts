@@ -37,18 +37,24 @@ export class CustomerRepository implements ICustomerRepository {
   async list(
     hubId: string,
     options: { limit: number; cursor: Cursor | null },
+    tenantId?: string,
   ): Promise<CustomerListResponse> {
     const start = Date.now();
     this.logger?.debug("customer_repo_list_started", {
       hubId,
       limit: options.limit,
       hasCursor: Boolean(options.cursor),
+      tenantId,
     });
 
     const cursorClause = options.cursor
       ? "AND (created_at < ? OR (created_at = ? AND id < ?))"
       : "";
+    const tenantClause = tenantId ? "AND (tenant_id = ? OR tenant_id IS NULL)" : "";
     const bindings: Array<string | number> = [hubId];
+    if (tenantId) {
+      bindings.push(tenantId);
+    }
     if (options.cursor) {
       bindings.push(
         options.cursor.createdAt,
@@ -63,6 +69,8 @@ export class CustomerRepository implements ICustomerRepository {
         `SELECT id, hub_id, name, phone, notes, created_at, updated_at
          FROM customers
          WHERE hub_id = ?
+         ${tenantClause}
+         AND (deleted_at IS NULL)
          ${cursorClause}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
@@ -89,17 +97,20 @@ export class CustomerRepository implements ICustomerRepository {
     return { items, nextCursor };
   }
 
-  async getById(hubId: string, id: string): Promise<Customer | null> {
+  async getById(hubId: string, id: string, tenantId?: string): Promise<Customer | null> {
     const start = Date.now();
-    this.logger?.debug("customer_repo_get_by_id_started", { hubId, customerId: id });
+    this.logger?.debug("customer_repo_get_by_id_started", { hubId, customerId: id, tenantId });
+
+    const tenantClause = tenantId ? "AND (tenant_id = ? OR tenant_id IS NULL)" : "";
+    const bindings = tenantId ? [hubId, id, tenantId] : [hubId, id];
 
     const row = await this.db
       .prepare(
         `SELECT id, hub_id, name, phone, notes, created_at, updated_at
          FROM customers
-         WHERE hub_id = ? AND id = ?`,
+         WHERE hub_id = ? AND id = ? ${tenantClause} AND (deleted_at IS NULL)`,
       )
-      .bind(hubId, id)
+      .bind(...bindings)
       .first<CustomerRow>();
 
     this.logger?.debug("customer_repo_get_by_id_completed", {
@@ -112,17 +123,20 @@ export class CustomerRepository implements ICustomerRepository {
     return row ? mapCustomer(row) : null;
   }
 
-  async findByPhone(hubId: string, phone: string): Promise<Customer | null> {
+  async findByPhone(hubId: string, phone: string, tenantId?: string): Promise<Customer | null> {
     const start = Date.now();
-    this.logger?.debug("customer_repo_find_by_phone_started", { hubId });
+    this.logger?.debug("customer_repo_find_by_phone_started", { hubId, tenantId });
+
+    const tenantClause = tenantId ? "AND (tenant_id = ? OR tenant_id IS NULL)" : "";
+    const bindings = tenantId ? [hubId, phone, tenantId] : [hubId, phone];
 
     const row = await this.db
       .prepare(
         `SELECT id, hub_id, name, phone, notes, created_at, updated_at
          FROM customers
-         WHERE hub_id = ? AND phone = ?`,
+         WHERE hub_id = ? AND phone = ? ${tenantClause} AND (deleted_at IS NULL)`,
       )
-      .bind(hubId, phone)
+      .bind(...bindings)
       .first<CustomerRow>();
 
     this.logger?.debug("customer_repo_find_by_phone_completed", {

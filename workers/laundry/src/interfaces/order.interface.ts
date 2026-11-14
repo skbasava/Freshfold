@@ -11,21 +11,23 @@ import type { InternalContext } from "../../../../packages/contracts/src/auth";
 import type { Cursor } from "../pagination";
 
 export interface IOrderRepository {
-  getById(hubId: string, id: string): Promise<OrderDetail | null>;
+  getById(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null>;
   list(
     hubId: string,
     options: { limit: number; cursor: Cursor | null },
+    tenantId?: string,
   ): Promise<OrderListResponse>;
-  listEvents(hubId: string, orderId: string, limit: number): Promise<OrderEvent[]>;
+  listEvents(hubId: string, orderId: string, limit: number, tenantId?: string): Promise<OrderEvent[]>;
 }
 
 export interface IOrderService {
-  getOrder(hubId: string, id: string): Promise<OrderDetail | null>;
+  getOrder(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null>;
   listOrders(
     hubId: string,
     query: { limit: number; cursor: string | null },
+    tenantId?: string,
   ): Promise<OrderListResponse>;
-  listEvents(hubId: string, orderId: string, limit?: number): Promise<OrderEvent[]>;
+  listEvents(hubId: string, orderId: string, limit?: number, tenantId?: string): Promise<OrderEvent[]>;
   applyChange(
     actor: InternalContext,
     input: ApplyChangeInput,

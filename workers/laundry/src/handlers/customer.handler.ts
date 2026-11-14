@@ -27,10 +27,14 @@ export async function listCustomersHandler(c: Context<LaundryEnv>) {
   const repo = new CustomerRepository(db, getLaundryLogger(c.env, c.get("requestId"), "repository"));
   const service = new CustomerService(repo, getLaundryLogger(c.env, c.get("requestId"), "service"));
 
-  const result = await service.listCustomers(actor.hubId, {
-    limit: query.limit,
-    cursor: query.cursor ?? null,
-  });
+  const result = await service.listCustomers(
+    actor.hubId,
+    {
+      limit: query.limit,
+      cursor: query.cursor ?? null,
+    },
+    actor.tenantId,
+  );
 
   return c.json(customerListResponseSchema.parse(result));
 }
@@ -49,7 +53,7 @@ export async function getCustomerHandler(c: Context<LaundryEnv>) {
   const repo = new CustomerRepository(db, getLaundryLogger(c.env, c.get("requestId"), "repository"));
   const service = new CustomerService(repo, getLaundryLogger(c.env, c.get("requestId"), "service"));
 
-  const customer = await service.getCustomer(actor.hubId, id);
+  const customer = await service.getCustomer(actor.hubId, id, actor.tenantId);
   if (!customer) {
     return c.json({ error: "not_found" }, 404);
   }

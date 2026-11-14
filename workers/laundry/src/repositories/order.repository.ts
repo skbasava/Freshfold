@@ -104,9 +104,12 @@ export class OrderRepository implements IOrderRepository {
     private readonly logger?: Logger,
   ) {}
 
-  async getById(hubId: string, id: string): Promise<OrderDetail | null> {
+  async getById(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null> {
     const start = Date.now();
-    this.logger?.debug("order_repo_get_by_id_started", { hubId, orderId: id });
+    this.logger?.debug("order_repo_get_by_id_started", { hubId, orderId: id, tenantId });
+
+    const tenantClause = tenantId ? "AND (o.tenant_id = ? OR o.tenant_id IS NULL)" : "";
+    const bindings = tenantId ? [hubId, id, tenantId] : [hubId, id];
 
     const row = await this.db
       .prepare(
@@ -116,9 +119,9 @@ export class OrderRepository implements IOrderRepository {
                 c.updated_at AS customer_updated_at
          FROM orders o
          JOIN customers c ON c.id = o.customer_id AND c.hub_id = o.hub_id
-         WHERE o.hub_id = ? AND o.id = ?`,
+         WHERE o.hub_id = ? AND o.id = ? ${tenantClause}`,
       )
-      .bind(hubId, id)
+      .bind(...bindings)
       .first<OrderDetailRow>();
 
     if (!row) {
@@ -167,18 +170,24 @@ export class OrderRepository implements IOrderRepository {
   async list(
     hubId: string,
     options: { limit: number; cursor: Cursor | null },
+    tenantId?: string,
   ): Promise<{ items: OrderSummary[]; nextCursor: string | null }> {
     const start = Date.now();
     this.logger?.debug("order_repo_list_started", {
       hubId,
       limit: options.limit,
       hasCursor: Boolean(options.cursor),
+      tenantId,
     });
 
     const cursorClause = options.cursor
       ? "AND (o.created_at < ? OR (o.created_at = ? AND o.id < ?))"
       : "";
+    const tenantClause = tenantId ? "AND (o.tenant_id = ? OR o.tenant_id IS NULL)" : "";
     const bindings: Array<string | number> = [hubId];
+    if (tenantId) {
+      bindings.push(tenantId);
+    }
     if (options.cursor) {
       bindings.push(
         options.cursor.createdAt,
@@ -194,6 +203,7 @@ export class OrderRepository implements IOrderRepository {
          FROM orders o
          JOIN customers c ON c.id = o.customer_id AND c.hub_id = o.hub_id
          WHERE o.hub_id = ?
+         ${tenantClause}
          ${cursorClause}
          ORDER BY o.created_at DESC, o.id DESC
          LIMIT ?`,
@@ -224,13 +234,18 @@ export class OrderRepository implements IOrderRepository {
     hubId: string,
     orderId: string,
     limit: number,
+    tenantId?: string,
   ): Promise<OrderEvent[]> {
     const start = Date.now();
     this.logger?.debug("order_repo_list_events_started", {
       hubId,
       orderId,
       limit,
+      tenantId,
     });
+
+    const tenantClause = tenantId ? "AND (tenant_id = ? OR tenant_id IS NULL)" : "";
+    const bindings = tenantId ? [hubId, orderId, tenantId, limit] : [hubId, orderId, limit];
 
     const result = await this.db
       .prepare(
@@ -238,11 +253,11 @@ export class OrderRepository implements IOrderRepository {
           id, hub_id, order_id, mutation_id, event_type, source, actor_type,
           actor_id, previous_version, new_version, at, detail_json
          FROM order_events
-         WHERE hub_id = ? AND order_id = ?
+         WHERE hub_id = ? AND order_id = ? ${tenantClause}
          ORDER BY at DESC, id DESC
          LIMIT ?`,
       )
-      .bind(hubId, orderId, limit)
+      .bind(...bindings)
       .all<OrderEventRow>();
 
     this.logger?.debug("order_repo_list_events_completed", {

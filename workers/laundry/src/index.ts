@@ -16,6 +16,7 @@ import {
   notificationRouter,
   orderRouter,
   outboxRouter,
+  tenantRouter,
 } from "./routers";
 import syncRoutes from "./sync/routes";
 
@@ -67,6 +68,7 @@ app.get("/health", (c) =>
 );
 
 // Mount modular routers
+app.route("/api/tenants", tenantRouter);
 app.route("/api/customers", customerRouter);
 app.route("/api/orders", orderRouter);
 app.route("/api/delivery-slots", deliverySlotRouter);

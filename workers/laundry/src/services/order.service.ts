@@ -29,12 +29,12 @@ export class OrderService implements IOrderService {
     private readonly logger?: Logger,
   ) {}
 
-  async getOrder(hubId: string, id: string): Promise<OrderDetail | null> {
-    this.logger?.debug("order_service_get_requested", { hubId, orderId: id });
+  async getOrder(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null> {
+    this.logger?.debug("order_service_get_requested", { hubId, orderId: id, tenantId });
 
-    const order = await this.orderRepo.getById(hubId, id);
+    const order = await this.orderRepo.getById(hubId, id, tenantId);
     if (!order) {
-      this.logger?.debug("order_service_get_not_found", { hubId, orderId: id });
+      this.logger?.debug("order_service_get_not_found", { hubId, orderId: id, tenantId });
       return null;
     }
 
@@ -43,6 +43,7 @@ export class OrderService implements IOrderService {
       orderId: id,
       version: order.version,
       status: order.status,
+      tenantId,
     });
     return order;
   }
@@ -50,23 +51,30 @@ export class OrderService implements IOrderService {
   async listOrders(
     hubId: string,
     query: { limit: number; cursor: string | null },
+    tenantId?: string,
   ): Promise<OrderListResponse> {
     this.logger?.debug("order_service_list_requested", {
       hubId,
       limit: query.limit,
       cursor: query.cursor,
+      tenantId,
     });
 
     const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-    const result = await this.orderRepo.list(hubId, {
-      limit: query.limit,
-      cursor,
-    });
+    const result = await this.orderRepo.list(
+      hubId,
+      {
+        limit: query.limit,
+        cursor,
+      },
+      tenantId,
+    );
 
     this.logger?.info("order_service_list_success", {
       hubId,
       count: result.items.length,
       hasNext: Boolean(result.nextCursor),
+      tenantId,
     });
 
     return result;
@@ -76,19 +84,22 @@ export class OrderService implements IOrderService {
     hubId: string,
     orderId: string,
     limit = 50,
+    tenantId?: string,
   ): Promise<OrderEvent[]> {
     this.logger?.debug("order_service_list_events_requested", {
       hubId,
       orderId,
       limit,
+      tenantId,
     });
 
-    const events = await this.orderRepo.listEvents(hubId, orderId, limit);
+    const events = await this.orderRepo.listEvents(hubId, orderId, limit, tenantId);
 
     this.logger?.info("order_service_list_events_success", {
       hubId,
       orderId,
       count: events.length,
+      tenantId,
     });
 
     return events;

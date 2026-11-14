@@ -17,13 +17,15 @@ export function createTestD1Database(): D1Database {
   if (!migrationsDir) {
     throw new Error('Cannot find migrations/laundry directory');
   }
-  const m1 = fs.readFileSync(path.join(migrationsDir, '0001_core.sql'), 'utf8');
-  const m2 = fs.readFileSync(path.join(migrationsDir, '0002_indexes.sql'), 'utf8');
-  const m3 = fs.readFileSync(path.join(migrationsDir, '0003_multi_tenant_local_first.sql'), 'utf8');
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((f: string) => f.endsWith('.sql'))
+    .sort();
 
-  sqlite.exec(m1);
-  sqlite.exec(m2);
-  sqlite.exec(m3);
+  for (const file of migrationFiles) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    sqlite.exec(sql);
+  }
 
   class PreparedStatement {
     private query: string;
@@ -71,11 +73,11 @@ export function createTestD1Database(): D1Database {
     async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
       try {
         const stmt = sqlite.prepare(this.query);
-        stmt.run(...(this.boundValues as any[]));
+        const info = stmt.run(...(this.boundValues as any[])) as { changes?: number };
         return {
           results: [] as T[],
           success: true,
-          meta: {} as any,
+          meta: { changes: Number(info?.changes ?? 0) } as any,
         };
       } catch (err) {
         throw err;
@@ -99,8 +101,12 @@ export function createTestD1Database(): D1Database {
         for (const s of statements) {
           const { query, values } = (s as unknown as PreparedStatement).getInternal();
           const stmt = sqlite.prepare(query);
-          stmt.run(...(values as any[]));
-          responses.push({ results: [] as T[], success: true, meta: {} as any });
+          const info = stmt.run(...(values as any[])) as { changes?: number };
+          responses.push({
+            results: [] as T[],
+            success: true,
+            meta: { changes: Number(info?.changes ?? 0) } as any,
+          });
         }
         sqlite.exec('COMMIT');
         return responses;

@@ -5,4 +5,5 @@ export * from "./calendar.service";
 export * from "./notification.service";
 export * from "./outbox.service";
 export * from "./change-feed.service";
+export * from "./tenant.service";
 
