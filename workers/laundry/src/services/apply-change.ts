@@ -25,6 +25,8 @@ import { permissionForIntent } from "../domain/intents";
 import { nextStatus, type UpdateIntent } from "../domain/state-machine";
 import { hashPayload } from "../domain/idempotency";
 import { getOrder } from "../repositories/order.repository";
+import { CrnService } from "./crn.service";
+import { parseCrn, packCrn } from "../../../../packages/contracts/src/crn";
 
 type OrderRow = {
   id: string;
@@ -162,6 +164,37 @@ async function createOrder(
     throw new ApplyChangeError("INVALID_SLOT", 422);
   }
 
+  let crnId: string | null = null;
+  let crnPacked: number | null = null;
+  let seqId: number | null = null;
+
+  if ("crnId" in data.payload && typeof data.payload.crnId === "string" && data.payload.crnId) {
+    crnId = data.payload.crnId;
+    try {
+      const comp = parseCrn(crnId);
+      crnPacked = packCrn(comp);
+      seqId = comp.orderId;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!crnId) {
+    try {
+      const crnService = new CrnService(db);
+      const generated = await crnService.generateNextCrn(
+        actor.tenantId ?? "tenant-default",
+        actor.hubId,
+        now,
+      );
+      crnId = generated.crnId;
+      crnPacked = generated.crnPacked;
+      seqId = generated.components.orderId;
+    } catch {
+      // fallback if table not yet present
+    }
+  }
+
   const newVersion = 1;
   const eventId = crypto.randomUUID();
   const calendarOutboxId = crypto.randomUUID();
@@ -172,6 +205,7 @@ async function createOrder(
     previousStatus: null,
     newStatus: "confirmed",
     customerCreated: false,
+    crnId,
   };
   const detailJson = JSON.stringify(detail);
   const source = sourceForActor(actor);
@@ -220,9 +254,9 @@ async function createOrder(
         `INSERT OR IGNORE INTO orders (
           id, hub_id, customer_id, status, service_type, delivery_slot_id,
           delivery_at, version, last_mutation_id, last_notified_delivery_at,
-          created_at, updated_at
+          created_at, updated_at, tenant_id, crn_id, crn_packed, seq_id
         )
-        SELECT ?, ?, ?, 'confirmed', ?, ?, ?, 1, ?, NULL, ?, ?
+        SELECT ?, ?, ?, 'confirmed', ?, ?, ?, 1, ?, NULL, ?, ?, ?, ?, ?, ?
         WHERE (
           SELECT COUNT(*) FROM orders
           WHERE hub_id = ? AND delivery_slot_id = ?
@@ -245,6 +279,10 @@ async function createOrder(
         data.mutationId,
         now,
         now,
+        actor.tenantId ?? null,
+        crnId,
+        crnPacked,
+        seqId,
         actor.hubId,
         slot.id,
         actor.hubId,

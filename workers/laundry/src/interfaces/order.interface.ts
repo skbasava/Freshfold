@@ -7,6 +7,7 @@ import type {
   ApplyChangeInput,
   ApplyChangeResult,
 } from "../../../../packages/contracts/src/mutations";
+import type { OrderStateSnapshot } from "../../../../packages/contracts/src/crn";
 import type { InternalContext } from "../../../../packages/contracts/src/auth";
 import type { Cursor } from "../pagination";
 
@@ -22,6 +23,7 @@ export interface IOrderRepository {
 
 export interface IOrderService {
   getOrder(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null>;
+  getOrderState(hubId: string, id: string, tenantId?: string): Promise<OrderStateSnapshot | null>;
   listOrders(
     hubId: string,
     query: { limit: number; cursor: string | null },

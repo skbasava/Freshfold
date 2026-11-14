@@ -88,10 +88,12 @@ export interface MockOrderItem {
 
 export interface MockOrderSummary {
   id: string;
+  crnId?: string | null;
   customerId: string;
   customerName: string;
   customerPhone?: string;
   status: OrderStatus;
+  previousState?: OrderStatus | null;
   serviceType: string;
   deliverySlotId: string | null;
   deliveryAt: number | null;
@@ -110,6 +112,7 @@ export interface MockOrderDetail extends MockOrderSummary {
   items: MockOrderItem[];
   deliverySlot: MockDeliverySlot | null;
   customerCreated?: boolean;
+  stateSnapshot?: Record<string, unknown> | null;
 }
 
 export type OrderSort = "newest" | "oldest" | "delivery";

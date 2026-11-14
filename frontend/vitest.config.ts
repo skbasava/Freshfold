@@ -26,6 +26,8 @@ export default defineConfig({
       "../tests/integration/tenant-api.test.ts",
       "../tests/integration/hub-api.test.ts",
       "../tests/unit/tenant-contracts.test.ts",
+      "../tests/unit/crn.test.ts",
+      "../tests/integration/order-crn-kv.test.ts",
     ],
     css: false,
     restoreMocks: true,

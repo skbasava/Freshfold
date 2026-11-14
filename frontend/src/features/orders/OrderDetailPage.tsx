@@ -349,12 +349,27 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
             ) : null}
           </Card>
 
-          <Card title="Status">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatusBadge status={order.status} />
-              <span className="text-sm text-text-muted">
-                Version {order.version}
-              </span>
+          <Card title="Status & KV State Diagnostics">
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <StatusBadge status={order.status} />
+                <span className="text-sm text-text-muted">
+                  Version {order.version}
+                </span>
+              </div>
+              {order.previousState ? (
+                <p className="text-xs text-text-muted">
+                  Previous State:{" "}
+                  <span className="font-semibold text-text">
+                    {order.previousState}
+                  </span>
+                </p>
+              ) : null}
+              {order.crnId ? (
+                <p className="font-mono text-xs text-primary">
+                  CRN: <span className="font-semibold">{order.crnId}</span>
+                </p>
+              ) : null}
             </div>
           </Card>
 

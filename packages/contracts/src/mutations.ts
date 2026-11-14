@@ -33,6 +33,7 @@ const createOrderFields = {
   serviceType: z.string().min(1).max(100),
   deliverySlotId: z.string().min(1).max(128),
   items: z.array(createOrderItemSchema).min(1).max(100),
+  crnId: z.string().optional(),
 } as const;
 
 export const createOrderWithCustomerIdPayloadSchema = z

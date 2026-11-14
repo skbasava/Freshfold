@@ -31,6 +31,12 @@
       "new_sqlite_classes": ["TenantRealtime"]
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "ORDER_STATE_KV",
+      "id": "order-state-kv"
+    }
+  ],
   "queues": {
     "producers": [
       { "binding": "CALENDAR_QUEUE", "queue": "laundry-calendar-queue" },

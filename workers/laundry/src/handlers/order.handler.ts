@@ -7,7 +7,10 @@ import {
   orderEventsQuerySchema,
   orderEventsResponseSchema,
 } from "../../../../packages/contracts/src/changes";
-import { applyChangeInputSchema } from "../../../../packages/contracts/src/mutations";
+import {
+  applyChangeInputSchema,
+  createOrderPayloadSchema,
+} from "../../../../packages/contracts/src/mutations";
 import type { LaundryBindings, LaundryEnv } from "../authz";
 import { getLaundryLogger } from "../logging";
 import { parseListQuery } from "../pagination";
@@ -28,6 +31,7 @@ function createOrderService(c: Context<LaundryEnv>): OrderService {
     repo,
     db,
     getLaundryLogger(c.env, c.get("requestId"), "service"),
+    c.env.ORDER_STATE_KV,
   );
 }
 
@@ -163,6 +167,119 @@ export async function applyChangeHandler(c: Context<LaundryEnv>) {
       now: nowMs(c.env),
     });
     return c.json(result);
+  } catch (error) {
+    if (error instanceof ApplyChangeError) {
+      return c.json(
+        {
+          error: error.code,
+          ...(error.currentOrder ? { order: error.currentOrder } : {}),
+        },
+        error.status,
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getOrderStateHandler(c: Context<LaundryEnv>) {
+  const actor = c.get("actor");
+  const id = c.req.param("id") ?? "";
+  const logger = getLaundryLogger(c.env, c.get("requestId"), "handler");
+  logger.debug("handler_get_order_state", { hubId: actor.hubId, orderId: id, tenantId: actor.tenantId });
+
+  const service = createOrderService(c);
+  const state = await service.getOrderState(actor.hubId, id, actor.tenantId);
+  if (!state) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  return c.json(state);
+}
+
+export async function createOrderCrudHandler(c: Context<LaundryEnv>) {
+  const db = c.env.LAUNDRY_DB;
+  if (!db) {
+    return c.json({ error: "database_unavailable" }, 503);
+  }
+
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const parsed = createOrderPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "INVALID_REQUEST",
+        details: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+      400,
+    );
+  }
+
+  const actor = c.get("actor");
+  const service = createOrderService(c);
+  const orderId = (typeof body?.orderId === "string" ? body.orderId : null) || crypto.randomUUID();
+  const mutationId = (typeof body?.mutationId === "string" ? body.mutationId : null) || crypto.randomUUID();
+
+  try {
+    const result = await service.applyChange(
+      actor,
+      {
+        intent: "createOrder",
+        orderId,
+        mutationId,
+        payload: parsed.data,
+        baseVersion: null,
+      },
+      { now: nowMs(c.env) },
+    );
+    return c.json(orderDetailSchema.parse(result.order), 201);
+  } catch (error) {
+    if (error instanceof ApplyChangeError) {
+      return c.json(
+        {
+          error: error.code,
+          ...(error.currentOrder ? { order: error.currentOrder } : {}),
+        },
+        error.status,
+      );
+    }
+    throw error;
+  }
+}
+
+export async function cancelOrderHandler(c: Context<LaundryEnv>) {
+  const db = c.env.LAUNDRY_DB;
+  if (!db) {
+    return c.json({ error: "database_unavailable" }, 503);
+  }
+
+  const actor = c.get("actor");
+  const id = c.req.param("id") ?? "";
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const service = createOrderService(c);
+
+  const order = await service.getOrder(actor.hubId, id, actor.tenantId);
+  if (!order) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  try {
+    const reason = typeof body?.reason === "string" ? body.reason : "Cancelled by user request";
+    const mutationId = typeof body?.mutationId === "string" ? body.mutationId : crypto.randomUUID();
+    const result = await service.applyChange(
+      actor,
+      {
+        intent: "cancel",
+        orderId: order.id,
+        mutationId,
+        payload: { reason },
+        baseVersion: order.version,
+      },
+      { now: nowMs(c.env) },
+    );
+    return c.json(orderDetailSchema.parse(result.order));
   } catch (error) {
     if (error instanceof ApplyChangeError) {
       return c.json(

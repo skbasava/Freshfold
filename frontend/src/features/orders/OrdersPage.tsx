@@ -56,6 +56,9 @@ const columns: DataTableColumn<MockOrderSummary>[] = [
     render: (order) => (
       <div className="min-w-32">
         <p className="font-semibold text-text">{order.id}</p>
+        {order.crnId ? (
+          <p className="font-mono text-xs text-primary">{order.crnId}</p>
+        ) : null}
         <p className="text-xs text-text-muted">{order.serviceType}</p>
       </div>
     ),
@@ -75,7 +78,14 @@ const columns: DataTableColumn<MockOrderSummary>[] = [
   {
     key: "status",
     header: "Status",
-    render: (order) => <StatusBadge status={order.status} />,
+    render: (order) => (
+      <div className="flex flex-col gap-1">
+        <StatusBadge status={order.status} />
+        {order.previousState ? (
+          <span className="text-xs text-text-muted">prev: {order.previousState}</span>
+        ) : null}
+      </div>
+    ),
   },
   {
     key: "delivery",

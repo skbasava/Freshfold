@@ -45,10 +45,14 @@ export type OrderItem = z.infer<typeof orderItemSchema>;
 export const orderSummarySchema = z.object({
   id: z.string().min(1),
   hubId: z.string().min(1),
+  tenantId: z.string().optional(),
+  crnId: z.string().nullable().optional(),
+  crnPacked: z.number().int().nullable().optional(),
   customerId: z.string().min(1),
   customerName: z.string(),
   customerPhone: z.string(),
   status: orderStatusSchema,
+  previousState: orderStatusSchema.nullable().optional(),
   serviceType: z.string(),
   deliverySlotId: z.string().nullable(),
   deliveryAt: z.number().int().nullable(),
@@ -64,6 +68,7 @@ export type OrderSummary = z.infer<typeof orderSummarySchema>;
 export const orderDetailSchema = orderSummarySchema.extend({
   customer: customerSchema,
   items: z.array(orderItemSchema),
+  stateSnapshot: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export type OrderDetail = z.infer<typeof orderDetailSchema>;

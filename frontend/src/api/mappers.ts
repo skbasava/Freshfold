@@ -49,10 +49,12 @@ export function orderSummaryToMock(
 ): MockOrderSummary {
   return {
     id: order.id,
+    crnId: order.crnId ?? null,
     customerId: order.customerId,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     status: order.status,
+    previousState: order.previousState ?? null,
     serviceType: order.serviceType,
     deliverySlotId: order.deliverySlotId,
     deliveryAt: order.deliveryAt,
@@ -90,6 +92,7 @@ export function orderDetailToMock(
     customer: order.customer,
     items,
     deliverySlot: deliverySlotFromOrder(order),
+    stateSnapshot: order.stateSnapshot ?? null,
   };
 }
 

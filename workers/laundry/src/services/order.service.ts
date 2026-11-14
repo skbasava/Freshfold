@@ -7,6 +7,7 @@ import type {
   ApplyChangeInput,
   ApplyChangeResult,
 } from "../../../../packages/contracts/src/mutations";
+import type { OrderStateSnapshot } from "../../../../packages/contracts/src/crn";
 import type { InternalContext } from "../../../../packages/contracts/src/auth";
 import {
   METRICS,
@@ -18,6 +19,7 @@ import type {
   IOrderService,
 } from "../interfaces/order.interface";
 import { applyChange, ApplyChangeError } from "./apply-change";
+import { OrderStateService } from "./order-state.service";
 import { decodeCursor } from "../pagination";
 
 export { applyChange, ApplyChangeError } from "./apply-change";
@@ -27,6 +29,7 @@ export class OrderService implements IOrderService {
     private readonly orderRepo: IOrderRepository,
     private readonly db: D1Database,
     private readonly logger?: Logger,
+    private readonly kv?: KVNamespace,
   ) {}
 
   async getOrder(hubId: string, id: string, tenantId?: string): Promise<OrderDetail | null> {
@@ -38,6 +41,15 @@ export class OrderService implements IOrderService {
       return null;
     }
 
+    // State management is maintained in Cloudflare KV
+    const crnKey = order.crnId ?? order.id;
+    const kvState = await OrderStateService.getState(this.kv, crnKey);
+    if (kvState) {
+      order.status = kvState.currentState;
+      order.previousState = kvState.previousState;
+      order.stateSnapshot = kvState as unknown as Record<string, unknown>;
+    }
+
     this.logger?.info("order_service_get_success", {
       hubId,
       orderId: id,
@@ -46,6 +58,19 @@ export class OrderService implements IOrderService {
       tenantId,
     });
     return order;
+  }
+
+  async getOrderState(hubId: string, id: string, tenantId?: string): Promise<OrderStateSnapshot | null> {
+    if (id.startsWith("crn:")) {
+      const state = await OrderStateService.getState(this.kv, id);
+      if (state) return state;
+    }
+
+    const order = await this.orderRepo.getById(hubId, id, tenantId);
+    if (!order) return null;
+
+    const crnKey = order.crnId ?? order.id;
+    return OrderStateService.getState(this.kv, crnKey);
   }
 
   async listOrders(
@@ -70,14 +95,30 @@ export class OrderService implements IOrderService {
       tenantId,
     );
 
+    // Enrich with KV state
+    const enrichedItems = await Promise.all(
+      result.items.map(async (item) => {
+        const crnKey = item.crnId ?? item.id;
+        const kvState = await OrderStateService.getState(this.kv, crnKey);
+        if (kvState) {
+          return {
+            ...item,
+            status: kvState.currentState,
+            previousState: kvState.previousState,
+          };
+        }
+        return item;
+      }),
+    );
+
     this.logger?.info("order_service_list_success", {
       hubId,
-      count: result.items.length,
+      count: enrichedItems.length,
       hasNext: Boolean(result.nextCursor),
       tenantId,
     });
 
-    return result;
+    return { items: enrichedItems, nextCursor: result.nextCursor };
   }
 
   async listEvents(
@@ -123,6 +164,47 @@ export class OrderService implements IOrderService {
     try {
       const result = await applyChange(this.db, actor, input, options);
 
+      const crnKey = result.order.crnId ?? result.order.id;
+      if (input.intent === "createOrder") {
+        await OrderStateService.initializeOrderState(this.kv, {
+          crnId: crnKey,
+          orderId: result.order.id,
+          tenantId: actor.tenantId ?? "tenant-default",
+          hubId: actor.hubId,
+          actor: {
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+          },
+          now: options.now,
+          mutationId: input.mutationId,
+        });
+      } else {
+        await OrderStateService.transitionOrderState(this.kv, {
+          crnId: crnKey,
+          orderId: result.order.id,
+          tenantId: actor.tenantId ?? "tenant-default",
+          hubId: actor.hubId,
+          intent: input.intent,
+          newVersion: result.order.version,
+          actor: {
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+          },
+          holdComment: "comments" in input.payload ? (input.payload.comments as string) : null,
+          reason: "reason" in input.payload ? (input.payload.reason as string) : null,
+          now: options.now,
+          mutationId: input.mutationId,
+        });
+      }
+
+      // Synchronize returned order status from KV
+      const liveState = await OrderStateService.getState(this.kv, crnKey);
+      if (liveState) {
+        result.order.status = liveState.currentState;
+        result.order.previousState = liveState.previousState;
+        result.order.stateSnapshot = liveState as unknown as Record<string, unknown>;
+      }
+
       if (result.replayed) {
         this.logger?.info(OBSERVABILITY_EVENTS.applyChangeReplayed, {
           orderId: result.order.id,
@@ -149,6 +231,48 @@ export class OrderService implements IOrderService {
           intent: input.intent,
           mutationId: input.mutationId,
         });
+
+        // Record broken flow diagnostic in KV
+        let crnKey = input.orderId;
+        let existingState: OrderStateSnapshot | null = null;
+        try {
+          const existing = await this.orderRepo.getById(actor.hubId, input.orderId, actor.tenantId);
+          if (existing?.crnId) {
+            crnKey = existing.crnId;
+          }
+        } catch {
+          // ignore
+        }
+
+        try {
+          existingState = await OrderStateService.getState(this.kv, crnKey);
+        } catch {
+          // ignore
+        }
+
+        await OrderStateService.saveState(this.kv, {
+          crnId: crnKey.startsWith("crn:") ? crnKey : `crn:1:0:${input.orderId}`,
+          orderId: input.orderId,
+          tenantId: actor.tenantId ?? "tenant-default",
+          hubId: actor.hubId,
+          previousState: existingState?.previousState ?? null,
+          currentState: existingState?.currentState ?? "confirmed",
+          intent: input.intent,
+          version: existingState?.version ?? 0,
+          changedAt: options.now ?? Date.now(),
+          actor: {
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+          },
+          diagnostic: {
+            status: "broken",
+            reason: `Order mutation failed: ${error.code}`,
+            brokenStep: input.intent,
+            lastMutationId: input.mutationId,
+            errorCode: error.code,
+            errorMessage: error.message,
+          },
+        }).catch(() => null);
 
         if (
           error.code === "VERSION_CONFLICT" ||

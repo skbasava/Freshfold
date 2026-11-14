@@ -27,6 +27,9 @@ type OrderRow = {
   updated_at: number;
   cancelled_at: number | null;
   hold_comment: string | null;
+  tenant_id?: string | null;
+  crn_id?: string | null;
+  crn_packed?: number | null;
 };
 
 type OrderDetailRow = OrderRow & {
@@ -64,6 +67,9 @@ export function mapOrderSummary(row: OrderRow): OrderSummary {
   return {
     id: row.id,
     hubId: row.hub_id,
+    tenantId: row.tenant_id ?? undefined,
+    crnId: row.crn_id ?? null,
+    crnPacked: row.crn_packed ?? null,
     customerId: row.customer_id,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
@@ -95,7 +101,8 @@ const ORDER_SUMMARY_COLUMNS = `
   o.id, o.hub_id, o.customer_id, c.name AS customer_name,
   c.phone AS customer_phone, o.status, o.service_type,
   o.delivery_slot_id, o.delivery_at, o.version, o.created_at,
-  o.updated_at, o.cancelled_at, o.hold_comment
+  o.updated_at, o.cancelled_at, o.hold_comment, o.tenant_id,
+  o.crn_id, o.crn_packed
 `;
 
 export class OrderRepository implements IOrderRepository {
@@ -109,7 +116,7 @@ export class OrderRepository implements IOrderRepository {
     this.logger?.debug("order_repo_get_by_id_started", { hubId, orderId: id, tenantId });
 
     const tenantClause = tenantId ? "AND (o.tenant_id = ? OR o.tenant_id IS NULL)" : "";
-    const bindings = tenantId ? [hubId, id, tenantId] : [hubId, id];
+    const bindings = tenantId ? [hubId, id, id, tenantId] : [hubId, id, id];
 
     const row = await this.db
       .prepare(
@@ -119,7 +126,7 @@ export class OrderRepository implements IOrderRepository {
                 c.updated_at AS customer_updated_at
          FROM orders o
          JOIN customers c ON c.id = o.customer_id AND c.hub_id = o.hub_id
-         WHERE o.hub_id = ? AND o.id = ? ${tenantClause}`,
+         WHERE o.hub_id = ? AND (o.id = ? OR o.crn_id = ?) ${tenantClause}`,
       )
       .bind(...bindings)
       .first<OrderDetailRow>();
