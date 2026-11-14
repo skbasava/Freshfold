@@ -14,6 +14,8 @@ export const PERMISSIONS = [
   "internal_service",
   "view_tenants",
   "manage_tenants",
+  "view_hubs",
+  "manage_hubs",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -26,20 +28,24 @@ const rolePermissions: Record<Role, ReadonlySet<Permission>> = {
     "create_order",
     "update_order_status",
     "view_calendar",
+    "view_hubs",
   ]),
   counter_staff: new Set([
     "view_orders",
     "create_order",
     "update_order_status",
     "view_calendar",
+    "view_hubs",
   ]),
   operator: new Set([
     "view_orders",
     "update_order_status",
+    "view_hubs",
   ]),
   finance: new Set([
     "view_orders",
     "view_audit",
+    "view_hubs",
   ]),
   owner: new Set(PERMISSIONS),
   manager: new Set(PERMISSIONS),

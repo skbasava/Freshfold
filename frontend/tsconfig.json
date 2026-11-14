@@ -10,6 +10,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     "paths": {
       "@freshfold/ui": ["./src/ui/index.ts"],

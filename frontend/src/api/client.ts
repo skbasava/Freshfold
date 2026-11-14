@@ -3,24 +3,44 @@ import {
   applyChangeInputSchema,
   applyChangeResultSchema,
   changeFeedResponseSchema,
+  createTenantRequestSchema,
+  createHubRequestSchema,
   customerListResponseSchema,
   customerSchema,
+  deleteTenantResponseSchema,
+  deleteHubResponseSchema,
   deliverySlotListResponseSchema,
+  hubListResponseSchema,
+  hubSchema,
   orderDetailSchema,
   orderEventsResponseSchema,
   orderListResponseSchema,
   REQUEST_ID_HEADER,
   sessionResponseSchema,
+  tenantListResponseSchema,
+  tenantSchema,
+  updateTenantRequestSchema,
+  updateHubRequestSchema,
   type ApplyChangeInput,
   type ApplyChangeResult,
   type ChangeFeedResponse,
+  type CreateTenantRequest,
+  type CreateHubRequest,
   type Customer,
   type CustomerListResponse,
+  type DeleteTenantResponse,
+  type DeleteHubResponse,
   type DeliverySlotListResponse,
+  type Hub,
+  type HubListResponse,
   type OrderDetail,
   type OrderEventsResponse,
   type OrderListResponse,
   type SessionResponse,
+  type Tenant,
+  type TenantListResponse,
+  type UpdateTenantRequest,
+  type UpdateHubRequest,
 } from "@laundry/contracts";
 import { apiLogger } from "../lib/logger";
 import { defaultFetch, type FetchLike } from "../sync/fetch";
@@ -99,6 +119,19 @@ export interface ListDeliverySlotsOptions extends RequestOptions {
   date?: string;
 }
 
+export interface ListTenantsOptions extends RequestOptions {
+  status?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface ListHubsOptions extends RequestOptions {
+  tenantId?: string;
+  isActive?: boolean;
+  limit?: number;
+  cursor?: string | null;
+}
+
 export interface GetChangesOptions extends RequestOptions {
   since: number;
   limit?: number;
@@ -128,6 +161,36 @@ export interface GatewayClient {
     input: ApplyChangeInput,
     options?: RequestOptions,
   ): Promise<ApplyChangeResult>;
+  listTenants(options?: ListTenantsOptions): Promise<TenantListResponse>;
+  getTenant(id: string, options?: RequestOptions): Promise<Tenant>;
+  createTenant(
+    input: CreateTenantRequest,
+    options?: RequestOptions,
+  ): Promise<Tenant>;
+  updateTenant(
+    id: string,
+    input: UpdateTenantRequest,
+    options?: RequestOptions,
+  ): Promise<Tenant>;
+  deleteTenant(
+    id: string,
+    options?: RequestOptions,
+  ): Promise<DeleteTenantResponse>;
+  listHubs(options?: ListHubsOptions): Promise<HubListResponse>;
+  getHub(id: string, options?: RequestOptions): Promise<Hub>;
+  createHub(
+    input: CreateHubRequest,
+    options?: RequestOptions,
+  ): Promise<Hub>;
+  updateHub(
+    id: string,
+    input: UpdateHubRequest,
+    options?: RequestOptions,
+  ): Promise<Hub>;
+  deleteHub(
+    id: string,
+    options?: RequestOptions,
+  ): Promise<DeleteHubResponse>;
 }
 
 function buildPath(path: string, query?: URLSearchParams): string {
@@ -462,6 +525,181 @@ export function createGatewayClient(
         "POST",
         applyChangeResultSchema,
         parsed.data,
+        requestOptions,
+      );
+    },
+
+    listTenants(listOptions = {}) {
+      const query = new URLSearchParams();
+      query.set("limit", String(listOptions.limit ?? 50));
+      if (listOptions.status) {
+        query.set("status", listOptions.status);
+      }
+      if (listOptions.cursor) {
+        query.set("cursor", listOptions.cursor);
+      }
+      return request(
+        buildPath("/api/tenants", query),
+        "GET",
+        tenantListResponseSchema,
+        undefined,
+        listOptions,
+      );
+    },
+
+    getTenant(id, requestOptions) {
+      return request(
+        `/api/tenants/${encodeURIComponent(id)}`,
+        "GET",
+        tenantSchema,
+        undefined,
+        requestOptions,
+      );
+    },
+
+    createTenant(input, requestOptions) {
+      const parsed = createTenantRequestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new GatewayApiError({
+          status: 400,
+          code: "INVALID_REQUEST",
+          message: "The tenant details are not valid.",
+          details: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      return request(
+        "/api/tenants",
+        "POST",
+        tenantSchema,
+        parsed.data,
+        requestOptions,
+      );
+    },
+
+    updateTenant(id, input, requestOptions) {
+      const parsed = updateTenantRequestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new GatewayApiError({
+          status: 400,
+          code: "INVALID_REQUEST",
+          message: "The tenant update is not valid.",
+          details: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      return request(
+        `/api/tenants/${encodeURIComponent(id)}`,
+        "PATCH",
+        tenantSchema,
+        parsed.data,
+        requestOptions,
+      );
+    },
+
+    deleteTenant(id, requestOptions) {
+      return request(
+        `/api/tenants/${encodeURIComponent(id)}`,
+        "DELETE",
+        deleteTenantResponseSchema,
+        undefined,
+        requestOptions,
+      );
+    },
+
+    listHubs(listOptions = {}) {
+      const query = new URLSearchParams();
+      if (listOptions.tenantId) {
+        query.set("tenantId", listOptions.tenantId);
+      }
+      if (listOptions.isActive !== undefined) {
+        query.set("isActive", String(listOptions.isActive));
+      }
+      if (listOptions.limit !== undefined) {
+        query.set("limit", String(listOptions.limit));
+      }
+      if (listOptions.cursor) {
+        query.set("cursor", listOptions.cursor);
+      }
+      const path = listOptions.tenantId
+        ? `/api/tenants/${encodeURIComponent(listOptions.tenantId)}/hubs`
+        : "/api/hubs";
+      return request(
+        buildPath(path, query),
+        "GET",
+        hubListResponseSchema,
+        undefined,
+        listOptions,
+      );
+    },
+
+    getHub(id, requestOptions) {
+      return request(
+        `/api/hubs/${encodeURIComponent(id)}`,
+        "GET",
+        hubSchema,
+        undefined,
+        requestOptions,
+      );
+    },
+
+    createHub(input, requestOptions) {
+      const parsed = createHubRequestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new GatewayApiError({
+          status: 400,
+          code: "INVALID_REQUEST",
+          message: "The hub details are not valid.",
+          details: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      const path = parsed.data.tenantId
+        ? `/api/tenants/${encodeURIComponent(parsed.data.tenantId)}/hubs`
+        : "/api/hubs";
+      return request(
+        path,
+        "POST",
+        hubSchema,
+        parsed.data,
+        requestOptions,
+      );
+    },
+
+    updateHub(id, input, requestOptions) {
+      const parsed = updateHubRequestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new GatewayApiError({
+          status: 400,
+          code: "INVALID_REQUEST",
+          message: "The hub update is not valid.",
+          details: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      return request(
+        `/api/hubs/${encodeURIComponent(id)}`,
+        "PATCH",
+        hubSchema,
+        parsed.data,
+        requestOptions,
+      );
+    },
+
+    deleteHub(id, requestOptions) {
+      return request(
+        `/api/hubs/${encodeURIComponent(id)}`,
+        "DELETE",
+        deleteHubResponseSchema,
+        undefined,
         requestOptions,
       );
     },

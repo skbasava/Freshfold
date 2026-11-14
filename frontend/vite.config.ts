@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type ProxyOptions } from "vite";
-import { terminalLoggerPlugin } from "./src/plugins/terminal-logger";
+import { terminalLoggerPlugin } from "./src/plugins/terminal-logger.ts";
 
 function fromRoot(relativePath: string): string {
   return decodeURIComponent(
@@ -43,6 +43,8 @@ function gatewayProxy(target: string): ProxyOptions {
   };
 }
 
+declare const process: { env?: Record<string, string | undefined> } | undefined;
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), terminalLoggerPlugin()],
   resolve: {
@@ -57,7 +59,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    host: "127.0.0.1",
+    port: Number(typeof process !== "undefined" ? process.env?.PORT : undefined) || 3000,
+    strictPort: false,
     proxy: {
       "/api": gatewayProxy("http://127.0.0.1:8787"),
     },

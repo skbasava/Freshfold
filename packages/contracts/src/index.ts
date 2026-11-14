@@ -12,6 +12,7 @@ export * from "./queue-messages";
 export * from "./supabase-auth";
 export * from "./sync";
 export * from "./tenants";
+export * from "./hubs";
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),

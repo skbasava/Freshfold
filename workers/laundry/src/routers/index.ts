@@ -7,4 +7,5 @@ export * from "./outbox.router";
 export * from "./change-feed.router";
 export * from "./internal.router";
 export * from "./tenant.router";
+export * from "./hub.router";
 

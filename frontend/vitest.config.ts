@@ -24,6 +24,7 @@ export default defineConfig({
       "../tests/integration/sync-worker.test.ts",
       "../tests/integration/tenant-realtime.test.ts",
       "../tests/integration/tenant-api.test.ts",
+      "../tests/integration/hub-api.test.ts",
       "../tests/unit/tenant-contracts.test.ts",
     ],
     css: false,

@@ -1,9 +1,19 @@
 import {
   deriveCustomerId,
   normalizePhone,
+  type CreateHubRequest,
+  type CreateTenantRequest,
+  type DeleteHubResponse,
+  type DeleteTenantResponse,
+  type Hub,
+  type HubListResponse,
   type LoginRequest,
   type OrderStatus,
   type Role,
+  type Tenant,
+  type TenantListResponse,
+  type UpdateHubRequest,
+  type UpdateTenantRequest,
 } from "@laundry/contracts";
 import type {
   ApiCapabilities,
@@ -81,6 +91,8 @@ const rolePermissions: Record<Role, ReadonlySet<string>> = {
     "replay_dlq",
     "view_audit",
     "internal_service",
+    "view_tenants",
+    "manage_tenants",
   ]),
   super_admin: new Set([
     "view_orders",
@@ -94,6 +106,8 @@ const rolePermissions: Record<Role, ReadonlySet<string>> = {
     "replay_dlq",
     "view_audit",
     "internal_service",
+    "view_tenants",
+    "manage_tenants",
   ]),
   manager: new Set([
     "view_orders",
@@ -794,6 +808,299 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
           .sort((left, right) => right.createdAt - left.createdAt)
           .map(cloneSummary);
         return { customer: { ...customer }, orders };
+      });
+    },
+
+    listTenants(query = {}): Promise<TenantListResponse> {
+      return withLatency(() => {
+        let filtered = store.tenants.filter((tenant) => {
+          if (query.status && tenant.status !== query.status) {
+            return false;
+          }
+          if (!query.status && tenant.status === "deleted") {
+            return false;
+          }
+          return true;
+        });
+        filtered.sort((a, b) => b.createdAt - a.createdAt);
+        const limit = query.limit ?? 50;
+        const items = filtered.slice(0, limit).map((t) => ({
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          status: t.status,
+          planTier: t.planTier,
+          hubCount: 1,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        }));
+        return {
+          items,
+          nextCursor: null,
+        };
+      });
+    },
+
+    getTenant(id: string): Promise<Tenant | null> {
+      return withLatency(() => {
+        const tenant = store.tenants.find((t) => t.id === id);
+        return tenant ? { ...tenant } : null;
+      });
+    },
+
+    createTenant(input: CreateTenantRequest): Promise<Tenant> {
+      return withLatency(() => {
+        const slug =
+          input.slug ??
+          input.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+        if (store.tenants.some((t) => t.slug === slug)) {
+          throw new MockApiError(
+            `Tenant with slug "${slug}" already exists`,
+            { status: 409, code: "VALIDATION_ERROR" },
+          );
+        }
+        const newTenant: Tenant = {
+          id: `tenant-${Math.random().toString(36).substring(2, 10)}`,
+          name: input.name,
+          slug,
+          status: "active",
+          planTier: input.planTier ?? "standard",
+          settings: input.settings ?? {},
+          metadata: input.metadata ?? {},
+          contactEmail: input.contactEmail ?? null,
+          contactPhone: input.contactPhone ?? null,
+          version: 1,
+          createdAt: store.now,
+          updatedAt: store.now,
+        };
+        store.tenants.unshift(newTenant);
+        return { ...newTenant };
+      });
+    },
+
+    updateTenant(id: string, input: UpdateTenantRequest): Promise<Tenant> {
+      return withLatency(() => {
+        const tenant = store.tenants.find((t) => t.id === id);
+        if (!tenant) {
+          throw new MockApiError("Tenant not found", {
+            status: 404,
+            code: "NOT_FOUND",
+          });
+        }
+        if (
+          input.baseVersion !== undefined &&
+          input.baseVersion !== tenant.version
+        ) {
+          throw new MockApiError(
+            `Tenant was updated concurrently. Expected version ${input.baseVersion}, got ${tenant.version}`,
+            { status: 409, code: "VERSION_CONFLICT" },
+          );
+        }
+        if (input.slug && input.slug !== tenant.slug) {
+          if (store.tenants.some((t) => t.id !== id && t.slug === input.slug)) {
+            throw new MockApiError(
+              `Tenant with slug "${input.slug}" already exists`,
+              { status: 409, code: "VALIDATION_ERROR" },
+            );
+          }
+          tenant.slug = input.slug;
+        }
+        if (input.name !== undefined) tenant.name = input.name;
+        if (input.planTier !== undefined) tenant.planTier = input.planTier;
+        if (input.status !== undefined) tenant.status = input.status;
+        if (input.contactEmail !== undefined)
+          tenant.contactEmail = input.contactEmail;
+        if (input.contactPhone !== undefined)
+          tenant.contactPhone = input.contactPhone;
+        if (input.settings !== undefined) {
+          tenant.settings = { ...tenant.settings, ...input.settings };
+        }
+        if (input.metadata !== undefined) {
+          tenant.metadata = { ...tenant.metadata, ...input.metadata };
+        }
+        tenant.version += 1;
+        tenant.updatedAt = store.now;
+        return { ...tenant };
+      });
+    },
+
+    deleteTenant(id: string): Promise<DeleteTenantResponse> {
+      return withLatency(() => {
+        const tenant = store.tenants.find((t) => t.id === id);
+        if (!tenant) {
+          throw new MockApiError("Tenant not found", {
+            status: 404,
+            code: "NOT_FOUND",
+          });
+        }
+        tenant.status = "deleted";
+        tenant.deletedAt = store.now;
+        tenant.updatedAt = store.now;
+        tenant.version += 1;
+        return {
+          id: tenant.id,
+          status: "deleted" as const,
+          deletedAt: store.now,
+          message: "Tenant soft-deleted successfully",
+        };
+      });
+    },
+
+    listHubs(query?: {
+      tenantId?: string;
+      isActive?: boolean;
+      limit?: number;
+      cursor?: string | null;
+    }): Promise<HubListResponse> {
+      return withLatency(() => {
+        let filtered = store.hubs.filter((h) => !h.deletedAt);
+        if (query?.tenantId) {
+          filtered = filtered.filter((h) => h.tenantId === query.tenantId);
+        }
+        if (query?.isActive !== undefined) {
+          filtered = filtered.filter((h) => h.isActive === query.isActive);
+        }
+        const limit = query?.limit ?? 50;
+        const items = filtered.slice(0, limit).map((h) => ({
+          id: h.id,
+          tenantId: h.tenantId,
+          name: h.name,
+          code: h.code,
+          address: h.address,
+          phone: h.phone,
+          timezone: h.timezone,
+          isActive: h.isActive,
+          createdAt: h.createdAt,
+          updatedAt: h.updatedAt,
+        }));
+        return {
+          items,
+          nextCursor: filtered.length > limit ? "next-cursor" : null,
+        };
+      });
+    },
+
+    getHub(id: string): Promise<Hub | null> {
+      return withLatency(() => {
+        const hub = store.hubs.find((h) => h.id === id && !h.deletedAt);
+        return hub ? { ...hub } : null;
+      });
+    },
+
+    createHub(input: CreateHubRequest): Promise<Hub> {
+      return withLatency(() => {
+        const code = input.code.toUpperCase().trim();
+        const tenantId = input.tenantId ?? "tenant-freshfold-mumbai";
+        if (
+          store.hubs.some(
+            (h) =>
+              h.tenantId === tenantId &&
+              h.code.toUpperCase() === code &&
+              !h.deletedAt,
+          )
+        ) {
+          throw new MockApiError(
+            `Hub with code "${code}" already exists for this tenant`,
+            { status: 409, code: "CODE_ALREADY_EXISTS" },
+          );
+        }
+        const newHub: Hub = {
+          id: `hub-${Math.random().toString(36).substring(2, 10)}`,
+          tenantId,
+          name: input.name.trim(),
+          code,
+          address: input.address ?? null,
+          phone: input.phone ?? null,
+          timezone: input.timezone ?? "Asia/Kolkata",
+          isActive: input.isActive ?? true,
+          settings: input.settings ?? {},
+          metadata: input.metadata ?? {},
+          version: 1,
+          createdAt: store.now,
+          updatedAt: store.now,
+          deletedAt: null,
+        };
+        store.hubs.unshift(newHub);
+        return { ...newHub };
+      });
+    },
+
+    updateHub(id: string, input: UpdateHubRequest): Promise<Hub> {
+      return withLatency(() => {
+        const hub = store.hubs.find((h) => h.id === id && !h.deletedAt);
+        if (!hub) {
+          throw new MockApiError("Hub not found", {
+            status: 404,
+            code: "NOT_FOUND",
+          });
+        }
+        if (
+          input.baseVersion !== undefined &&
+          input.baseVersion !== hub.version
+        ) {
+          throw new MockApiError(
+            `Hub was updated concurrently. Expected version ${input.baseVersion}, got ${hub.version}`,
+            { status: 409, code: "VERSION_CONFLICT" },
+          );
+        }
+        if (input.code && input.code.toUpperCase() !== hub.code.toUpperCase()) {
+          const codeUpper = input.code.toUpperCase().trim();
+          if (
+            store.hubs.some(
+              (h) =>
+                h.id !== id &&
+                h.tenantId === hub.tenantId &&
+                h.code.toUpperCase() === codeUpper &&
+                !h.deletedAt,
+            )
+          ) {
+            throw new MockApiError(
+              `Hub with code "${codeUpper}" already exists for this tenant`,
+              { status: 409, code: "CODE_ALREADY_EXISTS" },
+            );
+          }
+          hub.code = codeUpper;
+        }
+        if (input.name !== undefined) hub.name = input.name.trim();
+        if (input.address !== undefined) hub.address = input.address;
+        if (input.phone !== undefined) hub.phone = input.phone;
+        if (input.timezone !== undefined) hub.timezone = input.timezone;
+        if (input.isActive !== undefined) hub.isActive = input.isActive;
+        if (input.settings !== undefined) {
+          hub.settings = { ...hub.settings, ...input.settings };
+        }
+        if (input.metadata !== undefined) {
+          hub.metadata = { ...hub.metadata, ...input.metadata };
+        }
+        hub.version += 1;
+        hub.updatedAt = store.now;
+        return { ...hub };
+      });
+    },
+
+    deleteHub(id: string): Promise<DeleteHubResponse> {
+      return withLatency(() => {
+        const hub = store.hubs.find((h) => h.id === id && !h.deletedAt);
+        if (!hub) {
+          throw new MockApiError("Hub not found", {
+            status: 404,
+            code: "NOT_FOUND",
+          });
+        }
+        hub.isActive = false;
+        hub.deletedAt = store.now;
+        hub.updatedAt = store.now;
+        hub.version += 1;
+        return {
+          id: hub.id,
+          tenantId: hub.tenantId,
+          status: "deleted" as const,
+          deletedAt: store.now,
+          message: "Hub soft-deleted successfully",
+        };
       });
     },
   };

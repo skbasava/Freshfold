@@ -1,11 +1,15 @@
 import {
   deriveCustomerId,
   normalizePhone,
+  type CreateHubRequest,
+  type CreateTenantRequest,
   type Customer,
   type DeliverySlot,
   type LoginRequest,
   type OrderDetail,
   type OrderSummary,
+  type UpdateHubRequest,
+  type UpdateTenantRequest,
 } from "@laundry/contracts";
 import { createIndexedDbBackend } from "../db/indexeddb";
 import { DB_NAME } from "../database/schema";
@@ -1582,6 +1586,92 @@ function createLiveApi(
       return (await queue.listMutations()).filter(
         (mutation) => mutation.status === "pending",
       ).length;
+    },
+
+    async listTenants(query = {}) {
+      try {
+        return await client.listTenants(query);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async getTenant(id: string) {
+      try {
+        return await client.getTenant(id);
+      } catch (error) {
+        if (isGatewayApiError(error) && error.status === 404) {
+          return null;
+        }
+        throw toMockApiError(error);
+      }
+    },
+
+    async createTenant(input: CreateTenantRequest) {
+      try {
+        return await client.createTenant(input);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async updateTenant(id: string, input: UpdateTenantRequest) {
+      try {
+        return await client.updateTenant(id, input);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async deleteTenant(id: string) {
+      try {
+        return await client.deleteTenant(id);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async listHubs(query = {}) {
+      try {
+        return await client.listHubs(query);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async getHub(id: string) {
+      try {
+        return await client.getHub(id);
+      } catch (error) {
+        if (isGatewayApiError(error) && error.status === 404) {
+          return null;
+        }
+        throw toMockApiError(error);
+      }
+    },
+
+    async createHub(input: CreateHubRequest) {
+      try {
+        return await client.createHub(input);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async updateHub(id: string, input: UpdateHubRequest) {
+      try {
+        return await client.updateHub(id, input);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
+    },
+
+    async deleteHub(id: string) {
+      try {
+        return await client.deleteHub(id);
+      } catch (error) {
+        throw toMockApiError(error);
+      }
     },
   };
 

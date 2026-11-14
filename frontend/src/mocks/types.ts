@@ -1,8 +1,18 @@
 import type {
   ApplyChangeIntent,
+  CreateHubRequest,
+  CreateTenantRequest,
   Customer,
+  DeleteHubResponse,
+  DeleteTenantResponse,
+  Hub,
+  HubListResponse,
   OrderStatus,
   Role,
+  Tenant,
+  TenantListResponse,
+  UpdateHubRequest,
+  UpdateTenantRequest,
 } from "@laundry/contracts";
 import type { LocalOrderSyncState } from "../sync/types";
 
@@ -224,6 +234,25 @@ export interface MockApi {
   getDeliverySchedule(date?: string): Promise<DeliverySchedule>;
   listCustomers(query?: CustomerListQuery): Promise<CustomerListResult>;
   getCustomer(customerId: string): Promise<MockCustomerDetail | null>;
+  listTenants(query?: {
+    status?: string;
+    limit?: number;
+    cursor?: string | null;
+  }): Promise<TenantListResponse>;
+  getTenant(id: string): Promise<Tenant | null>;
+  createTenant(input: CreateTenantRequest): Promise<Tenant>;
+  updateTenant(id: string, input: UpdateTenantRequest): Promise<Tenant>;
+  deleteTenant(id: string): Promise<DeleteTenantResponse>;
+  listHubs(query?: {
+    tenantId?: string;
+    isActive?: boolean;
+    limit?: number;
+    cursor?: string | null;
+  }): Promise<HubListResponse>;
+  getHub(id: string): Promise<Hub | null>;
+  createHub(input: CreateHubRequest): Promise<Hub>;
+  updateHub(id: string, input: UpdateHubRequest): Promise<Hub>;
+  deleteHub(id: string): Promise<DeleteHubResponse>;
 }
 
 export interface MockApiOptions {

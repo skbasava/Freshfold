@@ -31,6 +31,8 @@ import { CalendarPage } from "./features/calendar/CalendarPage";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { CustomerDetailPage } from "./features/customers/CustomerDetailPage";
 import { CustomersPage } from "./features/customers/CustomersPage";
+import { CreateTenantPage, TenantDetailPage, TenantsPage } from "./features/tenants";
+import { CreateHubPage, HubDetailPage, HubsPage } from "./features/hubs";
 import { DeliveriesPage } from "./features/deliveries/DeliveriesPage";
 import { AuthCallbackPage } from "./features/auth/AuthCallbackPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
@@ -309,6 +311,12 @@ function Workspace() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+          <Route path="/tenants" element={<TenantsPage />} />
+          <Route path="/tenants/new" element={<CreateTenantPage />} />
+          <Route path="/tenants/:tenantId" element={<TenantDetailPage />} />
+          <Route path="/hubs" element={<HubsPage />} />
+          <Route path="/hubs/new" element={<CreateHubPage />} />
+          <Route path="/hubs/:hubId" element={<HubDetailPage />} />
           <Route
             path="*"
             element={

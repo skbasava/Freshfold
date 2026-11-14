@@ -1,6 +1,8 @@
 import {
+  BuildingIcon,
   CalendarIcon,
   HomeIcon,
+  HubIcon,
   OrdersIcon,
   TruckIcon,
   UsersIcon,
@@ -51,6 +53,30 @@ export const navigationSections: SidebarSection[] = [
       },
     ],
   },
+  {
+    id: "admin",
+    label: "Administration",
+    items: [
+      {
+        label: "Tenants",
+        href: "/tenants",
+        icon: <BuildingIcon className="h-5 w-5" />,
+        children: [
+          { label: "All tenants", href: "/tenants" },
+          { label: "New tenant", href: "/tenants/new" },
+        ],
+      },
+      {
+        label: "Hubs",
+        href: "/hubs",
+        icon: <HubIcon className="h-5 w-5" />,
+        children: [
+          { label: "All hubs", href: "/hubs" },
+          { label: "New hub", href: "/hubs/new" },
+        ],
+      },
+    ],
+  },
 ];
 
 export interface PageMeta {
@@ -98,6 +124,44 @@ export function pageMeta(pathname: string): PageMeta {
   }
   if (pathname.startsWith("/customers")) {
     return { title: "Customers" };
+  }
+  if (pathname === "/tenants/new") {
+    return {
+      title: "New tenant",
+      breadcrumbs: [{ label: "Tenants", href: "/tenants" }, { label: "New tenant" }],
+    };
+  }
+  if (pathname.startsWith("/tenants/")) {
+    const tenantId = decodeURIComponent(pathname.slice("/tenants/".length));
+    return {
+      title: "Tenant details",
+      breadcrumbs: [
+        { label: "Tenants", href: "/tenants" },
+        { label: tenantId || "Tenant details" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/tenants")) {
+    return { title: "Tenants" };
+  }
+  if (pathname === "/hubs/new") {
+    return {
+      title: "New hub",
+      breadcrumbs: [{ label: "Hubs", href: "/hubs" }, { label: "New hub" }],
+    };
+  }
+  if (pathname.startsWith("/hubs/")) {
+    const hubId = decodeURIComponent(pathname.slice("/hubs/".length));
+    return {
+      title: "Hub details",
+      breadcrumbs: [
+        { label: "Hubs", href: "/hubs" },
+        { label: hubId || "Hub details" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/hubs")) {
+    return { title: "Hubs" };
   }
   return { title: "Dashboard" };
 }

@@ -1,4 +1,4 @@
-import type { Customer } from "@laundry/contracts";
+import type { Customer, Hub, Tenant } from "@laundry/contracts";
 import { formatDateKey, localDateKey } from "../lib/format";
 import type { LocalOrderSyncState } from "../sync/types";
 import type {
@@ -36,6 +36,8 @@ export interface MockStore {
   customers: Customer[];
   orders: MockOrderRecord[];
   slots: MockDeliverySlot[];
+  tenants: Tenant[];
+  hubs: Hub[];
   nextOrderNumber: number;
   nextItemNumber: number;
 }
@@ -411,9 +413,136 @@ export function refreshSlot(slot: MockDeliverySlot, todayKey: string): void {
   );
 }
 
+function baseTenants(): Tenant[] {
+  return [
+    {
+      id: "tenant-freshfold-mum",
+      name: "FreshFold Mumbai Central",
+      slug: "freshfold-mum",
+      status: "active",
+      planTier: "pro",
+      settings: {
+        currency: "INR",
+        timezone: "Asia/Kolkata",
+        taxRatePercent: 18,
+      },
+      metadata: {
+        registeredEntity: "FreshFold Retail Pvt Ltd",
+      },
+      contactEmail: "ops@freshfold.in",
+      contactPhone: "+919820098200",
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 30,
+      updatedAt: MOCK_TODAY - 86_400_000 * 5,
+    },
+    {
+      id: "tenant-sparkle-delhi",
+      name: "Sparkle Clean Delhi",
+      slug: "sparkle-delhi",
+      status: "active",
+      planTier: "enterprise",
+      settings: {
+        currency: "INR",
+        timezone: "Asia/Kolkata",
+      },
+      metadata: {},
+      contactEmail: "admin@sparkleclean.com",
+      contactPhone: "+919811098110",
+      version: 2,
+      createdAt: MOCK_TODAY - 86_400_000 * 60,
+      updatedAt: MOCK_TODAY - 86_400_000 * 2,
+    },
+    {
+      id: "tenant-spin-bangalore",
+      name: "Spin Cycle Indiranagar",
+      slug: "spin-bangalore",
+      status: "trial",
+      planTier: "trial",
+      settings: {},
+      metadata: {},
+      contactEmail: "hello@spincycle.io",
+      contactPhone: "+919845098450",
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 10,
+      updatedAt: MOCK_TODAY - 86_400_000 * 10,
+    },
+  ];
+}
+
+export function baseHubs(): Hub[] {
+  return [
+    {
+      id: "hub-mumbai-main",
+      tenantId: "tenant-freshfold-mum",
+      name: "Bandra Central Processing Hub",
+      code: "BNDR",
+      address: "102 Linking Road, Bandra West, Mumbai",
+      phone: "+919820011111",
+      timezone: "Asia/Kolkata",
+      isActive: true,
+      settings: { dailyCapacityKg: 800, expressDelivery: true },
+      metadata: { hubType: "processing_plant" },
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 30,
+      updatedAt: MOCK_TODAY - 86_400_000 * 30,
+      deletedAt: null,
+    },
+    {
+      id: "hub-mumbai-andheri",
+      tenantId: "tenant-freshfold-mum",
+      name: "Andheri Intake & Drop Hub",
+      code: "ANDH",
+      address: "45 Oshiwara Link Road, Andheri West, Mumbai",
+      phone: "+919820022222",
+      timezone: "Asia/Kolkata",
+      isActive: true,
+      settings: { dailyCapacityKg: 300, expressDelivery: false },
+      metadata: { hubType: "drop_point" },
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 20,
+      updatedAt: MOCK_TODAY - 86_400_000 * 20,
+      deletedAt: null,
+    },
+    {
+      id: "hub-delhi-south",
+      tenantId: "tenant-sparkle-delhi",
+      name: "South Extension Processing Hub",
+      code: "SEXT",
+      address: "B-14 South Extension Part 2, New Delhi",
+      phone: "+919811033333",
+      timezone: "Asia/Kolkata",
+      isActive: true,
+      settings: { dailyCapacityKg: 1000 },
+      metadata: {},
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 60,
+      updatedAt: MOCK_TODAY - 86_400_000 * 60,
+      deletedAt: null,
+    },
+    {
+      id: "hub-bangalore-indira",
+      tenantId: "tenant-spin-bangalore",
+      name: "Indiranagar 100ft Hub",
+      code: "INDR",
+      address: "542 100ft Road, Indiranagar, Bangalore",
+      phone: "+919845044444",
+      timezone: "Asia/Kolkata",
+      isActive: true,
+      settings: { dailyCapacityKg: 400 },
+      metadata: {},
+      version: 1,
+      createdAt: MOCK_TODAY - 86_400_000 * 10,
+      updatedAt: MOCK_TODAY - 86_400_000 * 10,
+      deletedAt: null,
+    },
+  ];
+}
+
 export function createMockStore(options: MockApiOptions = {}): MockStore {
   const todayKey = dayKeyFor(options.today ?? MOCK_TODAY);
   const customers = options.empty ? [] : baseCustomers();
+  const tenants = options.empty ? [] : baseTenants();
+  const hubs = options.empty ? [] : baseHubs();
   const orders = options.empty
     ? []
     : baseOrders(customers, options.syncIssues ?? true);
@@ -442,6 +571,8 @@ export function createMockStore(options: MockApiOptions = {}): MockStore {
     customers,
     orders,
     slots,
+    tenants,
+    hubs,
     nextOrderNumber: 1048,
     nextItemNumber: 1,
   };
