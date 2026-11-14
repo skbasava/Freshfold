@@ -3,7 +3,7 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import laundry from "../../workers/laundry/src/index";
-import { getOrder } from "../../workers/laundry/src/orders/read";
+import { getOrder } from "../../workers/laundry/src/repositories/order.repository";
 import type { CalendarEventApi } from "../../workers/calendar/src/consumer";
 import { runCalendarPoll } from "../../workers/calendar/src/poller";
 import { LaundryCalendarClient } from "../../workers/calendar/src/laundry";

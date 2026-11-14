@@ -2,7 +2,7 @@ import type {
   ChangeOperation,
   ChangeRecord,
 } from "../../../../packages/contracts/src/changes";
-import { getOrder } from "../orders/read";
+import { getOrder } from "../repositories/order.repository";
 
 type ChangeRow = {
   id: number;

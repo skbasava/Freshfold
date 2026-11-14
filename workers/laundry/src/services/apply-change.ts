@@ -23,8 +23,8 @@ import {
 } from "../capacity";
 import { permissionForIntent } from "../domain/intents";
 import { nextStatus, type UpdateIntent } from "../domain/state-machine";
-import { hashPayload } from "./idempotency";
-import { getOrder } from "./read";
+import { hashPayload } from "../domain/idempotency";
+import { getOrder } from "../repositories/order.repository";
 
 type OrderRow = {
   id: string;

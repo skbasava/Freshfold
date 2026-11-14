@@ -7,3 +7,4 @@ export async function hashPayload(value: unknown): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+

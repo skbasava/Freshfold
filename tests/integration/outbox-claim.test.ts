@@ -3,15 +3,16 @@ import type { D1Migration } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { InternalContext } from "../../packages/contracts/src/auth";
 import type { OutboxQueueMessage } from "../../packages/contracts/src/queue-messages";
-import { applyChange } from "../../workers/laundry/src/orders/apply-change";
+import { applyChange } from "../../workers/laundry/src/services/order.service";
 import {
   claimOutbox,
+  claimOutboxBatch,
   markOutboxDone,
   markOutboxFailed,
   OUTBOX_BACKOFF_BASE_MS,
   OUTBOX_MAX_ATTEMPTS,
-} from "../../workers/laundry/src/outbox/claim";
-import { dispatchOutboxBatch } from "../../workers/laundry/src/outbox/dispatch";
+  dispatchOutboxBatch,
+} from "../../workers/laundry/src/repositories/outbox.repository";
 import {
   clearLaundryData,
   seedLaundryReadFixtures,

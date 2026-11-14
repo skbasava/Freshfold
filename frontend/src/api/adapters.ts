@@ -675,12 +675,11 @@ function createLiveApi(
     return serverOrders;
   }
 
+  let lastFetchWasFromIndexedDb = false;
+
   async function fetchOrdersFromDexie(): Promise<LocalOrder[]> {
     if (dependencies.backend) {
-      const backendOrders = await backend.listOrders();
-      if (backendOrders && backendOrders.length > 0) {
-        return backendOrders;
-      }
+      return dependencies.backend.listOrders();
     }
     try {
       const db = getDatabase();
@@ -713,10 +712,12 @@ function createLiveApi(
 
     // 2. Only go to Gateway if IndexedDB is completely empty (cold start)
     if (localOrders.length === 0) {
+      lastFetchWasFromIndexedDb = false;
       syncLogger.info("indexeddb_empty_syncing_from_d1");
       await syncRemoteOrdersToDexie();
       localOrders = await fetchOrdersFromDexie();
     } else {
+      lastFetchWasFromIndexedDb = true;
       syncLogger.info("orders_served_from_indexeddb", {
         count: localOrders.length,
         bypassedGateway: true,
@@ -763,6 +764,27 @@ function createLiveApi(
         totalItems: orderDetailToMock(cached).totalItems,
       };
     }
+    try {
+      const db = getDatabase();
+      const localItems = await db.orderItems
+        .where("orderId")
+        .equals(summary.id)
+        .toArray();
+      if (localItems && localItems.length > 0) {
+        return {
+          ...summary,
+          totalItems: localItems.length,
+        };
+      }
+    } catch {
+      // ignore
+    }
+
+    // When reading from local replica, do not query Gateway for summaries
+    if (lastFetchWasFromIndexedDb) {
+      return summary;
+    }
+
     try {
       const detail = await client.getOrder(summary.id);
       details.set(summary.id, detail);

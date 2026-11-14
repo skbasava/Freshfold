@@ -6,7 +6,7 @@ import type { ApplyChangeInput } from "../../packages/contracts/src/mutations";
 import {
   applyChange,
   ApplyChangeError,
-} from "../../workers/laundry/src/orders/apply-change";
+} from "../../workers/laundry/src/services/order.service";
 import {
   clearLaundryData,
   seedLaundryReadFixtures,

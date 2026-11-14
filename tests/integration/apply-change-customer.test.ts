@@ -7,7 +7,7 @@ import { deriveCustomerId } from "../../packages/contracts/src/phone";
 import {
   applyChange,
   ApplyChangeError,
-} from "../../workers/laundry/src/orders/apply-change";
+} from "../../workers/laundry/src/services/order.service";
 import {
   clearLaundryData,
   seedLaundryReadFixtures,

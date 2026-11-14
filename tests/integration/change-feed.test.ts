@@ -19,7 +19,7 @@ import {
 } from "../../packages/contracts/src/http";
 import { signInternalContext } from "../../packages/shared/src/internal-context";
 import laundry from "../../workers/laundry/src/index";
-import { applyChange } from "../../workers/laundry/src/orders/apply-change";
+import { applyChange } from "../../workers/laundry/src/services/order.service";
 import {
   clearLaundryData,
   OTHER_HUB,
