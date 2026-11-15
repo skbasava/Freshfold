@@ -2,7 +2,7 @@ import { Badge, BellIcon, Button } from "@freshfold/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AppApi } from "../../api/types";
-import type { AttentionItem } from "../../mocks/types";
+import type { AttentionItem } from "../../types";
 
 export interface NotificationsMenuProps {
   api: AppApi;

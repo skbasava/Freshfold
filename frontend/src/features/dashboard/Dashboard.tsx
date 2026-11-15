@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useOptionalApi } from "../../api/context";
 import type { AppApi } from "../../api/types";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
-import type { MockOrderIntent, MockOrderSummary } from "../../mocks/types";
+import type { OrderIntent, OrderSummary } from "../../types";
 import {
   AttentionQueueCard,
   CalendarSectionCard,
@@ -50,8 +50,8 @@ export function Dashboard({ api, online }: DashboardProps) {
   const allSaved = isOnline && pendingCount === 0 && conflictCount === 0;
 
   const handleAdvanceStatus = async (
-    order: MockOrderSummary,
-    intent: MockOrderIntent,
+    order: OrderSummary,
+    intent: OrderIntent,
   ) => {
     setBusyOrderId(order.id);
     setActionNotice(null);

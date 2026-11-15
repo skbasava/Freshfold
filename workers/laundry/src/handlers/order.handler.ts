@@ -10,8 +10,10 @@ import {
 import {
   applyChangeInputSchema,
   createOrderPayloadSchema,
+  type ApplyChangeIntent,
 } from "../../../../packages/contracts/src/mutations";
 import type { LaundryBindings, LaundryEnv } from "../authz";
+import { broadcastToTenant } from "../durable-objects/broadcast";
 import { getLaundryLogger } from "../logging";
 import { parseListQuery } from "../pagination";
 import { OrderRepository } from "../repositories/order.repository";
@@ -19,6 +21,28 @@ import { ApplyChangeError, OrderService } from "../services/order.service";
 
 function nowMs(env: LaundryBindings): number {
   return (env.LAUNDRY_CLOCK ?? Date.now)();
+}
+
+function notifyRealtimeClients(
+  c: Context<LaundryEnv>,
+  tenantId: string,
+  hubId?: string | null,
+) {
+  if (c.env.TENANT_REALTIME) {
+    try {
+      c.executionCtx.waitUntil(
+        broadcastToTenant(c.env, tenantId, {
+          type: "CHANGES_AVAILABLE",
+          tenantId,
+          branchId: hubId ?? null,
+          latestCursor: Date.now(),
+          timestamp: Date.now(),
+        }),
+      );
+    } catch {
+      // Ignored if executionCtx is not present in local test environments
+    }
+  }
 }
 
 function createOrderService(c: Context<LaundryEnv>): OrderService {
@@ -166,6 +190,7 @@ export async function applyChangeHandler(c: Context<LaundryEnv>) {
     const result = await service.applyChange(actor, parsed.data, {
       now: nowMs(c.env),
     });
+    notifyRealtimeClients(c, actor.tenantId, actor.hubId);
     return c.json(result);
   } catch (error) {
     if (error instanceof ApplyChangeError) {
@@ -234,6 +259,7 @@ export async function createOrderCrudHandler(c: Context<LaundryEnv>) {
       },
       { now: nowMs(c.env) },
     );
+    notifyRealtimeClients(c, actor.tenantId, actor.hubId);
     return c.json(orderDetailSchema.parse(result.order), 201);
   } catch (error) {
     if (error instanceof ApplyChangeError) {
@@ -279,6 +305,112 @@ export async function cancelOrderHandler(c: Context<LaundryEnv>) {
       },
       { now: nowMs(c.env) },
     );
+    notifyRealtimeClients(c, actor.tenantId, actor.hubId);
+    return c.json(orderDetailSchema.parse(result.order));
+  } catch (error) {
+    if (error instanceof ApplyChangeError) {
+      return c.json(
+        {
+          error: error.code,
+          ...(error.currentOrder ? { order: error.currentOrder } : {}),
+        },
+        error.status,
+      );
+    }
+    throw error;
+  }
+}
+
+export async function updateOrderCrudHandler(c: Context<LaundryEnv>) {
+  const db = c.env.LAUNDRY_DB;
+  if (!db) {
+    return c.json({ error: "database_unavailable" }, 503);
+  }
+
+  const actor = c.get("actor");
+  const id = c.req.param("id") ?? "";
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) {
+    return c.json({ error: "INVALID_REQUEST", message: "Request body is required" }, 400);
+  }
+
+  const service = createOrderService(c);
+  const order = await service.getOrder(actor.hubId, id, actor.tenantId);
+  if (!order) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const mutationId =
+    (typeof body.mutationId === "string" ? body.mutationId : null) || crypto.randomUUID();
+  const baseVersion =
+    typeof body.baseVersion === "number" ? body.baseVersion : order.version;
+
+  let intent: Exclude<ApplyChangeIntent, "createOrder">;
+  let payload: Record<string, unknown> = {};
+
+  if (typeof body.intent === "string" && body.intent !== "createOrder") {
+    intent = body.intent as Exclude<ApplyChangeIntent, "createOrder">;
+    payload = (body.payload as Record<string, unknown>) ?? {};
+  } else if (body.status === "processing") {
+    intent = "markProcessing";
+  } else if (body.status === "hold") {
+    intent = "placeOnHold";
+    payload = {
+      comments:
+        typeof body.holdComment === "string"
+          ? body.holdComment
+          : typeof body.comments === "string"
+            ? body.comments
+            : "Hold requested",
+    };
+  } else if (body.status === "confirmed" && order.status === "hold") {
+    intent = "releaseHold";
+  } else if (body.status === "out_for_delivery") {
+    intent = "markOutForDelivery";
+  } else if (body.status === "delivered") {
+    intent = "markDelivered";
+  } else if (body.status === "cancelled") {
+    intent = "cancel";
+    payload = {
+      reason: typeof body.reason === "string" ? body.reason : "Cancelled by user",
+    };
+  } else if (
+    typeof body.deliverySlotId === "string" &&
+    body.deliverySlotId !== order.deliverySlotId
+  ) {
+    intent = "reschedule";
+    payload = { deliverySlotId: body.deliverySlotId };
+  } else {
+    if (typeof body.customerNotes === "string") {
+      await db
+        .prepare("UPDATE customers SET notes = ?, updated_at = ? WHERE id = ?")
+        .bind(body.customerNotes, nowMs(c.env), order.customerId)
+        .run();
+      const updated = await service.getOrder(actor.hubId, id, actor.tenantId);
+      return c.json(orderDetailSchema.parse(updated));
+    }
+    return c.json(
+      {
+        error: "INVALID_REQUEST",
+        message: "No recognized update fields or intent provided",
+      },
+      400,
+    );
+  }
+
+  try {
+    const result = await service.applyChange(
+      actor,
+      {
+        intent,
+        orderId: order.id,
+        mutationId,
+        payload: payload as any,
+        baseVersion,
+      },
+      { now: nowMs(c.env) },
+    );
+    notifyRealtimeClients(c, actor.tenantId, actor.hubId);
     return c.json(orderDetailSchema.parse(result.order));
   } catch (error) {
     if (error instanceof ApplyChangeError) {

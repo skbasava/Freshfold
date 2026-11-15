@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiProvider } from "../../api/context";
 import { AuthProvider } from "../../auth/AuthContext";
 import type { AuthClient, AuthClientSession } from "../../auth/types";
-import { createMockApi } from "../../mocks/api";
+import { createMockApi } from "../../test/mocks/api";
 import { ResetPasswordPage } from "./ResetPasswordPage";
 
 const authSession: AuthClientSession = {

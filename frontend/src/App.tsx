@@ -11,7 +11,7 @@ import {
   UsersIcon,
 } from "@freshfold/ui";
 import type { Role } from "@laundry/contracts";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Link,
   Navigate,
@@ -27,6 +27,7 @@ import type { AppApi } from "./api/types";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { readSupabaseAuthConfig } from "./auth/supabase-config";
 import { createAccessTokenStore } from "./auth/token-store";
+import { useRealtime } from "./hooks/useRealtime";
 import { CalendarPage } from "./features/calendar/CalendarPage";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { CustomerDetailPage } from "./features/customers/CustomerDetailPage";
@@ -41,11 +42,11 @@ import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { CreateOrderPage } from "./features/orders/CreateOrderPage";
 import { OrderDetailPage } from "./features/orders/OrderDetailPage";
 import { OrdersPage } from "./features/orders/OrdersPage";
-import { ComingSoonPage } from "./features/shared/ComingSoonPage";
+import { ComingSoonPage, UnauthorizedPage } from "./features/shared";
 import {
   HelpGuideModal,
   NotificationsMenu,
-  navigationSections,
+  getNavigationSections,
   pageMeta,
   roleLabel,
 } from "./features/shell";
@@ -116,6 +117,21 @@ function SessionError({
   );
 }
 
+function RequireSuperAdmin({
+  role,
+  resourceName,
+  children,
+}: {
+  role: Role;
+  resourceName: string;
+  children: ReactNode;
+}) {
+  if (role !== "super_admin") {
+    return <UnauthorizedPage role={role} resourceName={resourceName} />;
+  }
+  return <>{children}</>;
+}
+
 function Workspace() {
   const api = useApi();
   const auth = useAuth();
@@ -139,7 +155,18 @@ function Workspace() {
 
   const session = auth.state.session;
   const role = session.user.role;
+  const sections = useMemo(() => getNavigationSections(role), [role]);
   const meta = pageMeta(location.pathname);
+
+  useRealtime({
+    tenantId: session.hub.tenantId,
+    branchId: session.hub.id,
+    userId: session.user.id,
+    enabled: api.mode !== "mock" && Boolean(session.hub.tenantId),
+    onChangesAvailable: () => {
+      void api.syncPendingMutations?.();
+    },
+  });
 
   if (role === "service") {
     return (
@@ -162,10 +189,22 @@ function Workspace() {
   }
 
   const switchRole = () => {
-    const nextRole: Role = role === "manager" ? "front_desk" : "manager";
+    const nextRole: Role =
+      role === "front_desk"
+        ? "manager"
+        : role === "manager"
+          ? "super_admin"
+          : "front_desk";
     api.setRole(nextRole);
     void auth.refresh();
   };
+
+  const nextRoleLabel =
+    role === "front_desk"
+      ? "View as manager"
+      : role === "manager"
+        ? "View as super admin"
+        : "View as front desk";
 
   const handleGlobalSearchSubmit = (value: string) => {
     const trimmed = value.trim();
@@ -177,8 +216,7 @@ function Workspace() {
       ? [
           {
             id: "switch-role",
-            label:
-              role === "manager" ? "View as front desk" : "View as manager",
+            label: nextRoleLabel,
             icon: <UsersIcon className="h-4 w-4" />,
             onSelect: switchRole,
           },
@@ -204,7 +242,7 @@ function Workspace() {
       <AppShell
         sidebar={({ collapsed, toggleCollapsed }) => (
           <Sidebar
-            sections={navigationSections}
+            sections={sections}
             utilityItems={[
               {
                 id: "help",
@@ -311,12 +349,54 @@ function Workspace() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
-          <Route path="/tenants" element={<TenantsPage />} />
-          <Route path="/tenants/new" element={<CreateTenantPage />} />
-          <Route path="/tenants/:tenantId" element={<TenantDetailPage />} />
-          <Route path="/hubs" element={<HubsPage />} />
-          <Route path="/hubs/new" element={<CreateHubPage />} />
-          <Route path="/hubs/:hubId" element={<HubDetailPage />} />
+          <Route
+            path="/tenants"
+            element={
+              <RequireSuperAdmin role={role} resourceName="tenants">
+                <TenantsPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="/tenants/new"
+            element={
+              <RequireSuperAdmin role={role} resourceName="tenants">
+                <CreateTenantPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="/tenants/:tenantId"
+            element={
+              <RequireSuperAdmin role={role} resourceName="tenants">
+                <TenantDetailPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="/hubs"
+            element={
+              <RequireSuperAdmin role={role} resourceName="hubs">
+                <HubsPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="/hubs/new"
+            element={
+              <RequireSuperAdmin role={role} resourceName="hubs">
+                <CreateHubPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="/hubs/:hubId"
+            element={
+              <RequireSuperAdmin role={role} resourceName="hubs">
+                <HubDetailPage />
+              </RequireSuperAdmin>
+            }
+          />
           <Route
             path="*"
             element={

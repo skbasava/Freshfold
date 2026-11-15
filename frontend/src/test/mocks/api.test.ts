@@ -35,6 +35,12 @@ describe("mock order reads", () => {
 });
 
 describe("mock order mutations", () => {
+  it("updates customer notes", async () => {
+    const api = managerApi();
+    const res = await api.updateOrder("ORD-1043", { customerNotes: "Hello" });
+    expect(res.customer.notes).toBe("Hello");
+  });
+
   it("validates create input and rejects a full delivery slot", async () => {
     const api = managerApi();
 

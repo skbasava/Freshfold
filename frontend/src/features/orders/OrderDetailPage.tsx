@@ -1,15 +1,18 @@
 import {
   Alert,
+  Badge,
   Button,
   ConfirmDialog,
   Card,
   DataTable,
   EmptyState,
   LoadingState,
+  Modal,
   OrdersIcon,
   PageContainer,
   PageHeader,
   StatusBadge,
+  Textarea,
   Toast,
   type DataTableColumn,
 } from "@freshfold/ui";
@@ -17,14 +20,14 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { formatDateKey, formatDateTime, localDateKey } from "../../lib/format";
-import { isMockApiError } from "../../mocks/errors";
-import { useMockApi } from "../../mocks/context";
+import { isApiError } from "../../api/errors";
+import { useApi } from "../../api/context";
 import type {
-  MockOrderDetail,
-  MockOrderIntent,
-  MockOrderItem,
-} from "../../mocks/types";
-import type { Role } from "@laundry/contracts";
+  OrderDetail,
+  OrderIntent,
+  OrderItem,
+} from "../../types";
+import type { OrderEvent, OrderStateSnapshot, Role } from "@laundry/contracts";
 import { HoldDialog } from "./HoldDialog";
 import { RescheduleDialog } from "./RescheduleDialog";
 import { describeSyncState } from "../shared/order-sync";
@@ -33,9 +36,9 @@ type LoadState =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
-  | { status: "success"; order: MockOrderDetail; role: Role };
+  | { status: "success"; order: OrderDetail; role: Role };
 
-const itemColumns: DataTableColumn<MockOrderItem>[] = [
+const itemColumns: DataTableColumn<OrderItem>[] = [
   {
     key: "description",
     header: "Item",
@@ -50,12 +53,12 @@ const itemColumns: DataTableColumn<MockOrderItem>[] = [
 ];
 
 interface StatusAction {
-  intent: MockOrderIntent;
+  intent: OrderIntent;
   label: string;
   success: string;
 }
 
-function statusAction(status: MockOrderDetail["status"]): StatusAction | null {
+function statusAction(status: OrderDetail["status"]): StatusAction | null {
   switch (status) {
     case "confirmed":
       return {
@@ -91,7 +94,7 @@ export interface OrderDetailPageProps {
 }
 
 function savedMessage(
-  syncState: MockOrderDetail["syncState"],
+  syncState: OrderDetail["syncState"],
   confirmed: string,
 ): string {
   return syncState === "pending"
@@ -100,7 +103,7 @@ function savedMessage(
 }
 
 export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
-  const api = useMockApi();
+  const api = useApi();
   const navigate = useNavigate();
   const location = useLocation();
   const { orderId = "" } = useParams();
@@ -120,10 +123,34 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
   const [reloadToken, setReloadToken] = useState(0);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busyIntent, setBusyIntent] = useState<MockOrderIntent | null>(null);
+  const [busyIntent, setBusyIntent] = useState<OrderIntent | null>(null);
   const [holdOpen, setHoldOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+
+  const [kvState, setKvState] = useState<OrderStateSnapshot | null>(null);
+  const [loadingKv, setLoadingKv] = useState(false);
+  const [events, setEvents] = useState<OrderEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [copiedCrn, setCopiedCrn] = useState(false);
+  const [editNotesOpen, setEditNotesOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+
+  const loadKvAndEvents = (id: string) => {
+    setLoadingKv(true);
+    api.getOrderState(id)
+      .then((res) => setKvState(res))
+      .catch(() => setKvState(null))
+      .finally(() => setLoadingKv(false));
+
+    setLoadingEvents(true);
+    api.getOrderEvents(id)
+      .then((res) => setEvents(res.items))
+      .catch(() => setEvents([]))
+      .finally(() => setLoadingEvents(false));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -134,11 +161,13 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
         if (cancelled) {
           return;
         }
-        setState(
-          order
-            ? { status: "success", order, role: session.user.role }
-            : { status: "not-found" },
-        );
+        if (order) {
+          setState({ status: "success", order, role: session.user.role });
+          setNotesDraft(order.customer.notes ?? "");
+          loadKvAndEvents(order.id);
+        } else {
+          setState({ status: "not-found" });
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -154,12 +183,14 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
   const order = state.status === "success" ? state.order : null;
   const role = state.status === "success" ? state.role : "front_desk";
 
-  const replaceOrder = (next: MockOrderDetail) => {
+  const replaceOrder = (next: OrderDetail) => {
     setState({ status: "success", order: next, role });
+    setNotesDraft(next.customer.notes ?? "");
+    loadKvAndEvents(next.id);
   };
 
   const applyIntent = async (
-    intent: MockOrderIntent,
+    intent: OrderIntent,
     payload: unknown,
     success: string,
   ) => {
@@ -180,7 +211,7 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
       replaceOrder(updated);
       setSuccessMessage(savedMessage(updated.syncState, success));
     } catch (caught) {
-      if (isMockApiError(caught)) {
+      if (isApiError(caught)) {
         if (caught.currentOrder) {
           replaceOrder(caught.currentOrder);
         }
@@ -295,7 +326,22 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
         <div className="flex min-w-0 flex-col gap-6">
-          <Card title="Customer" description="Contact details for this order.">
+          <Card
+            title="Customer"
+            description="Contact details for this order."
+            actions={
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setNotesDraft(order.customer.notes ?? "");
+                  setEditNotesOpen(true);
+                }}
+              >
+                Edit note
+              </Button>
+            }
+          >
             <p className="text-lg font-semibold text-text">
               {order.customer.name}
             </p>
@@ -334,6 +380,82 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
               </p>
             </Card>
           ) : null}
+
+          <Card
+            title="Audit & Mutation History"
+            description="Authoritative event stream and state transitions."
+            actions={
+              events.length > 0 ? (
+                <Badge tone="neutral">
+                  {events.length} event{events.length === 1 ? "" : "s"}
+                </Badge>
+              ) : null
+            }
+          >
+            {loadingEvents ? (
+              <LoadingState label="Loading audit history" variant="list" rows={2} />
+            ) : events.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                No audit events recorded for this order yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {events.map((evt) => (
+                  <div
+                    key={evt.id}
+                    className="py-3 first:pt-0 last:pb-0 flex flex-col gap-1.5 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge tone="neutral">
+                          {evt.eventType.replace(/_/g, " ")}
+                        </Badge>
+                        <span className="text-xs text-text-muted">
+                          v{evt.previousVersion} &rarr; v{evt.newVersion}
+                        </span>
+                      </div>
+                      <span className="text-xs text-text-muted">
+                        {formatDateTime(evt.at)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between text-xs text-text-muted">
+                      <span>
+                        Source: {evt.source} · Actor: {evt.actorType}
+                        {evt.actorId ? ` (${evt.actorId})` : ""}
+                      </span>
+                      <span className="font-mono text-[11px]" title={evt.mutationId}>
+                        {evt.mutationId}
+                      </span>
+                    </div>
+                    {evt.detail &&
+                    typeof evt.detail === "object" &&
+                    Object.keys(evt.detail).length > 0 ? (
+                      <div>
+                        <button
+                          type="button"
+                          className="mt-1 text-[11px] text-text-muted hover:text-primary transition-colors cursor-pointer"
+                          onClick={() =>
+                            setExpandedEventId(
+                              expandedEventId === evt.id ? null : evt.id,
+                            )
+                          }
+                        >
+                          {expandedEventId === evt.id
+                            ? "Hide details"
+                            : "Show details"}
+                        </button>
+                        {expandedEventId === evt.id && (
+                          <pre className="mt-1 rounded bg-canvas p-2 text-[11px] text-text-muted overflow-x-auto font-mono">
+                            {JSON.stringify(evt.detail, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
@@ -349,27 +471,134 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
             ) : null}
           </Card>
 
-          <Card title="Status & KV State Diagnostics">
-            <div className="flex flex-col gap-2">
+          <Card
+            title="Status & KV State Diagnostics"
+            description="Cloudflare KV state model & diagnostic health"
+            actions={
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={loadingKv}
+                onClick={() => loadKvAndEvents(order.id)}
+              >
+                Refresh
+              </Button>
+            }
+          >
+            <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <StatusBadge status={order.status} />
                 <span className="text-sm text-text-muted">
                   Version {order.version}
                 </span>
               </div>
-              {order.previousState ? (
-                <p className="text-xs text-text-muted">
-                  Previous State:{" "}
-                  <span className="font-semibold text-text">
-                    {order.previousState}
+
+              {/* Diagnostic Status Badge */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Flow Status
+                </span>
+                {kvState?.diagnostic?.status === "broken" ? (
+                  <Badge tone="danger" dot>Flow Broken</Badge>
+                ) : kvState?.diagnostic?.status === "held" || order.status === "hold" ? (
+                  <Badge tone="warning" dot>On Hold</Badge>
+                ) : kvState?.diagnostic?.status === "cancelled" || order.status === "cancelled" ? (
+                  <Badge tone="neutral" dot>Cancelled</Badge>
+                ) : (
+                  <Badge tone="success" dot>Healthy Flow</Badge>
+                )}
+              </div>
+
+              {/* CRN Identifier */}
+              <div className="rounded-md bg-canvas p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    CRN (9b:4b:19b)
                   </span>
+                  {(kvState?.crnId || order.crnId) && (
+                    <button
+                      type="button"
+                      className="text-xs text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      onClick={() => {
+                        const crn = kvState?.crnId ?? order.crnId ?? "";
+                        navigator.clipboard?.writeText(crn);
+                        setCopiedCrn(true);
+                        setTimeout(() => setCopiedCrn(false), 2000);
+                      }}
+                    >
+                      {copiedCrn ? "✓ Copied" : "Copy"}
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 font-mono text-xs font-semibold text-primary truncate">
+                  {kvState?.crnId ?? order.crnId ?? "Unallocated"}
                 </p>
-              ) : null}
-              {order.crnId ? (
-                <p className="font-mono text-xs text-primary">
-                  CRN: <span className="font-semibold">{order.crnId}</span>
-                </p>
-              ) : null}
+              </div>
+
+              {/* State Transition Flow */}
+              <div className="rounded-md bg-canvas p-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  State Transition Model
+                </span>
+                <div className="mt-1.5 flex items-center gap-2 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-text-muted uppercase">Previous</span>
+                    <span className="font-semibold text-text">
+                      {kvState?.previousState ?? order.previousState ?? "None"}
+                    </span>
+                  </div>
+                  <span className="text-text-muted text-sm">&rarr;</span>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-text-muted uppercase">Current</span>
+                    <span className="font-semibold text-primary">
+                      {kvState?.currentState ?? order.status}
+                    </span>
+                  </div>
+                  <div className="ml-auto text-right">
+                    <span className="text-[10px] text-text-muted uppercase">Intent</span>
+                    <p className="text-[11px] font-medium text-text truncate max-w-[90px]">
+                      {kvState?.intent ?? "createOrder"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Failure Diagnostic Panel when state flow is broken */}
+              {kvState?.diagnostic?.status === "broken" && (
+                <div className="rounded-md border border-danger/40 bg-danger/10 p-2.5 text-xs flex flex-col gap-1">
+                  <p className="font-semibold text-danger-strong">Flow Failure Diagnostic</p>
+                  {kvState.diagnostic.brokenStep && (
+                    <p className="text-text">
+                      <span className="font-medium">Broken Step:</span> {kvState.diagnostic.brokenStep}
+                    </p>
+                  )}
+                  {kvState.diagnostic.errorCode && (
+                    <p className="text-text font-mono">
+                      <span className="font-medium">Error Code:</span> {kvState.diagnostic.errorCode}
+                    </p>
+                  )}
+                  {kvState.diagnostic.errorMessage && (
+                    <p className="text-text">{kvState.diagnostic.errorMessage}</p>
+                  )}
+                  {kvState.diagnostic.reason && (
+                    <p className="text-text">
+                      <span className="font-medium">Failure Reason:</span> {kvState.diagnostic.reason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Diagnostic Metadata */}
+              <div className="text-[11px] text-text-muted flex flex-col gap-0.5 pt-1 border-t border-border">
+                {kvState?.changedAt ? (
+                  <p>State sync: {formatDateTime(kvState.changedAt)}</p>
+                ) : null}
+                {kvState?.diagnostic?.lastMutationId ? (
+                  <p className="truncate font-mono text-[10px]">
+                    Mutation: {kvState.diagnostic.lastMutationId}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </Card>
 
@@ -477,6 +706,55 @@ export function OrderDetailPage({ online }: OrderDetailPageProps = {}) {
           setCancelOpen(false);
         }}
       />
+
+      <Modal
+        open={editNotesOpen}
+        onClose={() => setEditNotesOpen(false)}
+        title="Edit customer notes"
+        description={`Update instructions or preferences for ${order.customer.name}`}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setEditNotesOpen(false)}
+              disabled={savingNotes}
+            >
+              Cancel
+            </Button>
+            <Button
+              loading={savingNotes}
+              onClick={async () => {
+                setSavingNotes(true);
+                setActionError(null);
+                try {
+                  const updated = await api.updateOrder(order.id, {
+                    customerNotes: notesDraft.trim(),
+                  });
+                  replaceOrder(updated);
+                  setSuccessMessage("Customer notes updated.");
+                  setEditNotesOpen(false);
+                } catch {
+                  setActionError(
+                    "Failed to update customer notes. Please try again.",
+                  );
+                } finally {
+                  setSavingNotes(false);
+                }
+              }}
+            >
+              Save notes
+            </Button>
+          </div>
+        }
+      >
+        <Textarea
+          label="Customer Notes"
+          value={notesDraft}
+          onChange={(e) => setNotesDraft(e.target.value)}
+          placeholder="Special care instructions, delivery preferences..."
+          rows={4}
+        />
+      </Modal>
     </PageContainer>
   );
 }

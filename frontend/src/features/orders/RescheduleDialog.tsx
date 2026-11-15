@@ -9,24 +9,24 @@ import {
 } from "@freshfold/ui";
 import { useEffect, useState } from "react";
 import { formatDateKey } from "../../lib/format";
-import { isMockApiError } from "../../mocks/errors";
+import { isApiError } from "../../api/errors";
 import type { AppApi } from "../../api/types";
 import type {
-  MockDeliverySlot,
-  MockOrderDetail,
-  MockOrderSummary,
-} from "../../mocks/types";
+  DeliverySlot,
+  OrderDetail,
+  OrderSummary,
+} from "../../types";
 
 export interface RescheduleDialogProps {
   open: boolean;
   api: AppApi;
-  order: Pick<MockOrderSummary, "id" | "customerName" | "version"> | null;
+  order: Pick<OrderSummary, "id" | "customerName" | "version"> | null;
   online?: boolean;
   onClose: () => void;
-  onMoved: (order: MockOrderDetail) => void;
+  onMoved: (order: OrderDetail) => void;
 }
 
-function slotLabel(slot: MockDeliverySlot): string {
+function slotLabel(slot: DeliverySlot): string {
   const date = formatDateKey(slot.localDate);
   if (slot.status === "full") {
     return `${date} · ${slot.label} (Full)`;
@@ -48,7 +48,7 @@ export function RescheduleDialog({
   onClose,
   onMoved,
 }: RescheduleDialogProps) {
-  const [slots, setSlots] = useState<MockDeliverySlot[]>([]);
+  const [slots, setSlots] = useState<DeliverySlot[]>([]);
   const [slotId, setSlotId] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -113,7 +113,7 @@ export function RescheduleDialog({
       onMoved(updated);
       onClose();
     } catch (caught) {
-      if (isMockApiError(caught)) {
+      if (isApiError(caught)) {
         setError(caught.message);
       } else {
         setError("We could not move this delivery. Please try again.");

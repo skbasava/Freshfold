@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { UNAUTHORIZED_EVENT } from "../api/client";
 import { ApiProvider } from "../api/context";
-import { createMockApi } from "../mocks/api";
+import { createMockApi } from "../test/mocks/api";
 import { AuthProvider, useAuth } from "./AuthContext";
 
 function Probe() {

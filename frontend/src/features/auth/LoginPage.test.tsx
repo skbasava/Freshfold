@@ -7,8 +7,8 @@ import type { AppApi } from "../../api/types";
 import { AuthProvider, useAuth } from "../../auth/AuthContext";
 import { AuthClientError } from "../../auth/supabase-auth-client";
 import type { AuthClient } from "../../auth/types";
-import { createMockApi } from "../../mocks/api";
-import { MockApiError } from "../../mocks/errors";
+import { createMockApi } from "../../test/mocks/api";
+import { ApiError as MockApiError } from "../../api/errors";
 import { LoginPage } from "./LoginPage";
 
 function SessionProbe() {

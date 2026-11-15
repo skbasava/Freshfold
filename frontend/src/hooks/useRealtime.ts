@@ -11,6 +11,7 @@ export interface UseRealtimeOptions {
   syncEngine?: SyncEngine;
   url?: string;
   enabled?: boolean;
+  onChangesAvailable?: (notification: RealtimeNotification) => void;
 }
 
 export interface UseRealtimeReturn {
@@ -26,6 +27,7 @@ export function useRealtime({
   syncEngine,
   url,
   enabled = true,
+  onChangesAvailable,
 }: UseRealtimeOptions): UseRealtimeReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
@@ -83,6 +85,7 @@ export function useRealtime({
             const data = JSON.parse(event.data) as RealtimeNotification;
 
             if (data.type === 'CHANGES_AVAILABLE') {
+              onChangesAvailable?.(data);
               // Notification delivers metadata only! Trigger authoritative pull from D1:
               if (syncEngine) {
                 syncEngine.sync().catch((err) =>

@@ -16,12 +16,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { formatDateKey } from "../../lib/format";
-import { isMockApiError } from "../../mocks/errors";
-import { useMockApi } from "../../mocks/context";
+import { isApiError } from "../../api/errors";
+import { useApi } from "../../api/context";
 import type {
   CreateOrderOptions,
-  MockDeliverySlot,
-} from "../../mocks/types";
+  DeliverySlot,
+} from "../../types";
 
 interface DraftItem {
   description: string;
@@ -33,7 +33,7 @@ type OptionsState =
   | { status: "success"; options: CreateOrderOptions }
   | { status: "error" };
 
-function slotOptionLabel(slot: MockDeliverySlot): string {
+function slotOptionLabel(slot: DeliverySlot): string {
   const date = formatDateKey(slot.localDate);
   if (slot.status === "full") {
     return `${date} · ${slot.label} (Full)`;
@@ -52,7 +52,7 @@ export interface CreateOrderPageProps {
 }
 
 export function CreateOrderPage({ online }: CreateOrderPageProps) {
-  const api = useMockApi();
+  const api = useApi();
   const navigate = useNavigate();
   const detectedOnline = useOnlineStatus();
   const isOnline = online ?? detectedOnline;
@@ -149,7 +149,7 @@ export function CreateOrderPage({ online }: CreateOrderPageProps) {
         },
       });
     } catch (caught) {
-      if (isMockApiError(caught)) {
+      if (isApiError(caught)) {
         if (caught.fieldErrors) {
           setFieldErrors(caught.fieldErrors);
         } else if (caught.code === "SLOT_FULL") {

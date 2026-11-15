@@ -13,12 +13,12 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { localDateKey, shiftDateKey } from "../../lib/format";
-import { useMockApi } from "../../mocks/context";
+import { useApi } from "../../api/context";
 import type {
   DeliverySchedule,
-  MockDeliverySlot,
-  MockOrderSummary,
-} from "../../mocks/types";
+  DeliverySlot,
+  OrderSummary,
+} from "../../types";
 import type { Role } from "@laundry/contracts";
 import { RescheduleDialog } from "../orders/RescheduleDialog";
 
@@ -28,7 +28,7 @@ type ScheduleState =
   | { status: "success"; schedule: DeliverySchedule }
   | { status: "error" };
 
-function slotStatusLabel(slot: MockDeliverySlot): string {
+function slotStatusLabel(slot: DeliverySlot): string {
   switch (slot.status) {
     case "open":
       return "Open";
@@ -41,7 +41,7 @@ function slotStatusLabel(slot: MockDeliverySlot): string {
   }
 }
 
-function slotDescription(slot: MockDeliverySlot): string {
+function slotDescription(slot: DeliverySlot): string {
   switch (slot.status) {
     case "open":
       return `${slot.available} of ${slot.capacity} places free`;
@@ -54,7 +54,7 @@ function slotDescription(slot: MockDeliverySlot): string {
   }
 }
 
-function slotTone(slot: MockDeliverySlot) {
+function slotTone(slot: DeliverySlot) {
   if (slot.status === "open") {
     return "success" as const;
   }
@@ -65,14 +65,14 @@ function slotTone(slot: MockDeliverySlot) {
 }
 
 export function DeliveriesPage() {
-  const api = useMockApi();
+  const api = useApi();
   const [date, setDate] = useState("");
   const [role, setRole] = useState<Role>("front_desk");
   const [reloadToken, setReloadToken] = useState(0);
   const [state, setState] = useState<ScheduleState>({ status: "idle" });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<
-    Pick<MockOrderSummary, "id" | "customerName" | "version"> | null
+    Pick<OrderSummary, "id" | "customerName" | "version"> | null
   >(null);
 
   useEffect(() => {

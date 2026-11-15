@@ -1,8 +1,8 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { createMockApi } from "../../mocks/api";
+import { createMockApi } from "../../test/mocks/api";
 import type { Role } from "@laundry/contracts";
 import type { AppApi } from "../../api/types";
 import { renderWithApi } from "../../test/render-with-api";
@@ -222,6 +222,49 @@ describe("OrderDetailPage", () => {
 
     expect(
       await screen.findByText(/changed on another device/i),
+    ).toBeInTheDocument();
+  });
+
+  it("displays KV state machine diagnostics with CRN and audit history", async () => {
+    renderOrder("ORD-1043");
+
+    expect(
+      await screen.findByRole("heading", { name: "ORD-1043" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Status & KV State Diagnostics"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Healthy Flow/i)).toBeInTheDocument();
+    expect(screen.getByText("State Transition Model")).toBeInTheDocument();
+    expect(
+      screen.getByText("Audit & Mutation History"),
+    ).toBeInTheDocument();
+  });
+
+  it("allows staff to edit customer notes through modal", async () => {
+    const user = userEvent.setup();
+    renderOrder("ORD-1043");
+
+    await screen.findByRole("heading", { name: "ORD-1043" });
+
+    await user.click(screen.getByRole("button", { name: "Edit note" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Edit customer notes" }),
+    ).toBeInTheDocument();
+
+    const textarea = screen.getByLabelText("Customer Notes");
+    fireEvent.change(textarea, {
+      target: { value: "Customer prefers contactless delivery at front gate." },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save notes" }));
+
+    expect(
+      await screen.findByText("Customer notes updated."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Customer prefers contactless delivery at front gate."),
     ).toBeInTheDocument();
   });
 });

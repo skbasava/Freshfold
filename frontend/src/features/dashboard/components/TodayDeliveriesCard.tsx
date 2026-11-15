@@ -11,14 +11,14 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatDeliveryTime } from "../../../lib/format";
-import type { MockOrderIntent, MockOrderSummary } from "../../../mocks/types";
+import type { OrderIntent, OrderSummary } from "../../../types";
 
 export interface TodayDeliveriesCardProps {
-  orders: MockOrderSummary[];
+  orders: OrderSummary[];
   todayLabel: string;
   error?: boolean;
   busyOrderId?: string | null;
-  onAdvanceStatus?: (order: MockOrderSummary, intent: MockOrderIntent) => void;
+  onAdvanceStatus?: (order: OrderSummary, intent: OrderIntent) => void;
   onRetry: () => void;
   onOpenCalendar: () => void;
 }
@@ -26,8 +26,8 @@ export interface TodayDeliveriesCardProps {
 type DeliveryFilter = "all" | "active" | "done";
 
 function nextStageAction(
-  status: MockOrderSummary["status"],
-): { intent: MockOrderIntent; label: string } | null {
+  status: OrderSummary["status"],
+): { intent: OrderIntent; label: string } | null {
   switch (status) {
     case "confirmed":
       return { intent: "markProcessing", label: "Start washing" };

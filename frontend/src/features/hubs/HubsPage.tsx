@@ -11,9 +11,12 @@ import {
   HubIcon,
   Input,
   LoadingState,
+  MetricCard,
   PageContainer,
   PageHeader,
+  RefreshIcon,
   Select,
+  StatusPills,
   type DataTableColumn,
 } from "@freshfold/ui";
 import { useApi } from "../../api/context";
@@ -168,42 +171,101 @@ export function HubsPage() {
   ];
 
   return (
-    <PageContainer>
+    <PageContainer className="flex flex-col gap-6">
       <PageHeader
         title="Processing Hubs"
         description="Manage laundry processing facilities, intake centers, and drop hubs across organizations."
         actions={
-          <Button
-            variant="primary"
-            onClick={() => navigate("/hubs/new")}
-          >
-            New Hub
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              leadingIcon={<RefreshIcon className="h-4 w-4" />}
+              onClick={() => setReloadToken((t) => t + 1)}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => navigate("/hubs/new")}
+            >
+              New Hub
+            </Button>
+          </div>
         }
       />
 
+      {/* KPI Metric Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="Total Hubs"
+          value={state.status === "success" ? state.hubs.length : 0}
+          subtext="Facilities registered"
+          icon={<HubIcon className="h-5 w-5" />}
+          tone="primary"
+          active={statusFilter === "all"}
+          onClick={() => setStatusFilter("all")}
+        />
+        <MetricCard
+          label="Active Facilities"
+          value={state.status === "success" ? state.hubs.filter((h) => h.isActive).length : 0}
+          subtext="Operational and taking orders"
+          icon={<HubIcon className="h-5 w-5" />}
+          tone="success"
+          active={statusFilter === "active"}
+          onClick={() => setStatusFilter("active")}
+        />
+        <MetricCard
+          label="Inactive Facilities"
+          value={state.status === "success" ? state.hubs.filter((h) => !h.isActive).length : 0}
+          subtext="Decommissioned or paused"
+          icon={<HubIcon className="h-5 w-5" />}
+          tone="neutral"
+          active={statusFilter === "inactive"}
+          onClick={() => setStatusFilter("inactive")}
+        />
+      </div>
+
       <div className="space-y-6">
         <Card padding="md">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="w-full sm:max-w-xs">
-              <Input
-                label="Search hubs"
-                placeholder="Search by name, code, tenant..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="w-full sm:max-w-xs">
+                <Input
+                  label="Search hubs"
+                  placeholder="Search by name, code, tenant..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="w-full sm:w-48">
+                <Select
+                  label="Operating status"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
+                  options={[
+                    { value: "all", label: "All Statuses" },
+                    { value: "active", label: "Active Hubs" },
+                    { value: "inactive", label: "Inactive Hubs" },
+                  ]}
+                />
+              </div>
             </div>
 
-            <div className="w-full sm:w-48">
-              <Select
-                label="Operating status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
-                options={[
-                  { value: "all", label: "All Statuses" },
-                  { value: "active", label: "Active Hubs" },
-                  { value: "inactive", label: "Inactive Hubs" },
+            <div className="pt-2 border-t border-border">
+              <StatusPills
+                items={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
                 ]}
+                activeValue={statusFilter}
+                onChange={(val) => setStatusFilter(val as FilterStatus)}
+                showClear={searchQuery.trim() !== "" || statusFilter !== "all"}
+                onClear={() => {
+                  setSearchQuery("");
+                  setStatusFilter("all");
+                }}
               />
             </div>
           </div>

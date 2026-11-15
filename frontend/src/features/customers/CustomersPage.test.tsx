@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { createMockApi } from "../../mocks/api";
+import { createMockApi } from "../../test/mocks/api";
 import { renderWithApi } from "../../test/render-with-api";
 import { CustomerDetailPage } from "./CustomerDetailPage";
 import { CustomersPage } from "./CustomersPage";

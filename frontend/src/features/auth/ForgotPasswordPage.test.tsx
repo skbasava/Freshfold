@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiProvider } from "../../api/context";
 import { AuthProvider } from "../../auth/AuthContext";
 import type { AuthClient } from "../../auth/types";
-import { createMockApi } from "../../mocks/api";
+import { createMockApi } from "../../test/mocks/api";
 import { ForgotPasswordPage } from "./ForgotPasswordPage";
 
 function authClient(): AuthClient {

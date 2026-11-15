@@ -8,11 +8,14 @@ import {
   EmptyState,
   Input,
   LoadingState,
+  MetricCard,
   PageContainer,
   PageHeader,
   PlusIcon,
+  RefreshIcon,
   SearchIcon,
   Select,
+  StatusPills,
   type DataTableColumn,
 } from "@freshfold/ui";
 import type { TenantSummary } from "@laundry/contracts";
@@ -178,33 +181,107 @@ export function TenantsPage() {
         title="Tenants"
         description="Manage multi-tenant organizations, service branches, and platform plans."
         actions={
-          <Button
-            variant="primary"
-            onClick={() => navigate("/tenants/new")}
-            leadingIcon={<PlusIcon className="h-4 w-4" />}
-          >
-            New tenant
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              leadingIcon={<RefreshIcon className="h-4 w-4" />}
+              onClick={() => setReloadToken((t) => t + 1)}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => navigate("/tenants/new")}
+              leadingIcon={<PlusIcon className="h-4 w-4" />}
+            >
+              New tenant
+            </Button>
+          </div>
         }
       />
+
+      {/* KPI Metric Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          label="Total Tenants"
+          value={state.status === "success" ? state.items.length : 0}
+          subtext="Organizations registered"
+          icon={<BuildingIcon className="h-5 w-5" />}
+          tone="primary"
+          active={selectedStatus === "all"}
+          onClick={() => setSelectedStatus("all")}
+        />
+        <MetricCard
+          label="Active"
+          value={state.status === "success" ? state.items.filter((t) => t.status === "active").length : 0}
+          subtext="In good standing"
+          icon={<BuildingIcon className="h-5 w-5" />}
+          tone="success"
+          active={selectedStatus === "active"}
+          onClick={() => setSelectedStatus("active")}
+        />
+        <MetricCard
+          label="Trial"
+          value={state.status === "success" ? state.items.filter((t) => t.status === "trial").length : 0}
+          subtext="Evaluation period"
+          icon={<BuildingIcon className="h-5 w-5" />}
+          tone="primary"
+          active={selectedStatus === "trial"}
+          onClick={() => setSelectedStatus("trial")}
+        />
+        <MetricCard
+          label="Suspended / Deleted"
+          value={
+            state.status === "success"
+              ? state.items.filter((t) => t.status === "suspended" || t.status === "deleted").length
+              : 0
+          }
+          subtext="Inactive accounts"
+          icon={<BuildingIcon className="h-5 w-5" />}
+          tone="warning"
+          active={selectedStatus === "suspended" || selectedStatus === "deleted"}
+          onClick={() => setSelectedStatus("suspended")}
+        />
+      </div>
 
       <Card
         title="Find a tenant"
         description="Filter by organization name, slug, or status."
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Search tenants"
-            placeholder="Name or slug"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Select
-            label="Status"
-            value={selectedStatus}
-            options={statusOptions}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-          />
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Search tenants"
+              placeholder="Name or slug"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select
+              label="Status"
+              value={selectedStatus}
+              options={statusOptions}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+            />
+          </div>
+
+          <div className="pt-2 border-t border-border">
+            <StatusPills
+              items={[
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "trial", label: "Trial" },
+                { value: "suspended", label: "Suspended" },
+                { value: "deleted", label: "Deleted" },
+              ]}
+              activeValue={selectedStatus}
+              onChange={(val) => setSelectedStatus(val)}
+              showClear={search.trim() !== "" || selectedStatus !== "all"}
+              onClear={() => {
+                setSearch("");
+                setSelectedStatus("all");
+              }}
+            />
+          </div>
         </div>
       </Card>
 

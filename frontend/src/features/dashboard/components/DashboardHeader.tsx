@@ -5,7 +5,7 @@ import {
   PlusIcon,
   SearchIcon,
 } from "@freshfold/ui";
-import type { DashboardSummary } from "../../../mocks/types";
+import type { DashboardSummary } from "../../../types";
 
 export interface DashboardHeaderProps {
   dateLabel: string;

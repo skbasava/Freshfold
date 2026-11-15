@@ -1,18 +1,31 @@
-import type { Customer, Hub, Tenant } from "@laundry/contracts";
-import { formatDateKey, localDateKey } from "../lib/format";
-import type { LocalOrderSyncState } from "../sync/types";
+import type { Customer, Hub, Role, Tenant } from "@laundry/contracts";
+import { formatDateKey, localDateKey } from "../../lib/format";
+import type { LocalOrderSyncState } from "../../sync/types";
 import type {
   AttentionItem,
   CustomerSummary,
   DashboardData,
   DashboardOrder,
-  DeliverySlotStatus,
+  DeliverySlot,
   DeliverySlotSummary,
-  MockApiOptions,
-  MockDeliverySlot,
-  MockOrderItem,
-  MockOrderSummary,
-} from "./types";
+  OrderItem,
+  OrderSummary,
+} from "../../types";
+
+export type DeliverySlotStatus = DeliverySlot["status"];
+export type MockDeliverySlot = DeliverySlot;
+export type MockOrderItem = OrderItem;
+export type MockOrderSummary = OrderSummary;
+
+export interface MockApiOptions {
+  latencyMs?: number;
+  fail?: boolean;
+  empty?: boolean;
+  syncIssues?: boolean;
+  role?: Role;
+  today?: number;
+  authRequired?: boolean;
+}
 
 export const MOCK_HUB_ID = "hub-mumbai";
 export const MOCK_HUB_NAME = "Mumbai hub";

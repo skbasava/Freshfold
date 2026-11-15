@@ -13,7 +13,7 @@ import type { AuthFailureDetail } from "../api/client";
 import { authLogger } from "../lib/logger";
 import { useApi } from "../api/context";
 import type { AppApi } from "../api/types";
-import { isMockApiError } from "../mocks/errors";
+import { isApiError } from "../api/errors";
 import { AuthClientError, createSupabaseAuthClient } from "./supabase-auth-client";
 import { readSupabaseAuthConfig } from "./supabase-config";
 import {
@@ -65,7 +65,7 @@ class HandledAuthError extends Error {
 }
 
 function errorStatus(error: unknown): number | null {
-  if (isMockApiError(error)) {
+  if (isApiError(error)) {
     return error.status;
   }
   if (
@@ -365,7 +365,7 @@ export function AuthProvider({
           return;
         }
       }
-      if (isMockApiError(error) && error.status === 401) {
+      if (isApiError(error) && error.status === 401) {
         await clearLocalSession();
         return;
       }

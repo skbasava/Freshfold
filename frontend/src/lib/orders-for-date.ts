@@ -1,6 +1,6 @@
 import type { AppApi } from "../api/types";
 import { localDateKey } from "./format";
-import type { MockOrderSummary } from "../mocks/types";
+import type { OrderSummary } from "../types";
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 20;
@@ -8,8 +8,8 @@ const MAX_PAGES = 20;
 export async function listOrdersForDate(
   api: Pick<AppApi, "listOrders">,
   dateKey: string,
-): Promise<MockOrderSummary[]> {
-  const orders = new Map<string, MockOrderSummary>();
+): Promise<OrderSummary[]> {
+  const orders = new Map<string, OrderSummary>();
   let page = 1;
   let pageCount = 1;
 

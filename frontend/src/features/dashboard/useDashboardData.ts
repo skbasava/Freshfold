@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AppApi } from "../../api/types";
 import { formatToday, localDateKey } from "../../lib/format";
 import { listOrdersForDate } from "../../lib/orders-for-date";
-import type { DashboardData, MockOrderSummary } from "../../mocks/types";
+import type { DashboardData, OrderSummary } from "../../types";
 
 export type DashboardLoadState =
   | { status: "loading" }
@@ -10,7 +10,7 @@ export type DashboardLoadState =
       status: "success";
       data: DashboardData;
       today: number;
-      todayOrders: MockOrderSummary[];
+      todayOrders: OrderSummary[];
       deliveriesError: boolean;
     }
   | { status: "error" };
@@ -33,7 +33,7 @@ export function useDashboardData(client: AppApi): UseDashboardDataResult {
 
     Promise.all([client.getDashboardData(), client.getSession()])
       .then(async ([data, session]) => {
-        let todayOrders: MockOrderSummary[] = [];
+        let todayOrders: OrderSummary[] = [];
         let deliveriesError = false;
 
         try {

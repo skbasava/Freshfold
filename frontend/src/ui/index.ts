@@ -7,20 +7,27 @@ export {
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClockIcon,
   CloseIcon,
+  EditIcon,
+  EyeIcon,
+  FilterIcon,
   GoogleIcon,
   HelpCircleIcon,
   HomeIcon,
   HubIcon,
   InfoCircleIcon,
+  LockIcon,
   LogOutIcon,
   MenuIcon,
   OrdersIcon,
   PanelLeftIcon,
   PlusIcon,
+  RefreshIcon,
   SearchIcon,
   ShieldCheckIcon,
   SparkleIcon,
+  TrashIcon,
   TruckIcon,
   UsersIcon,
   XCircleIcon,
@@ -106,4 +113,16 @@ export { SyncStatusBadge } from "./components/sync/SyncStatusBadge";
 export type { SyncStatusBadgeProps } from "./components/sync/SyncStatusBadge";
 export { OperatorOrderQueue } from "./components/sync/OperatorOrderQueue";
 export type { OperatorOrderQueueProps } from "./components/sync/OperatorOrderQueue";
+
+export { MetricCard } from "./components/patterns/MetricCard";
+export type { MetricCardProps, MetricTone } from "./components/patterns/MetricCard";
+export { SearchFilterBar } from "./components/patterns/SearchFilterBar";
+export type { SearchFilterBarProps } from "./components/patterns/SearchFilterBar";
+export { StatusPills } from "./components/patterns/StatusPills";
+export type { StatusPillItem, StatusPillsProps } from "./components/patterns/StatusPills";
+export { CrnBadge } from "./components/patterns/CrnBadge";
+export type { CrnBadgeProps } from "./components/patterns/CrnBadge";
+export { PaginationBar } from "./components/patterns/PaginationBar";
+export type { PaginationBarProps } from "./components/patterns/PaginationBar";
+
 

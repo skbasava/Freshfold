@@ -6,7 +6,7 @@ import {
   StatusBadge,
   XCircleIcon,
 } from "@freshfold/ui";
-import type { AttentionItem } from "../../../mocks/types";
+import type { AttentionItem } from "../../../types";
 
 export interface AttentionQueueCardProps {
   items: AttentionItem[];

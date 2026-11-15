@@ -22,18 +22,18 @@ import {
   shiftDateKey,
 } from "../../lib/format";
 import { listOrdersForDate } from "../../lib/orders-for-date";
-import { useMockApi } from "../../mocks/context";
-import type { MockOrderSummary } from "../../mocks/types";
+import { useApi } from "../../api/context";
+import type { OrderSummary } from "../../types";
 import { GoogleCalendarWidget } from "./GoogleCalendarWidget";
 
 type CalendarState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; dateKey: string; orders: MockOrderSummary[] }
+  | { status: "success"; dateKey: string; orders: OrderSummary[] }
   | { status: "error" };
 
 export function CalendarPage() {
-  const api = useMockApi();
+  const api = useApi();
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const [date, setDate] = useState("");

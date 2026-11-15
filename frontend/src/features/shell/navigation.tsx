@@ -11,73 +11,84 @@ import {
 } from "@freshfold/ui";
 import type { Role } from "@laundry/contracts";
 
-export const navigationSections: SidebarSection[] = [
-  {
-    id: "workspace",
-    label: "Workspace",
-    items: [
-      {
-        label: "Dashboard",
-        href: "/",
-        icon: <HomeIcon className="h-5 w-5" />,
-      },
-      {
-        label: "Orders",
-        href: "/orders",
-        icon: <OrdersIcon className="h-5 w-5" />,
-        children: [
-          { label: "All orders", href: "/orders" },
-          { label: "New order", href: "/orders/new" },
-        ],
-      },
-      {
-        label: "Deliveries",
-        href: "/deliveries",
-        icon: <TruckIcon className="h-5 w-5" />,
-      },
-      {
-        label: "Calendar",
-        href: "/calendar",
-        icon: <CalendarIcon className="h-5 w-5" />,
-      },
-    ],
-  },
-  {
-    id: "directory",
-    label: "Directory",
-    items: [
-      {
-        label: "Customers",
-        href: "/customers",
-        icon: <UsersIcon className="h-5 w-5" />,
-      },
-    ],
-  },
-  {
-    id: "admin",
-    label: "Administration",
-    items: [
-      {
-        label: "Tenants",
-        href: "/tenants",
-        icon: <BuildingIcon className="h-5 w-5" />,
-        children: [
-          { label: "All tenants", href: "/tenants" },
-          { label: "New tenant", href: "/tenants/new" },
-        ],
-      },
-      {
-        label: "Hubs",
-        href: "/hubs",
-        icon: <HubIcon className="h-5 w-5" />,
-        children: [
-          { label: "All hubs", href: "/hubs" },
-          { label: "New hub", href: "/hubs/new" },
-        ],
-      },
-    ],
-  },
-];
+export function getNavigationSections(role?: Role): SidebarSection[] {
+  const isSuperAdmin = role === "super_admin";
+
+  const sections: SidebarSection[] = [
+    {
+      id: "workspace",
+      label: "Workspace",
+      items: [
+        {
+          label: "Dashboard",
+          href: "/",
+          icon: <HomeIcon className="h-5 w-5" />,
+        },
+        {
+          label: "Orders",
+          href: "/orders",
+          icon: <OrdersIcon className="h-5 w-5" />,
+          children: [
+            { label: "All orders", href: "/orders" },
+            { label: "New order", href: "/orders/new" },
+          ],
+        },
+        {
+          label: "Deliveries",
+          href: "/deliveries",
+          icon: <TruckIcon className="h-5 w-5" />,
+        },
+        {
+          label: "Calendar",
+          href: "/calendar",
+          icon: <CalendarIcon className="h-5 w-5" />,
+        },
+      ],
+    },
+    {
+      id: "directory",
+      label: "Directory",
+      items: [
+        {
+          label: "Customers",
+          href: "/customers",
+          icon: <UsersIcon className="h-5 w-5" />,
+        },
+      ],
+    },
+  ];
+
+  if (isSuperAdmin) {
+    sections.push({
+      id: "admin",
+      label: "Administration",
+      items: [
+        {
+          label: "Tenants",
+          href: "/tenants",
+          icon: <BuildingIcon className="h-5 w-5" />,
+          children: [
+            { label: "All tenants", href: "/tenants" },
+            { label: "New tenant", href: "/tenants/new" },
+          ],
+        },
+        {
+          label: "Hubs",
+          href: "/hubs",
+          icon: <HubIcon className="h-5 w-5" />,
+          children: [
+            { label: "All hubs", href: "/hubs" },
+            { label: "New hub", href: "/hubs/new" },
+          ],
+        },
+      ],
+    });
+  }
+
+  return sections;
+}
+
+export const navigationSections: SidebarSection[] = getNavigationSections();
 
 export interface PageMeta {
   title: string;

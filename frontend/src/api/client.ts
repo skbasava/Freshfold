@@ -15,6 +15,7 @@ import {
   orderDetailSchema,
   orderEventsResponseSchema,
   orderListResponseSchema,
+  orderStateSnapshotSchema,
   REQUEST_ID_HEADER,
   sessionResponseSchema,
   tenantListResponseSchema,
@@ -36,6 +37,7 @@ import {
   type OrderDetail,
   type OrderEventsResponse,
   type OrderListResponse,
+  type OrderStateSnapshot,
   type SessionResponse,
   type Tenant,
   type TenantListResponse,
@@ -152,6 +154,20 @@ export interface GatewayClient {
     options?: ListDeliverySlotsOptions,
   ): Promise<DeliverySlotListResponse>;
   getOrder(id: string, options?: RequestOptions): Promise<OrderDetail>;
+  getOrderState(
+    orderId: string,
+    options?: RequestOptions,
+  ): Promise<OrderStateSnapshot>;
+  updateOrder(
+    id: string,
+    input: unknown,
+    options?: RequestOptions,
+  ): Promise<OrderDetail>;
+  cancelOrder(
+    id: string,
+    reason?: string,
+    options?: RequestOptions,
+  ): Promise<OrderDetail>;
   getChanges(options: GetChangesOptions): Promise<ChangeFeedResponse>;
   getOrderEvents(
     orderId: string,
@@ -475,6 +491,36 @@ export function createGatewayClient(
         "GET",
         orderDetailSchema,
         undefined,
+        requestOptions,
+      );
+    },
+
+    getOrderState(orderId, requestOptions) {
+      return request(
+        `/api/orders/${encodeURIComponent(orderId)}/state`,
+        "GET",
+        orderStateSnapshotSchema,
+        undefined,
+        requestOptions,
+      );
+    },
+
+    updateOrder(id, input, requestOptions) {
+      return request(
+        `/api/orders/${encodeURIComponent(id)}`,
+        "PATCH",
+        orderDetailSchema,
+        input,
+        requestOptions,
+      );
+    },
+
+    cancelOrder(id, reason, requestOptions) {
+      return request(
+        `/api/orders/${encodeURIComponent(id)}/cancel`,
+        "POST",
+        orderDetailSchema,
+        { reason: reason ?? "Cancelled by user" },
         requestOptions,
       );
     },

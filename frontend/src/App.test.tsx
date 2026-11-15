@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { createMockApi } from "./mocks/api";
+import { createMockApi } from "./test/mocks/api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -174,5 +174,72 @@ describe("Workspace navigation shell", () => {
       await screen.findByRole("heading", { name: "Orders" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Search orders")).toHaveValue("Meera");
+  });
+
+  it("hides tenants and hubs from the sidebar and shows unauthorized page for non-super_admin staff", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === "(min-width: 64rem)",
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/tenants"]}>
+        <App api={createMockApi({ latencyMs: 0, syncIssues: false, role: "front_desk" })} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Access Denied" })).toBeInTheDocument();
+    expect(screen.queryByText("Administration")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tenants" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hubs" })).not.toBeInTheDocument();
+
+    expect(screen.getByText("Super Admin access required")).toBeInTheDocument();
+    expect(screen.getByText(/Only Super Administrators can access and manage tenants\./)).toBeInTheDocument();
+    expect(screen.getAllByText("Front desk").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows unauthorized page when a manager navigates to hubs", async () => {
+    render(
+      <MemoryRouter initialEntries={["/hubs"]}>
+        <App api={createMockApi({ latencyMs: 0, syncIssues: false, role: "manager" })} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Access Denied" })).toBeInTheDocument();
+    expect(screen.getByText("Super Admin access required")).toBeInTheDocument();
+    expect(screen.getByText(/Only Super Administrators can access and manage hubs\./)).toBeInTheDocument();
+    expect(screen.getAllByText("Manager").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("allows super_admin to access tenants and hubs in sidebar and routes", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === "(min-width: 64rem)",
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/tenants"]}>
+        <App api={createMockApi({ latencyMs: 0, syncIssues: false, role: "super_admin" })} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Tenants" })).toBeInTheDocument();
+    expect((await screen.findAllByText("Administration")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "Tenants" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hubs" })).toBeInTheDocument();
   });
 });

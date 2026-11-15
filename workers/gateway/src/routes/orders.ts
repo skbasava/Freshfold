@@ -9,6 +9,8 @@ const reads = new Hono<GatewayEnv>();
 
 for (const path of [
   "/orders",
+  "/orders/:id/state",
+  "/orders/:id/events",
   "/orders/:id",
   "/customers",
   "/customers/:id",

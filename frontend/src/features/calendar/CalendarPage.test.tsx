@@ -1,8 +1,8 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import type { MockOrderSummary } from "../../mocks/types";
-import { createMockApi } from "../../mocks/api";
+import type { OrderSummary } from "../../types";
+import { createMockApi } from "../../test/mocks/api";
 import { renderWithApi } from "../../test/render-with-api";
 import { CalendarPage } from "./CalendarPage";
 
@@ -14,15 +14,15 @@ function at(dayKey: string, hour: number): number {
 
 function order(
   input: Pick<
-    MockOrderSummary,
+    OrderSummary,
     | "id"
     | "customerName"
     | "serviceType"
     | "status"
     | "deliveryAt"
   > &
-    Partial<MockOrderSummary>,
-): MockOrderSummary {
+    Partial<OrderSummary>,
+): OrderSummary {
   return {
     customerId: `C-${input.id}`,
     customerPhone: "",
@@ -39,7 +39,7 @@ function order(
   };
 }
 
-function mixedOrders(): MockOrderSummary[] {
+function mixedOrders(): OrderSummary[] {
   return [
     order({
       id: "ORD-B",

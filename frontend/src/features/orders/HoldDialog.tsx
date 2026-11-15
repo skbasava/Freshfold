@@ -1,15 +1,16 @@
 import { Alert, Button, Modal, Textarea } from "@freshfold/ui";
 import { useEffect, useState } from "react";
-import { isMockApiError } from "../../mocks/errors";
-import type { MockApi, MockOrderDetail, MockOrderSummary } from "../../mocks/types";
+import { isApiError } from "../../api/errors";
+import type { AppApi } from "../../api/types";
+import type { OrderDetail, OrderSummary } from "../../types";
 
 export interface HoldDialogProps {
   open: boolean;
-  api: MockApi;
-  order: Pick<MockOrderSummary, "id" | "version" | "customerName"> | null;
+  api: AppApi;
+  order: Pick<OrderSummary, "id" | "version" | "customerName"> | null;
   online?: boolean;
   onClose: () => void;
-  onHeld: (order: MockOrderDetail) => void;
+  onHeld: (order: OrderDetail) => void;
 }
 
 export function HoldDialog({
@@ -58,7 +59,7 @@ export function HoldDialog({
       onHeld(updated);
       onClose();
     } catch (caught) {
-      if (isMockApiError(caught)) {
+      if (isApiError(caught)) {
         if (caught.code === "HOLD_COMMENT_REQUIRED") {
           setError(caught.message);
         } else {

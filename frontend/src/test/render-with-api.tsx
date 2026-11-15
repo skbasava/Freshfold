@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { MockApiProvider } from "../mocks/context";
+import { ApiProvider } from "../api/context";
 import type { AppApi } from "../api/types";
 
 export interface RenderWithApiOptions {
@@ -14,10 +14,10 @@ export function renderWithApi(
   options: RenderWithApiOptions = {},
 ) {
   return render(
-    <MockApiProvider api={api}>
+    <ApiProvider api={api}>
       <MemoryRouter initialEntries={[options.route ?? "/"]}>
         {ui}
       </MemoryRouter>
-    </MockApiProvider>,
+    </ApiProvider>,
   );
 }

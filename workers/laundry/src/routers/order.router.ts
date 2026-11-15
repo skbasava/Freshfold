@@ -8,6 +8,7 @@ import {
   getOrderStateHandler,
   listOrderEventsHandler,
   listOrdersHandler,
+  updateOrderCrudHandler,
 } from "../handlers/order.handler";
 
 export const orderRouter = new Hono<LaundryEnv>();
@@ -45,6 +46,18 @@ orderRouter.get(
   requireActor,
   requirePermission("view_orders"),
   getOrderHandler,
+);
+
+orderRouter.patch(
+  "/:id",
+  requireActor,
+  updateOrderCrudHandler,
+);
+
+orderRouter.put(
+  "/:id",
+  requireActor,
+  updateOrderCrudHandler,
 );
 
 orderRouter.post(

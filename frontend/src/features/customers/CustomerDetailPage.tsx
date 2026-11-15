@@ -20,19 +20,19 @@ import {
   formatPhoneMasked,
   localDateKey,
 } from "../../lib/format";
-import { useMockApi } from "../../mocks/context";
+import { useApi } from "../../api/context";
 import type {
-  MockCustomerDetail,
-  MockOrderSummary,
-} from "../../mocks/types";
+  CustomerDetail,
+  OrderSummary,
+} from "../../types";
 
 type LoadState =
   | { status: "loading" }
   | { status: "error" }
   | { status: "not-found" }
-  | { status: "success"; data: MockCustomerDetail };
+  | { status: "success"; data: CustomerDetail };
 
-const orderColumns: DataTableColumn<MockOrderSummary>[] = [
+const orderColumns: DataTableColumn<OrderSummary>[] = [
   {
     key: "order",
     header: "Order",
@@ -74,7 +74,7 @@ const orderColumns: DataTableColumn<MockOrderSummary>[] = [
 ];
 
 export function CustomerDetailPage() {
-  const api = useMockApi();
+  const api = useApi();
   const navigate = useNavigate();
   const { customerId = "" } = useParams();
   const [state, setState] = useState<LoadState>({ status: "loading" });

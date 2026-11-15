@@ -15,15 +15,15 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatDateKey, localDateKey } from "../../lib/format";
-import { useMockApi } from "../../mocks/context";
-import type { CustomerListResult, MockCustomerSummary } from "../../mocks/types";
+import { useApi } from "../../api/context";
+import type { CustomerListResult, CustomerListItem } from "../../types";
 
 type LoadState =
   | { status: "loading" }
   | { status: "success"; data: CustomerListResult }
   | { status: "error" };
 
-const columns: DataTableColumn<MockCustomerSummary>[] = [
+const columns: DataTableColumn<CustomerListItem>[] = [
   {
     key: "customer",
     header: "Customer",
@@ -64,7 +64,7 @@ const columns: DataTableColumn<MockCustomerSummary>[] = [
 ];
 
 export function CustomersPage() {
-  const api = useMockApi();
+  const api = useApi();
   const [search, setSearch] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });

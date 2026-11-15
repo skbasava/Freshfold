@@ -8,6 +8,8 @@ import {
   type Hub,
   type HubListResponse,
   type LoginRequest,
+  type OrderEventsResponse,
+  type OrderStateSnapshot,
   type OrderStatus,
   type Role,
   type Tenant,
@@ -18,7 +20,7 @@ import {
 import type {
   ApiCapabilities,
   AppApi,
-} from "../api/types";
+} from "../../api/types";
 import { MockApiError } from "./errors";
 import {
   createMockData,
@@ -30,27 +32,34 @@ import {
   MOCK_SERVICES,
   refreshSlot,
   toOrderSummary,
+  type MockApiOptions,
+  type MockDeliverySlot,
   type MockOrderRecord,
+  type MockOrderSummary,
   type MockStore,
 } from "./data";
 import type {
   CreateOrderInput,
   CreateOrderOptions,
+  CustomerDetail,
+  CustomerListItem,
   CustomerListQuery,
   CustomerListResult,
   CustomerSummary,
   DeliverySchedule,
-  MockApiOptions,
-  MockCustomerDetail,
-  MockCustomerSummary,
-  MockDeliverySlot,
-  MockOrderDetail,
-  MockOrderIntent,
-  MockOrderSummary,
+  OrderDetail,
+  OrderIntent,
   OrderListQuery,
   OrderListResult,
   OrderMutationOptions,
-} from "./types";
+  OrderSummary,
+  UpdateOrderInput,
+} from "../../types";
+
+export type MockCustomerDetail = CustomerDetail;
+export type MockCustomerSummary = CustomerListItem;
+export type MockOrderDetail = OrderDetail;
+export type MockOrderIntent = OrderIntent;
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
@@ -222,16 +231,17 @@ function orderDetail(
 
   return {
     ...cloneSummary(order),
-    customer:
-      customer ?? {
-        id: order.customerId,
-        hubId: MOCK_HUB_ID,
-        name: order.customerName,
-        phone: "",
-        notes: null,
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt,
-      },
+    customer: customer
+      ? { ...customer }
+      : {
+          id: order.customerId,
+          hubId: MOCK_HUB_ID,
+          name: order.customerName,
+          phone: "",
+          notes: null,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+        },
     items: order.items.map((item) => ({ ...item })),
     deliverySlot: slot ? cloneSlot(slot) : null,
   };
@@ -345,6 +355,130 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
       },
       today: options.today ?? MOCK_NOW,
     };
+  }
+
+  function applyOrderIntentSync(
+    orderId: string,
+    intent: MockOrderIntent,
+    payload: unknown,
+    baseVersion: number,
+    mutationOptions: OrderMutationOptions = {},
+  ): MockOrderDetail {
+    const order = findOrder(store, orderId);
+
+    if (!can(currentRole, permissionForIntent(intent))) {
+      throw new MockApiError(
+        intent === "reschedule" || intent === "cancel"
+          ? "Only a manager can do this."
+          : "You do not have permission to change this order.",
+        { status: 403, code: "FORBIDDEN" },
+      );
+    }
+
+    if (baseVersion !== order.version) {
+      throw new MockApiError(
+        "This order changed on another device. Review the latest details.",
+        {
+          status: 409,
+          code: "VERSION_CONFLICT",
+          currentOrder: orderDetail(store, order),
+        },
+      );
+    }
+
+    let holdComment = order.holdComment;
+    let slot: MockDeliverySlot | undefined;
+
+    if (intent === "placeOnHold") {
+      const comments =
+        payload !== null &&
+        typeof payload === "object" &&
+        "comments" in payload &&
+        typeof payload.comments === "string"
+          ? payload.comments.trim()
+          : "";
+      if (!comments) {
+        throw new MockApiError(
+          "Add a short reason for the hold.",
+          { status: 422, code: "HOLD_COMMENT_REQUIRED" },
+        );
+      }
+      holdComment = comments;
+    }
+
+    if (intent === "reschedule") {
+      const slotId =
+        payload !== null &&
+        typeof payload === "object" &&
+        "deliverySlotId" in payload &&
+        typeof payload.deliverySlotId === "string"
+          ? payload.deliverySlotId
+          : "";
+      slot = findSlot(store, slotId);
+      if (!slot) {
+        throw new MockApiError("Choose a delivery time.", {
+          status: 422,
+          code: "SLOT_NOT_FOUND",
+        });
+      }
+    }
+
+    const status = nextStatus(order.status, intent);
+    if (status === null) {
+      throw new MockApiError(
+        "This order cannot make that change right now.",
+        { status: 422, code: "INVALID_TRANSITION" },
+      );
+    }
+
+    const oldSlot = order.deliverySlotId
+      ? findSlot(store, order.deliverySlotId)
+      : undefined;
+
+    if (
+      intent === "reschedule" &&
+      slot &&
+      slot.id !== order.deliverySlotId
+    ) {
+      assertSlotAvailable(slot);
+      if (oldSlot) {
+        oldSlot.booked = Math.max(0, oldSlot.booked - 1);
+        refreshSlot(oldSlot, store.todayKey);
+      }
+      slot.booked += 1;
+      refreshSlot(slot, store.todayKey);
+      order.deliverySlotId = slot.id;
+      order.deliveryAt = slot.startsAt;
+    }
+
+    if (intent === "cancel") {
+      if (oldSlot) {
+        oldSlot.booked = Math.max(0, oldSlot.booked - 1);
+        refreshSlot(oldSlot, store.todayKey);
+      }
+      order.deliverySlotId = null;
+      order.deliveryAt = null;
+      order.cancelledAt = store.now;
+      order.holdComment = null;
+    } else if (intent === "markDelivered") {
+      if (oldSlot) {
+        oldSlot.booked = Math.max(0, oldSlot.booked - 1);
+        refreshSlot(oldSlot, store.todayKey);
+      }
+    } else if (intent === "releaseHold") {
+      order.holdComment = null;
+    } else if (intent === "placeOnHold") {
+      order.holdComment = holdComment;
+    }
+
+    order.status = status;
+    order.version += 1;
+    order.updatedAt = store.now;
+    order.syncState =
+      mutationOptions.online === false ? "pending" : "synced";
+    order.lastError = null;
+
+    return orderDetail(store, order);
   }
 
   return {
@@ -468,6 +602,84 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
       return withLatency(() => {
         const order = store.orders.find((entry) => entry.id === orderId);
         return order ? orderDetail(store, order) : null;
+      });
+    },
+    getOrderState(orderId: string): Promise<OrderStateSnapshot | null> {
+      return withLatency(() => {
+        const order = store.orders.find((entry) => entry.id === orderId);
+        if (!order) return null;
+        const diagStatus =
+          order.status === "cancelled"
+            ? "cancelled"
+            : order.status === "hold"
+              ? "held"
+              : "healthy";
+        return {
+          crnId: order.crnId ?? `crn:1:1:${order.version}`,
+          orderId: order.id,
+          tenantId: "tenant_default",
+          hubId: "hub_default",
+          previousState: order.previousState ?? null,
+          currentState: order.status,
+          intent: "createOrder",
+          version: order.version,
+          changedAt: order.updatedAt,
+          actor: {
+            actorType: "user",
+            actorId: "mock_user",
+            role: currentRole,
+          },
+          diagnostic: {
+            status: diagStatus,
+            reason: order.holdComment ?? null,
+            brokenStep: null,
+            lastMutationId: `mock-mut-${order.version}`,
+            errorCode: null,
+            errorMessage: null,
+          },
+        };
+      });
+    },
+    getOrderEvents(orderId: string): Promise<OrderEventsResponse> {
+      return withLatency(() => {
+        const order = store.orders.find((entry) => entry.id === orderId);
+        if (!order) return { items: [] };
+        return {
+          items: [
+            {
+              id: `evt-${order.id}-1`,
+              hubId: "hub_default",
+              orderId: order.id,
+              mutationId: `mut-init-${order.id}`,
+              eventType: "order_created",
+              source: "app",
+              actorType: "user",
+              actorId: "mock_user",
+              previousVersion: 0,
+              newVersion: 1,
+              at: order.createdAt,
+              detail: { serviceType: order.serviceType },
+            },
+            ...(order.status !== "confirmed"
+              ? [
+                  {
+                    id: `evt-${order.id}-2`,
+                    hubId: "hub_default",
+                    orderId: order.id,
+                    mutationId: `mut-update-${order.id}`,
+                    eventType: `order_${order.status}`,
+                    source: "app" as const,
+                    actorType: "user" as const,
+                    actorId: "mock_user",
+                    previousVersion: 1,
+                    newVersion: order.version,
+                    at: order.updatedAt,
+                    detail: order.holdComment ? { comments: order.holdComment } : {},
+                  },
+                ]
+              : []),
+          ],
+        };
       });
     },
     getCreateOrderOptions(): Promise<CreateOrderOptions> {
@@ -603,6 +815,7 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
         return { ...orderDetail(store, order), customerCreated };
       });
     },
+
     applyOrderIntent(
       orderId: string,
       intent: MockOrderIntent,
@@ -610,122 +823,99 @@ export function createMockApi(options: MockApiOptions = {}): AppApi {
       baseVersion: number,
       mutationOptions: OrderMutationOptions = {},
     ): Promise<MockOrderDetail> {
+      return withLatency(() =>
+        applyOrderIntentSync(
+          orderId,
+          intent,
+          payload,
+          baseVersion,
+          mutationOptions,
+        ),
+      );
+    },
+
+    updateOrder(
+      orderId: string,
+      input: UpdateOrderInput,
+      mutationOptions: OrderMutationOptions = {},
+    ): Promise<MockOrderDetail> {
       return withLatency(() => {
         const order = findOrder(store, orderId);
-
-        if (!can(currentRole, permissionForIntent(intent))) {
-          throw new MockApiError(
-            intent === "reschedule" || intent === "cancel"
-              ? "Only a manager can do this."
-              : "You do not have permission to change this order.",
-            { status: 403, code: "FORBIDDEN" },
-          );
-        }
-
-        if (baseVersion !== order.version) {
-          throw new MockApiError(
-            "This order changed on another device. Review the latest details.",
-            {
-              status: 409,
-              code: "VERSION_CONFLICT",
-              currentOrder: orderDetail(store, order),
-            },
-          );
-        }
-
-        let holdComment = order.holdComment;
-        let slot: MockDeliverySlot | undefined;
-
-        if (intent === "placeOnHold") {
-          const comments =
-            payload !== null &&
-            typeof payload === "object" &&
-            "comments" in payload &&
-            typeof payload.comments === "string"
-              ? payload.comments.trim()
-              : "";
-          if (!comments) {
-            throw new MockApiError(
-              "Add a short reason for the hold.",
-              { status: 422, code: "HOLD_COMMENT_REQUIRED" },
-            );
-          }
-          holdComment = comments;
-        }
-
-        if (intent === "reschedule") {
-          const slotId =
-            payload !== null &&
-            typeof payload === "object" &&
-            "deliverySlotId" in payload &&
-            typeof payload.deliverySlotId === "string"
-              ? payload.deliverySlotId
-              : "";
-          slot = findSlot(store, slotId);
-          if (!slot) {
-            throw new MockApiError("Choose a delivery time.", {
-              status: 422,
-              code: "SLOT_NOT_FOUND",
+        if (input.customerNotes !== undefined) {
+          const cust = store.customers.find((c) => c.id === order.customerId);
+          if (cust) {
+            cust.notes = input.customerNotes;
+          } else {
+            store.customers.push({
+              id: order.customerId,
+              hubId: MOCK_HUB_ID,
+              name: order.customerName,
+              phone: "",
+              notes: input.customerNotes,
+              createdAt: order.createdAt,
+              updatedAt: store.now,
             });
           }
         }
-
-        const status = nextStatus(order.status, intent);
-        if (status === null) {
-          throw new MockApiError(
-            "This order cannot make that change right now.",
-            { status: 422, code: "INVALID_TRANSITION" },
+        if (input.serviceType) {
+          order.serviceType = input.serviceType;
+        }
+        if (input.status && input.status !== order.status) {
+          let intent: MockOrderIntent = "markProcessing";
+          let payload: unknown = {};
+          if (input.status === "processing") intent = "markProcessing";
+          else if (input.status === "out_for_delivery")
+            intent = "markOutForDelivery";
+          else if (input.status === "delivered") intent = "markDelivered";
+          else if (input.status === "hold") {
+            intent = "placeOnHold";
+            payload = {
+              comments: input.holdComment ?? input.comments ?? "Put on hold",
+            };
+          } else if (input.status === "confirmed" && order.status === "hold") {
+            intent = "releaseHold";
+          } else if (input.status === "cancelled") {
+            intent = "cancel";
+            payload = { reason: input.reason ?? "Cancelled" };
+          }
+          return applyOrderIntentSync(
+            orderId,
+            intent,
+            payload,
+            order.version,
+            mutationOptions,
           );
         }
-
-        const oldSlot = order.deliverySlotId
-          ? findSlot(store, order.deliverySlotId)
-          : undefined;
-
         if (
-          intent === "reschedule" &&
-          slot &&
-          slot.id !== order.deliverySlotId
+          input.deliverySlotId &&
+          input.deliverySlotId !== order.deliverySlotId
         ) {
-          assertSlotAvailable(slot);
-          if (oldSlot) {
-            oldSlot.booked = Math.max(0, oldSlot.booked - 1);
-            refreshSlot(oldSlot, store.todayKey);
-          }
-          slot.booked += 1;
-          refreshSlot(slot, store.todayKey);
-          order.deliverySlotId = slot.id;
-          order.deliveryAt = slot.startsAt;
+          return applyOrderIntentSync(
+            orderId,
+            "reschedule",
+            { deliverySlotId: input.deliverySlotId },
+            order.version,
+            mutationOptions,
+          );
         }
-
-        if (intent === "cancel") {
-          if (oldSlot) {
-            oldSlot.booked = Math.max(0, oldSlot.booked - 1);
-            refreshSlot(oldSlot, store.todayKey);
-          }
-          order.deliverySlotId = null;
-          order.deliveryAt = null;
-          order.cancelledAt = store.now;
-          order.holdComment = null;
-        } else if (intent === "markDelivered") {
-          if (oldSlot) {
-            oldSlot.booked = Math.max(0, oldSlot.booked - 1);
-            refreshSlot(oldSlot, store.todayKey);
-          }
-        } else if (intent === "releaseHold") {
-          order.holdComment = null;
-        } else if (intent === "placeOnHold") {
-          order.holdComment = holdComment;
-        }
-
-        order.status = status;
-        order.version += 1;
-        order.updatedAt = store.now;
-        order.syncState =
-          mutationOptions.online === false ? "pending" : "synced";
-        order.lastError = null;
-
         return orderDetail(store, order);
+      });
+    },
+
+    cancelOrder(
+      orderId: string,
+      reason?: string,
+      mutationOptions: OrderMutationOptions = {},
+    ): Promise<MockOrderDetail> {
+      return withLatency(() => {
+        const order = findOrder(store, orderId);
+        return applyOrderIntentSync(
+          orderId,
+          "cancel",
+          { reason: reason ?? "Cancelled by user" },
+          order.version,
+          mutationOptions,
+        );
       });
     },
     getDeliverySchedule(date?: string): Promise<DeliverySchedule> {

@@ -6,7 +6,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStorageBackend } from "../db/memory";
 import { getDatabase, resetDatabase } from "../database/db";
-import { createMockApi } from "../mocks/api";
+import { createMockApi } from "../test/mocks/api";
 import { createMutationQueue, createPendingMutation } from "../sync/mutation-queue";
 import type { LocalOrder } from "../sync/types";
 import {

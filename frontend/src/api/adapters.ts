@@ -7,6 +7,8 @@ import {
   type DeliverySlot,
   type LoginRequest,
   type OrderDetail,
+  type OrderEventsResponse,
+  type OrderStateSnapshot,
   type OrderSummary,
   type UpdateHubRequest,
   type UpdateTenantRequest,
@@ -17,30 +19,30 @@ import { getDatabase } from "../database/db";
 import { createMemoryStorageBackend } from "../db/memory";
 import type { StorageBackend } from "../db/types";
 import { formatDateKey, formatDeliveryTime, localDateKey } from "../lib/format";
-import { isMockApiError, MockApiError } from "../mocks/errors";
-import { createMockApi } from "../mocks/api";
+import { ApiError, isApiError } from "./errors";
+import { createMockApi } from "../test/mocks/api";
 import type {
   AttentionItem,
   CreateOrderInput,
   CreateOrderOptions,
+  CustomerDetail as MockCustomerDetail,
   CustomerListQuery,
   CustomerListResult,
   CustomerSummary,
   DashboardData,
   DashboardOrder,
   DeliverySchedule,
+  DeliverySlot as MockDeliverySlot,
   DeliverySlotSummary,
-  MockApi,
-  MockCustomerDetail,
-  MockDeliverySlot,
-  MockOrderDetail,
-  MockOrderIntent,
-  MockOrderSummary,
-  MockSession,
+  OrderDetail as MockOrderDetail,
+  OrderIntent as MockOrderIntent,
   OrderListQuery,
   OrderListResult,
   OrderMutationOptions,
-} from "../mocks/types";
+  OrderSummary as MockOrderSummary,
+  UpdateOrderInput,
+  UserSession as MockSession,
+} from "../types";
 import { createOfflineOrder, updateOfflineOrder } from "../orders/offline";
 import { localOrderFromServer } from "../orders/local-order";
 import { createLockCoordinator } from "../sync/locks";
@@ -149,7 +151,7 @@ const liveCapabilities = (config: ApiConfig): ApiCapabilities => ({
   liveReads: true,
 });
 
-function mockCode(error: GatewayApiError): MockApiError["code"] {
+function apiErrorCode(error: GatewayApiError): ApiError["code"] {
   switch (error.status) {
     case 401:
       return "UNAUTHORIZED";
@@ -222,12 +224,12 @@ export function describeGatewayError(error: GatewayApiError): string {
   return "The server could not accept that change. Please try again.";
 }
 
-function toMockApiError(error: unknown): MockApiError {
-  if (isMockApiError(error)) {
+export function toApiError(error: unknown): ApiError {
+  if (isApiError(error)) {
     return error;
   }
   if (!isGatewayApiError(error)) {
-    return new MockApiError("Something went wrong. Please try again.", {
+    return new ApiError("Something went wrong. Please try again.", {
       status: 500,
       code: "SERVER_ERROR",
     });
@@ -239,9 +241,9 @@ function toMockApiError(error: unknown): MockApiError {
       )
     : undefined;
 
-  return new MockApiError(describeGatewayError(error), {
+  return new ApiError(describeGatewayError(error), {
     status: error.status === 0 ? 503 : error.status,
-    code: mockCode(error),
+    code: apiErrorCode(error),
     ...(fieldErrors && Object.keys(fieldErrors).length > 0
       ? { fieldErrors }
       : {}),
@@ -251,38 +253,13 @@ function toMockApiError(error: unknown): MockApiError {
   });
 }
 
+export const toMockApiError = toApiError;
+
 function clientTransport(client: GatewayClient): MutationTransport {
   return {
     async send(input): Promise<MutationTransportResult> {
       try {
         const result = await client.applyChange(input);
-        try {
-          const db = getDatabase();
-          await db.orders.put({
-            id: result.order.id,
-            tenantId: result.order.hubId,
-            branchId: result.order.hubId,
-            orderNumber: result.order.id,
-            customerId: result.order.customer.id,
-            customerName: result.order.customer.name,
-            customerPhone: result.order.customer.phone,
-            status: result.order.status as any,
-            serviceType: result.order.serviceType,
-            deliverySlotId: result.order.deliverySlotId,
-            deliveryAt: result.order.deliveryAt,
-            version: result.order.version,
-            holdComment: result.order.holdComment,
-            createdAt: result.order.createdAt,
-            updatedAt: result.order.updatedAt,
-            syncState: "synced",
-          } as any);
-          syncLogger.info("order_written_to_dexie", {
-            orderId: result.order.id,
-            version: result.order.version,
-          });
-        } catch {
-          // Ignore Dexie write failure in non-browser environments
-        }
         return {
           kind: "accepted",
           order: result.order,
@@ -486,7 +463,7 @@ function createLiveApi(
       };
       return cachedSession;
     } catch (error) {
-      throw toMockApiError(error);
+      throw toApiError(error);
     }
   }
 
@@ -618,7 +595,7 @@ function createLiveApi(
       if (isGatewayApiError(error) && error.status === 404) {
         return null;
       }
-      throw toMockApiError(error);
+      throw toApiError(error);
     }
   }
 
@@ -865,7 +842,7 @@ function createLiveApi(
       customers.set(server.customer.id, server.customer);
     } catch (error) {
       if (!(isGatewayApiError(error) && error.status === 404)) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     }
 
@@ -902,13 +879,13 @@ function createLiveApi(
           }).withOrderLock,
         });
         if (summary.paused > 0) {
-          throw new MockApiError("Your session ended. Please sign in again.", {
+          throw new ApiError("Your session ended. Please sign in again.", {
             status: 401,
             code: "UNAUTHORIZED",
           });
         }
       } catch (error) {
-        if (isMockApiError(error)) {
+        if (isApiError(error)) {
           throw error;
         }
         return (await localDetail(orderId)) as MockOrderDetail;
@@ -917,7 +894,7 @@ function createLiveApi(
 
     const mutation = await queue.getMutation(mutationId);
     if (!mutation) {
-      throw new MockApiError("We could not save that change.", {
+      throw new ApiError("We could not save that change.", {
         status: 500,
         code: "SERVER_ERROR",
       });
@@ -934,7 +911,7 @@ function createLiveApi(
     if (mutation.status === "conflict") {
       workflowLogger.warn("mutation_settled_conflict", { orderId, mutationId });
       const current = await localDetail(orderId);
-      throw new MockApiError(
+      throw new ApiError(
         "This order changed on another device. Review the latest details.",
         {
           status: 409,
@@ -959,7 +936,7 @@ function createLiveApi(
             : mutation.lastError === "MUTATION_PAYLOAD_MISMATCH"
               ? "MUTATION_PAYLOAD_MISMATCH"
               : "VALIDATION_ERROR";
-      throw new MockApiError(
+      throw new ApiError(
         code === "HOLD_COMMENT_REQUIRED"
           ? "Add a short reason for the hold."
           : code === "SLOT_FULL"
@@ -975,7 +952,7 @@ function createLiveApi(
 
     const detail = await localDetail(orderId);
     if (!detail) {
-      throw new MockApiError("We could not find that order.", {
+      throw new ApiError("We could not find that order.", {
         status: 404,
         code: "NOT_FOUND",
       });
@@ -1007,7 +984,7 @@ function createLiveApi(
       if (isGatewayApiError(error) && error.status === 404) {
         return local ?? null;
       }
-      throw toMockApiError(error);
+      throw toApiError(error);
     }
   }
 
@@ -1111,7 +1088,7 @@ function createLiveApi(
     capabilities: liveCapabilities(config),
 
     async login(_input: LoginRequest) {
-      throw new MockApiError("Use Google sign-in with Supabase Auth.", {
+      throw new ApiError("Use Google sign-in with Supabase Auth.", {
         status: 400,
         code: "VALIDATION_ERROR",
       });
@@ -1308,6 +1285,131 @@ function createLiveApi(
       return loadOrderDetail(orderId);
     },
 
+    async getOrderState(orderId: string): Promise<OrderStateSnapshot | null> {
+      try {
+        return await client.getOrderState(orderId);
+      } catch (err) {
+        if (isGatewayApiError(err) && err.status === 404) {
+          return null;
+        }
+        const detail = await loadOrderDetail(orderId);
+        if (!detail) return null;
+        return {
+          crnId: detail.crnId ?? `crn:1:1:${detail.version}`,
+          orderId: detail.id,
+          tenantId: "tenant_default",
+          hubId: "hub_default",
+          previousState: detail.previousState ?? null,
+          currentState: detail.status,
+          intent: "createOrder",
+          version: detail.version,
+          changedAt: detail.updatedAt,
+          actor: {
+            actorType: "user",
+            actorId: null,
+          },
+          diagnostic: {
+            status:
+              detail.status === "cancelled"
+                ? "cancelled"
+                : detail.status === "hold"
+                  ? "held"
+                  : "healthy",
+            reason: detail.holdComment ?? null,
+            brokenStep: null,
+            lastMutationId: "local",
+            errorCode: null,
+            errorMessage: null,
+          },
+        };
+      }
+    },
+
+    async getOrderEvents(orderId: string): Promise<OrderEventsResponse> {
+      try {
+        return await client.getOrderEvents(orderId);
+      } catch {
+        if (config.demoFallbacks) {
+          return await getDemoFallbackApi().getOrderEvents(orderId);
+        }
+        return { items: [] };
+      }
+    },
+
+    async updateOrder(
+      orderId: string,
+      input: UpdateOrderInput,
+      mutationOptions: OrderMutationOptions = {},
+    ): Promise<MockOrderDetail> {
+      const order = await loadOrderDetail(orderId);
+      if (!order) {
+        throw new ApiError("We could not find that order.", {
+          status: 404,
+          code: "NOT_FOUND",
+        });
+      }
+
+      if (input.status && input.status !== order.status) {
+        let intent: MockOrderIntent = "markProcessing";
+        let payload: unknown = {};
+        if (input.status === "processing") intent = "markProcessing";
+        else if (input.status === "out_for_delivery") intent = "markOutForDelivery";
+        else if (input.status === "delivered") intent = "markDelivered";
+        else if (input.status === "hold") {
+          intent = "placeOnHold";
+          payload = { comments: input.holdComment ?? input.comments ?? "Put on hold" };
+        } else if (input.status === "confirmed" && order.status === "hold") {
+          intent = "releaseHold";
+        } else if (input.status === "cancelled") {
+          intent = "cancel";
+          payload = { reason: input.reason ?? "Cancelled" };
+        }
+        return api.applyOrderIntent(orderId, intent, payload, order.version, mutationOptions);
+      }
+
+      if (input.deliverySlotId && input.deliverySlotId !== order.deliverySlotId) {
+        return api.applyOrderIntent(
+          orderId,
+          "reschedule",
+          { deliverySlotId: input.deliverySlotId },
+          order.version,
+          mutationOptions,
+        );
+      }
+
+      if (input.customerNotes !== undefined) {
+        try {
+          await client.updateOrder(orderId, { customerNotes: input.customerNotes });
+          return (await loadOrderDetail(orderId)) ?? order;
+        } catch {
+          // ignore
+        }
+      }
+
+      return order;
+    },
+
+    async cancelOrder(
+      orderId: string,
+      reason?: string,
+      mutationOptions: OrderMutationOptions = {},
+    ): Promise<MockOrderDetail> {
+      const order = await loadOrderDetail(orderId);
+      if (!order) {
+        throw new ApiError("We could not find that order.", {
+          status: 404,
+          code: "NOT_FOUND",
+        });
+      }
+      return api.applyOrderIntent(
+        orderId,
+        "cancel",
+        { reason: reason ?? "Cancelled by user" },
+        order.version,
+        mutationOptions,
+      );
+    },
+
     async getCreateOrderOptions(): Promise<CreateOrderOptions> {
       const [customerResult, summaries] = await Promise.all([
         api.listCustomers({ pageSize: 100 }),
@@ -1343,7 +1445,7 @@ function createLiveApi(
           (entry) => entry.id === input.customerId,
         );
         if (!customer) {
-          throw new MockApiError("Choose a customer.", {
+          throw new ApiError("Choose a customer.", {
             status: 422,
             code: "VALIDATION_ERROR",
             fieldErrors: { customerId: "Choose a customer." },
@@ -1363,7 +1465,7 @@ function createLiveApi(
           fieldErrors.customerPhone = "Enter a valid phone number.";
         }
         if (Object.keys(fieldErrors).length > 0 || !normalizedPhone) {
-          throw new MockApiError("Please check the customer details.", {
+          throw new ApiError("Please check the customer details.", {
             status: 422,
             code: "VALIDATION_ERROR",
             fieldErrors,
@@ -1384,7 +1486,7 @@ function createLiveApi(
         (entry) => entry.id === input.deliverySlotId,
       );
       if (!slot) {
-        throw new MockApiError(
+        throw new ApiError(
           config.demoFallbacks
             ? "Choose a delivery time."
             : "Delivery times are not available from the server yet.",
@@ -1444,7 +1546,7 @@ function createLiveApi(
     ): Promise<MockOrderDetail> {
       const local = await ensureLocalOrder(orderId, baseVersion);
       if (!local) {
-        throw new MockApiError("We could not find that order.", {
+        throw new ApiError("We could not find that order.", {
           status: 404,
           code: "NOT_FOUND",
         });
@@ -1550,7 +1652,7 @@ function createLiveApi(
           if (isGatewayApiError(error) && error.status === 404) {
             return null;
           }
-          throw toMockApiError(error);
+          throw toApiError(error);
         }
       }
 
@@ -1580,6 +1682,7 @@ function createLiveApi(
           hubId: (await session()).hub.id,
         }).withOrderLock,
       });
+      await syncRemoteOrdersToDexie();
     },
 
     async getPendingCount() {
@@ -1592,7 +1695,7 @@ function createLiveApi(
       try {
         return await client.listTenants(query);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1603,7 +1706,7 @@ function createLiveApi(
         if (isGatewayApiError(error) && error.status === 404) {
           return null;
         }
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1611,7 +1714,7 @@ function createLiveApi(
       try {
         return await client.createTenant(input);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1619,7 +1722,7 @@ function createLiveApi(
       try {
         return await client.updateTenant(id, input);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1627,7 +1730,7 @@ function createLiveApi(
       try {
         return await client.deleteTenant(id);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1635,7 +1738,7 @@ function createLiveApi(
       try {
         return await client.listHubs(query);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1646,7 +1749,7 @@ function createLiveApi(
         if (isGatewayApiError(error) && error.status === 404) {
           return null;
         }
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1654,7 +1757,7 @@ function createLiveApi(
       try {
         return await client.createHub(input);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1662,7 +1765,7 @@ function createLiveApi(
       try {
         return await client.updateHub(id, input);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
 
@@ -1670,7 +1773,7 @@ function createLiveApi(
       try {
         return await client.deleteHub(id);
       } catch (error) {
-        throw toMockApiError(error);
+        throw toApiError(error);
       }
     },
   };

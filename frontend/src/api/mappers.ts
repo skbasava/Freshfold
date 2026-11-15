@@ -5,12 +5,12 @@ import type {
 } from "@laundry/contracts";
 import { formatDeliveryTime, localDateKey } from "../lib/format";
 import type {
-  MockCustomerSummary,
-  MockDeliverySlot,
-  MockOrderDetail,
-  MockOrderItem,
-  MockOrderSummary,
-} from "../mocks/types";
+  CustomerListItem as MockCustomerSummary,
+  DeliverySlot as MockDeliverySlot,
+  OrderDetail as MockOrderDetail,
+  OrderItem as MockOrderItem,
+  OrderSummary as MockOrderSummary,
+} from "../types";
 import type {
   LocalOrder,
   LocalOrderSyncState,

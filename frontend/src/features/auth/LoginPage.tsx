@@ -18,7 +18,7 @@ import {
 import { useApi } from "../../api/context";
 import { useAuth } from "../../auth/AuthContext";
 import { AuthClientError } from "../../auth/supabase-auth-client";
-import { isMockApiError } from "../../mocks/errors";
+import { isApiError } from "../../api/errors";
 import { AuthLayout } from "./AuthLayout";
 
 type OAuthErrorReason = "cancelled" | "failed";
@@ -41,7 +41,7 @@ function loginErrorMessage(error: unknown): string {
     }
   }
 
-  if (isMockApiError(error)) {
+  if (isApiError(error)) {
     switch (error.status) {
       case 403:
         return "This Google account cannot access this hub.";

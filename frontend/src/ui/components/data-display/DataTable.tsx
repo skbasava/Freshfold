@@ -21,6 +21,7 @@ export interface DataTableProps<T> {
   loading?: boolean;
   loadingLabel?: string;
   className?: string;
+  onRowClick?: (row: T) => void;
 }
 
 const alignClasses = {
@@ -38,6 +39,7 @@ export function DataTable<T>({
   loading = false,
   loadingLabel = "Loading",
   className,
+  onRowClick,
 }: DataTableProps<T>) {
   if (loading) {
     return (
@@ -92,7 +94,11 @@ export function DataTable<T>({
           {rows.map((row) => (
             <tr
               key={getRowKey(row)}
-              className="border-b border-border/70 last:border-b-0 hover:bg-canvas/60"
+              className={cn(
+                "border-b border-border/70 last:border-b-0 hover:bg-canvas/60 transition-colors",
+                onRowClick && "cursor-pointer hover:bg-primary/5",
+              )}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
               {columns.map((column) => (
                 <td
