@@ -16,7 +16,9 @@ export type GoogleCalendarEvent = {
   status?: string;
   summary?: string;
   description?: string;
+  location?: string;
   colorId?: string | null;
+  htmlLink?: string;
   start?: CalendarEventDateTime;
   end?: CalendarEventDateTime;
   recurrence?: string[];
@@ -27,7 +29,7 @@ export type GoogleCalendarEvent = {
 };
 
 export type NewGoogleCalendarEvent = GoogleCalendarEvent & {
-  id: string;
+  id?: string;
   start: CalendarEventDateTime;
   end: CalendarEventDateTime;
 };

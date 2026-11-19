@@ -36,6 +36,10 @@ export const sessionResponseSchema = z.object({
   user: authenticatedUserSchema,
   hub: authenticatedHubSchema,
   role: roleSchema,
+  tenantId: z.string().optional(),
+  rcVersion: z.string().optional(),
+  tenantEnabled: z.boolean().optional(),
+  hubEnabled: z.boolean().optional(),
 });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 

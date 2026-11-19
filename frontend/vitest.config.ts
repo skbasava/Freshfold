@@ -14,6 +14,7 @@ export default defineConfig({
       "@freshfold/ui": fromRoot("./src/ui/index.ts"),
       "@laundry/contracts": fromRoot("../packages/contracts/src/index.ts"),
       "@": fromRoot("./src"),
+      "/assets": fromRoot("./public/assets"),
     },
   },
   test: {
@@ -28,6 +29,7 @@ export default defineConfig({
       "../tests/unit/tenant-contracts.test.ts",
       "../tests/unit/crn.test.ts",
       "../tests/integration/order-crn-kv.test.ts",
+      "../tests/integration/tenant-headers-flags.test.ts",
     ],
     css: false,
     restoreMocks: true,

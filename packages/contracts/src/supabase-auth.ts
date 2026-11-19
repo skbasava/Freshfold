@@ -118,6 +118,10 @@ function singleHubFromList(value: unknown): string | undefined {
  */
 export function resolveSupabaseAuthorization(
   claims: SupabaseJwtClaims,
+  options?: {
+    defaultTenantId?: string;
+    defaultHubId?: string;
+  },
 ): SupabaseAuthorizationResult {
   const root = claims as Record<string, unknown>;
   const appMeta = asRecord(claims.app_metadata);
@@ -167,14 +171,16 @@ export function resolveSupabaseAuthorization(
     nonEmptyString(root.tenant_id) ??
     nonEmptyString(root.tenantId) ??
     nonEmptyString(appMeta.tenant_id) ??
-    nonEmptyString(appMeta.tenantId);
+    nonEmptyString(appMeta.tenantId) ??
+    options?.defaultTenantId;
 
   const hubId =
     nonEmptyString(root.hub_id) ??
     nonEmptyString(root.hubId) ??
     nonEmptyString(appMeta.hub_id) ??
     nonEmptyString(appMeta.hubId) ??
-    singleHubFromList(appMeta.hub_ids);
+    singleHubFromList(appMeta.hub_ids) ??
+    options?.defaultHubId;
 
   if (!tenantId || !hubId) {
     return {

@@ -116,7 +116,7 @@ export const orderDiagnosticStatusSchema = z.enum(["healthy", "held", "broken", 
 export type OrderDiagnosticStatus = z.infer<typeof orderDiagnosticStatusSchema>;
 
 export const orderStateSnapshotSchema = z.object({
-  crnId: crnStringSchema,
+  crnId: crnStringSchema.or(z.string().min(1)),
   orderId: z.string().min(1),
   tenantId: z.string().or(z.number()),
   hubId: z.string().or(z.number()),

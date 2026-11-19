@@ -1,473 +1,37 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { ErrorBoundary, WorkspaceShell } from "@/components/blocks";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  Alert,
-  AppShell,
-  Badge,
-  Button,
-  HelpCircleIcon,
-  LoadingState,
-  LogOutIcon,
-  Sidebar,
-  Topbar,
-  UsersIcon,
-} from "@freshfold/ui";
-import type { Role } from "@laundry/contracts";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+  AuthCallbackPage,
+  AuthProvider,
+  ForgotPasswordPage,
+  LoginPage,
+  PublicOnly,
+  RequireAuth,
+  ResetPasswordPage,
+  type AuthService,
+} from "@/features/auth";
+import { CustomersPage } from "@/features/customers";
+import { ItemsPage } from "@/features/catalog";
+import { DashboardPage, type DashboardService } from "@/features/dashboard";
+import { DeliveriesPage } from "@/features/deliveries";
 import {
-  Link,
-  Navigate,
-  NavLink,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
-import { createAppApi, readApiConfig } from "./api/adapters";
-import { ApiProvider, useApi } from "./api/context";
-import type { AppApi } from "./api/types";
-import { AuthProvider, useAuth } from "./auth/AuthContext";
-import { readSupabaseAuthConfig } from "./auth/supabase-config";
-import { createAccessTokenStore } from "./auth/token-store";
-import { useRealtime } from "./hooks/useRealtime";
-import { CalendarPage } from "./features/calendar/CalendarPage";
-import { Dashboard } from "./features/dashboard/Dashboard";
-import { CustomerDetailPage } from "./features/customers/CustomerDetailPage";
-import { CustomersPage } from "./features/customers/CustomersPage";
-import { CreateTenantPage, TenantDetailPage, TenantsPage } from "./features/tenants";
-import { CreateHubPage, HubDetailPage, HubsPage } from "./features/hubs";
-import { DeliveriesPage } from "./features/deliveries/DeliveriesPage";
-import { AuthCallbackPage } from "./features/auth/AuthCallbackPage";
-import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
-import { LoginPage } from "./features/auth/LoginPage";
-import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
-import { CreateOrderPage } from "./features/orders/CreateOrderPage";
-import { OrderDetailPage } from "./features/orders/OrderDetailPage";
-import { OrdersPage } from "./features/orders/OrdersPage";
-import { ComingSoonPage, UnauthorizedPage } from "./features/shared";
-import {
-  HelpGuideModal,
-  NotificationsMenu,
-  getNavigationSections,
-  pageMeta,
-  roleLabel,
-} from "./features/shell";
-import { useOnlineStatus } from "./hooks/useOnlineStatus";
-import { formatToday } from "./lib/format";
-import { syncLogger } from "./lib/logger";
+  CreateOrderPage,
+  OrderDetailPage,
+  OrdersPage,
+  type OrdersService,
+} from "@/features/orders";
+import { SettingsPage } from "@/features/settings";
 
-function useReconnectFlush(api: AppApi) {
-  useEffect(() => {
-    const flush = () => {
-      syncLogger.info("network_online_flushing");
-      void api.syncPendingMutations().catch((err) => {
-        syncLogger.error("flush_reconnect_failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    };
-    window.addEventListener("online", flush);
-    void api
-      .getPendingCount()
-      .then((pendingCount) => {
-        syncLogger.info("offline_storage_ready", { pendingCount });
-      })
-      .catch((err) => {
-        syncLogger.error("offline_storage_check_failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    return () => {
-      window.removeEventListener("online", flush);
-    };
-  }, [api]);
+export interface AppRoutesProps {
+  dashboardService?: DashboardService;
+  ordersService?: OrdersService;
 }
 
-function SessionLoading() {
-  return (
-    <main className="grid min-h-screen place-items-center bg-canvas px-4">
-      <div className="w-full max-w-sm">
-        <LoadingState label="Checking your session" rows={2} />
-      </div>
-    </main>
-  );
-}
-
-function SessionError({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <main className="grid min-h-screen place-items-center bg-canvas px-4">
-      <div className="w-full max-w-md">
-        <Alert
-          tone="danger"
-          title="We could not check your session"
-          action={
-            <Button variant="secondary" size="sm" onClick={onRetry}>
-              Try again
-            </Button>
-          }
-        >
-          {message}
-        </Alert>
-      </div>
-    </main>
-  );
-}
-
-function RequireSuperAdmin({
-  role,
-  resourceName,
-  children,
-}: {
-  role: Role;
-  resourceName: string;
-  children: ReactNode;
-}) {
-  if (role !== "super_admin") {
-    return <UnauthorizedPage role={role} resourceName={resourceName} />;
-  }
-  return <>{children}</>;
-}
-
-function Workspace() {
-  const api = useApi();
-  const auth = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const online = useOnlineStatus();
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [helpOpen, setHelpOpen] = useState(false);
-  useReconnectFlush(api);
-
-  useEffect(() => {
-    if (location.pathname === "/orders") {
-      const params = new URLSearchParams(location.search);
-      setGlobalSearch(params.get("q") ?? "");
-    }
-  }, [location.pathname, location.search]);
-
-  if (auth.state.status !== "authenticated") {
-    return null;
-  }
-
-  const session = auth.state.session;
-  const role = session.user.role;
-  const sections = useMemo(() => getNavigationSections(role), [role]);
-  const meta = pageMeta(location.pathname);
-
-  useRealtime({
-    tenantId: session.hub.tenantId,
-    branchId: session.hub.id,
-    userId: session.user.id,
-    enabled: api.mode !== "mock" && Boolean(session.hub.tenantId),
-    onChangesAvailable: () => {
-      void api.syncPendingMutations?.();
-    },
-  });
-
-  if (role === "service") {
-    return (
-      <main className="grid min-h-screen place-items-center bg-canvas px-4">
-        <div className="w-full max-w-md">
-          <Alert
-            tone="warning"
-            title="This workspace is for front desk and manager accounts."
-            action={
-              <Button variant="secondary" size="sm" onClick={() => void auth.logout()}>
-                Sign out
-              </Button>
-            }
-          >
-            Ask your manager for a staff account.
-          </Alert>
-        </div>
-      </main>
-    );
-  }
-
-  const switchRole = () => {
-    const nextRole: Role =
-      role === "front_desk"
-        ? "manager"
-        : role === "manager"
-          ? "super_admin"
-          : "front_desk";
-    api.setRole(nextRole);
-    void auth.refresh();
-  };
-
-  const nextRoleLabel =
-    role === "front_desk"
-      ? "View as manager"
-      : role === "manager"
-        ? "View as super admin"
-        : "View as front desk";
-
-  const handleGlobalSearchSubmit = (value: string) => {
-    const trimmed = value.trim();
-    navigate(trimmed ? `/orders?q=${encodeURIComponent(trimmed)}` : "/orders");
-  };
-
-  const userMenuItems = [
-    ...(api.capabilities.roleSwitch
-      ? [
-          {
-            id: "switch-role",
-            label: nextRoleLabel,
-            icon: <UsersIcon className="h-4 w-4" />,
-            onSelect: switchRole,
-          },
-        ]
-      : []),
-    {
-      id: "help",
-      label: "Help & guide",
-      icon: <HelpCircleIcon className="h-4 w-4" />,
-      onSelect: () => setHelpOpen(true),
-    },
-    {
-      id: "sign-out",
-      label: "Sign out",
-      icon: <LogOutIcon className="h-4 w-4" />,
-      onSelect: () => void auth.logout(),
-      tone: "danger" as const,
-    },
-  ];
-
-  return (
-    <>
-      <AppShell
-        sidebar={({ collapsed, toggleCollapsed }) => (
-          <Sidebar
-            sections={sections}
-            utilityItems={[
-              {
-                id: "help",
-                label: "Help & guide",
-                icon: <HelpCircleIcon className="h-5 w-5" />,
-                onClick: () => setHelpOpen(true),
-                active: helpOpen,
-              },
-            ]}
-            collapsed={collapsed}
-            onToggleCollapse={toggleCollapsed}
-            activePath={location.pathname}
-            renderLink={(item, props) => (
-              <NavLink
-                to={item.href}
-                end={item.href === "/" || item.href === "/orders"}
-                className={props.className}
-                aria-current={props["aria-current"]}
-                aria-label={props["aria-label"]}
-                title={props.title}
-              >
-                {props.children}
-              </NavLink>
-            )}
-            footer={
-              <div className="rounded-lg bg-canvas/80 px-3.5 py-3">
-                <div className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      online ? "bg-success" : "bg-warning"
-                    }`}
-                  />
-                  <p className="truncate text-xs font-semibold text-text">
-                    {session.hub.name}
-                  </p>
-                </div>
-                <p className="mt-1 pl-4 text-xs leading-5 text-text-muted">
-                  {roleLabel(role)} ·{" "}
-                  {api.mode === "mock"
-                    ? "Demo data"
-                    : "Changes save on this device."}
-                </p>
-              </div>
-            }
-          />
-        )}
-        topbar={({ openNavigation }) => (
-          <Topbar
-            title={meta.title}
-            breadcrumbs={meta.breadcrumbs}
-            renderBreadcrumbLink={(crumb, className) => (
-              <Link to={crumb.href ?? "/"} className={className}>
-                {crumb.label}
-              </Link>
-            )}
-            subtitle={`${formatToday()} · ${session.hub.name}`}
-            search={{
-              value: globalSearch,
-              onChange: setGlobalSearch,
-              onSubmit: handleGlobalSearchSubmit,
-              placeholder: "Search orders or customers",
-              label: "Search orders or customers",
-            }}
-            actions={
-              <>
-                <Badge tone={online ? "success" : "warning"} dot>
-                  {online ? "Online" : "Offline"}
-                </Badge>
-                {api.mode === "mock" ? (
-                  <Badge tone="accent">Demo</Badge>
-                ) : null}
-              </>
-            }
-            notifications={
-              <NotificationsMenu
-                api={api}
-                online={online}
-                pathname={location.pathname}
-              />
-            }
-            user={{ name: session.user.name, role: roleLabel(role) }}
-            userMenuHeader={
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-medium text-text-muted">
-                  {session.hub.name}
-                </span>
-                {api.mode === "mock" ? (
-                  <Badge tone="accent">Demo</Badge>
-                ) : null}
-              </div>
-            }
-            userMenuItems={userMenuItems}
-            onMenuClick={openNavigation}
-          />
-        )}
-      >
-        <Routes key={role}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/orders/new" element={<CreateOrderPage />} />
-          <Route path="/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/deliveries" element={<DeliveriesPage />} />
-          <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/customers" element={<CustomersPage />} />
-          <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
-          <Route
-            path="/tenants"
-            element={
-              <RequireSuperAdmin role={role} resourceName="tenants">
-                <TenantsPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="/tenants/new"
-            element={
-              <RequireSuperAdmin role={role} resourceName="tenants">
-                <CreateTenantPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="/tenants/:tenantId"
-            element={
-              <RequireSuperAdmin role={role} resourceName="tenants">
-                <TenantDetailPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="/hubs"
-            element={
-              <RequireSuperAdmin role={role} resourceName="hubs">
-                <HubsPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="/hubs/new"
-            element={
-              <RequireSuperAdmin role={role} resourceName="hubs">
-                <CreateHubPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="/hubs/:hubId"
-            element={
-              <RequireSuperAdmin role={role} resourceName="hubs">
-                <HubDetailPage />
-              </RequireSuperAdmin>
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <ComingSoonPage
-                title="Page not found"
-                description="The page you asked for is not available."
-              />
-            }
-          />
-        </Routes>
-      </AppShell>
-
-      <HelpGuideModal
-        open={helpOpen}
-        onClose={() => setHelpOpen(false)}
-        hubName={session.hub.name}
-      />
-    </>
-  );
-}
-
-interface RouteLocationState {
-  from?: { pathname?: string; search?: string };
-}
-
-function intendedPath(state: unknown): string {
-  const from = (state as RouteLocationState | null)?.from;
-  return from?.pathname ? `${from.pathname}${from.search ?? ""}` : "/";
-}
-
-function RequireAuth({ children }: { children: ReactNode }) {
-  const auth = useAuth();
-  const location = useLocation();
-
-  if (auth.state.status === "loading") {
-    return <SessionLoading />;
-  }
-  if (auth.state.status === "error") {
-    return (
-      <SessionError
-        message={auth.state.message}
-        onRetry={() => void auth.refresh()}
-      />
-    );
-  }
-  if (auth.state.status === "password_recovery") {
-    return <Navigate to="/reset-password" replace />;
-  }
-  if (auth.state.status === "unauthenticated") {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  return <>{children}</>;
-}
-
-function PublicOnly({ children }: { children: ReactNode }) {
-  const auth = useAuth();
-  const location = useLocation();
-
-  if (auth.state.status === "loading") {
-    return <SessionLoading />;
-  }
-  if (auth.state.status === "password_recovery") {
-    return <Navigate to="/reset-password" replace />;
-  }
-  if (auth.state.status === "authenticated") {
-    return <Navigate to={intendedPath(location.state)} replace />;
-  }
-  return <>{children}</>;
-}
-
-function AppRoutes() {
+export function AppRoutes({
+  dashboardService,
+  ordersService,
+}: AppRoutesProps = {}) {
   return (
     <Routes>
       <Route
@@ -478,6 +42,7 @@ function AppRoutes() {
           </PublicOnly>
         }
       />
+      <Route path="/login/callback" element={<AuthCallbackPage />} />
       <Route
         path="/forgot-password"
         element={
@@ -487,47 +52,61 @@ function AppRoutes() {
         }
       />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/login/callback" element={<AuthCallbackPage />} />
+
       <Route
-        path="/*"
         element={
           <RequireAuth>
-            <Workspace />
+            <WorkspaceShell />
           </RequireAuth>
         }
-      />
+      >
+        <Route
+          path="/"
+          element={<DashboardPage dashboardService={dashboardService} />}
+        />
+        <Route
+          path="/orders"
+          element={<OrdersPage ordersService={ordersService} />}
+        />
+        <Route
+          path="/orders/new"
+          element={<CreateOrderPage ordersService={ordersService} />}
+        />
+        <Route
+          path="/orders/:id"
+          element={<OrderDetailPage ordersService={ordersService} />}
+        />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/items" element={<ItemsPage />} />
+        <Route path="/deliveries" element={<DeliveriesPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }
 
 export interface AppProps {
-  api?: AppApi;
+  authService?: AuthService;
+  dashboardService?: DashboardService;
+  ordersService?: OrdersService;
 }
 
-export function App({ api: providedApi }: AppProps = {}) {
-  const [tokenStore] = useState(() => createAccessTokenStore());
-  const [bearerAuthRequired] = useState(() => {
-    try {
-      return Boolean(readSupabaseAuthConfig(import.meta.env));
-    } catch {
-      return true;
-    }
-  });
-  const [api] = useState(
-    () =>
-      providedApi ??
-      createAppApi(readApiConfig(), {
-        getAccessToken: () => tokenStore.get(),
-        setAccessToken: (token) => tokenStore.set(token),
-        requireBearerAuth: bearerAuthRequired,
-      }),
-  );
-
+export function App({
+  authService,
+  dashboardService,
+  ordersService,
+}: AppProps = {}) {
   return (
-    <ApiProvider api={api}>
-      <AuthProvider tokenStore={tokenStore}>
-        <AppRoutes />
+    <TooltipProvider>
+      <AuthProvider authService={authService}>
+        <ErrorBoundary fallbackTitle="Application Error">
+          <AppRoutes
+            dashboardService={dashboardService}
+            ordersService={ordersService}
+          />
+        </ErrorBoundary>
       </AuthProvider>
-    </ApiProvider>
+    </TooltipProvider>
   );
 }

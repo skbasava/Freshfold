@@ -41,6 +41,7 @@ export const tenantSchema = z.object({
   metadata: tenantMetadataSchema,
   contactEmail: z.string().email().nullable().optional(),
   contactPhone: z.string().nullable().optional(),
+  rcVersion: z.string().optional(),
   version: z.number().int().positive(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),

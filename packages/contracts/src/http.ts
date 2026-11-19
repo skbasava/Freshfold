@@ -2,6 +2,9 @@ import { z } from "zod";
 import { internalContextSchema } from "./auth";
 
 export const REQUEST_ID_HEADER = "x-request-id";
+export const HEADER_TENANT_ID = "x-tenant-id";
+export const HEADER_HUB_ID = "x-hub-id";
+export const HEADER_RC_VERSION = "x-rc-version";
 export const INTERNAL_CONTEXT_HEADER = "x-internal-context";
 export const INTERNAL_SIGNATURE_HEADER = "x-internal-signature";
 export const INTERNAL_KEY_ID_HEADER = "x-internal-key-id";

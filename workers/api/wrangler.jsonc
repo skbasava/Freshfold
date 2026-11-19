@@ -1,0 +1,34 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-erp-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "laundry-erp-db",
+      "database_id": "382ef6b2-19c9-47f3-a09f-3bf1dc7a227b",
+      "migrations_dir": "../../migrations/api"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "STORAGE",
+      "bucket_name": "laundry-erp-storage"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "D1_STORAGE_LIMIT_BYTES": "524288000",
+    "SUPABASE_URL": "https://cnxprbxuztftolilepvz.supabase.co",
+    "SUPABASE_JWKS_URL": "https://cnxprbxuztftolilepvz.supabase.co/auth/v1/.well-known/jwks.json",
+    "SUPABASE_JWT_ISSUER": "https://cnxprbxuztftolilepvz.supabase.co/auth/v1",
+    "SUPABASE_JWT_AUDIENCE": "authenticated"
+  }
+}

@@ -15,6 +15,7 @@ export const hubSchema = z.object({
   phone: z.string().nullable().optional(),
   timezone: z.string().min(1).default("Asia/Kolkata"),
   isActive: z.boolean(),
+  rcVersion: z.string().nullable().optional(),
   settings: hubSettingsSchema,
   metadata: hubMetadataSchema,
   version: z.number().int().positive(),

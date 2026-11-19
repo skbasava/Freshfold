@@ -1,0 +1,1151 @@
+/*
+ * FreshFold Order Operations Data Table — Custom Design System
+ *
+ * Layered cleanly on top of shadcn/ui Table, Tabs, and DropdownMenu primitives.
+ * Engineered for crisp scannability on Desktop, generous touch ergonomics on
+ * iPad / Tablets (portrait & landscape), and touch-native cards on iPhone.
+ */
+
+/* ==========================================================================
+   Scoped Design Tokens
+   ========================================================================== */
+
+.ff-ot-shell {
+  --ff-ot-surface: #ffffff;
+  --ff-ot-surface-header: #f8fafc;
+  --ff-ot-surface-subtle: #f1f5f9;
+  --ff-ot-surface-hover: #f8fbff;
+  --ff-ot-border: #e2e8f0;
+  --ff-ot-border-subtle: #edf2f7;
+  --ff-ot-border-strong: #cbd5e1;
+  --ff-ot-ink: #172f46;
+  --ff-ot-ink-secondary: #334155;
+  --ff-ot-muted: #64748b;
+  --ff-ot-accent: #159d91;
+  --ff-ot-primary: #2563eb;
+  --ff-ot-crimson: #dc2626;
+  --ff-ot-shadow: 0 1px 2px rgba(23, 47, 70, 0.04),
+    0 6px 18px -6px rgba(23, 47, 70, 0.06);
+
+  container-type: inline-size;
+  container-name: ff-orders-table;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 0.9375rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  box-shadow: var(--ff-ot-shadow);
+  overflow: hidden;
+}
+
+.dark .ff-ot-shell {
+  --ff-ot-surface: #18181b;
+  --ff-ot-surface-header: #1d222c;
+  --ff-ot-surface-subtle: rgba(255, 255, 255, 0.06);
+  --ff-ot-surface-hover: rgba(255, 255, 255, 0.035);
+  --ff-ot-border: rgba(255, 255, 255, 0.1);
+  --ff-ot-border-subtle: rgba(255, 255, 255, 0.06);
+  --ff-ot-border-strong: rgba(255, 255, 255, 0.18);
+  --ff-ot-ink: #f8fafc;
+  --ff-ot-ink-secondary: #cbd5e1;
+  --ff-ot-muted: #94a3b8;
+  --ff-ot-accent: #2dd4bf;
+  --ff-ot-primary: #60a5fa;
+  --ff-ot-crimson: #f87171;
+  --ff-ot-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ==========================================================================
+   Card Header Strip (Title, Live Count, Density & Refresh Controls)
+   ========================================================================== */
+
+.ff-ot-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9375rem 1rem;
+  border-bottom: 1px solid var(--ff-ot-border-subtle);
+  background-color: var(--ff-ot-surface);
+}
+
+@container ff-orders-table (min-width: 640px) {
+  .ff-ot-top {
+    padding: 1rem 1.25rem;
+  }
+}
+
+.ff-ot-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.ff-ot-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--ff-ot-ink);
+  line-height: 1.25;
+}
+
+.ff-ot-count-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 1.375rem;
+  padding: 0 0.5625rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface-header);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-muted);
+  white-space: nowrap;
+}
+
+.ff-ot-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Density segmented switch (iPad / Tablet / Desktop only) */
+.ff-ot-density {
+  display: none;
+  align-items: center;
+  padding: 0.1875rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface-header);
+  gap: 0.125rem;
+}
+
+@media (min-width: 768px) {
+  .ff-ot-density {
+    display: inline-flex;
+  }
+}
+
+.ff-ot-density-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.625rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--ff-ot-muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.ff-ot-density-btn:hover {
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-density-btn[aria-pressed="true"] {
+  background-color: var(--ff-ot-surface);
+  color: var(--ff-ot-ink);
+  box-shadow: 0 1px 2px rgba(23, 47, 70, 0.08);
+}
+
+.ff-ot-density-btn:focus-visible {
+  outline: 2px solid var(--ff-ot-primary);
+  outline-offset: 1px;
+}
+
+/* ==========================================================================
+   Filter Bar & Action Controls Bar matching reference design
+   ========================================================================== */
+
+.ff-ot-action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background-color: var(--ff-ot-surface);
+  border-bottom: 1px solid var(--ff-ot-border);
+}
+
+@container ff-orders-table (min-width: 680px) {
+  .ff-ot-action-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+  }
+}
+
+.ff-ot-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.ff-ot-btn-customize {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2.125rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  color: var(--ff-ot-ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.ff-ot-btn-customize:hover {
+  background-color: var(--ff-ot-surface-subtle);
+  border-color: var(--ff-ot-border-strong);
+}
+
+.ff-ot-btn-new-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2.125rem;
+  padding: 0 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid #0f172a;
+  background-color: #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 140ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.ff-ot-btn-new-order:hover {
+  background-color: #1e293b;
+  border-color: #1e293b;
+}
+
+.dark .ff-ot-btn-new-order {
+  background-color: #f8fafc;
+  border-color: #f8fafc;
+  color: #0f172a;
+}
+
+.ff-ot-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background-color: var(--ff-ot-surface-header);
+  border-bottom: 1px solid var(--ff-ot-border);
+}
+
+@container ff-orders-table (min-width: 640px) {
+  .ff-ot-filter-bar {
+    padding: 0.625rem 1.25rem;
+  }
+}
+
+.ff-ot-tabs-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.ff-ot-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ff-ot-tabs-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: auto !important;
+  min-height: 2.25rem;
+  padding: 0.1875rem !important;
+  border-radius: 0.625rem !important;
+  background-color: color-mix(in srgb, var(--ff-ot-border) 55%, transparent) !important;
+  width: max-content;
+}
+
+.ff-ot-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  height: 1.9375rem !important;
+  padding: 0 0.75rem !important;
+  border-radius: 0.4375rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  color: var(--ff-ot-muted) !important;
+  white-space: nowrap;
+  transition: background-color 140ms ease, color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.ff-ot-tab:hover {
+  color: var(--ff-ot-ink) !important;
+}
+
+.ff-ot-tab[data-active],
+.ff-ot-tab[aria-selected="true"] {
+  background-color: var(--ff-ot-surface) !important;
+  color: var(--ff-ot-ink) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(23, 47, 70, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--ff-ot-border) 80%, transparent);
+}
+
+.ff-ot-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.125rem;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--ff-ot-muted) 14%, transparent);
+  color: var(--ff-ot-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ff-ot-tab[data-active] .ff-ot-tab-count,
+.ff-ot-tab[aria-selected="true"] .ff-ot-tab-count {
+  background-color: color-mix(in srgb, var(--ff-ot-accent) 14%, transparent);
+  color: var(--ff-ot-accent);
+}
+
+.ff-ot-tab-count[data-alert="true"] {
+  background-color: rgba(220, 38, 38, 0.12);
+  color: var(--ff-ot-crimson);
+}
+
+/* ==========================================================================
+   Structured Data Table (iPad Portrait/Landscape, Tablets & Desktop)
+   ========================================================================== */
+
+.ff-ot-table-wrap {
+  position: relative;
+  width: 100%;
+  background-color: var(--ff-ot-surface);
+}
+
+.ff-ot-table-wrap [data-slot="table-container"] {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ff-ot-border-strong) transparent;
+}
+
+.ff-ot-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 44rem;
+}
+
+/* Sticky crisp uppercase column headers */
+.ff-ot-thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 2.625rem;
+  padding: 0 0.875rem;
+  background-color: var(--ff-ot-surface-header);
+  border-bottom: 1px solid var(--ff-ot-border);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--ff-ot-muted);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.ff-ot-thead th:first-child {
+  padding-left: 1.25rem;
+}
+
+.ff-ot-thead th:last-child {
+  padding-right: 1.25rem;
+}
+
+/* Interactive sort trigger inside table header */
+.ff-ot-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.375rem;
+  margin-left: -0.375rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.ff-ot-sort-btn:hover {
+  background-color: color-mix(in srgb, var(--ff-ot-border) 55%, transparent);
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-sort-btn[data-sorted="true"] {
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-sort-btn:focus-visible {
+  outline: 2px solid var(--ff-ot-primary);
+  outline-offset: 1px;
+}
+
+.ff-ot-sort-icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  opacity: 0.45;
+  flex-shrink: 0;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+
+.ff-ot-sort-btn:hover .ff-ot-sort-icon {
+  opacity: 0.85;
+}
+
+.ff-ot-sort-btn[data-sorted="true"] .ff-ot-sort-icon {
+  opacity: 1;
+  color: var(--ff-ot-accent);
+}
+
+/* Table Body Rows */
+.ff-ot-row {
+  background-color: var(--ff-ot-surface);
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.ff-ot-row td {
+  padding: 0.875rem 0.875rem;
+  border-bottom: 1px solid var(--ff-ot-border-subtle);
+  vertical-align: middle;
+  color: var(--ff-ot-ink-secondary);
+}
+
+.ff-ot-table[data-density="compact"] .ff-ot-row td {
+  padding-top: 0.5625rem;
+  padding-bottom: 0.5625rem;
+}
+
+.ff-ot-row td:first-child {
+  padding-left: 1.25rem;
+}
+
+.ff-ot-row td:last-child {
+  padding-right: 1.25rem;
+}
+
+.ff-ot-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Hover accent bar and subtle elevation wash */
+.ff-ot-row:hover {
+  background-color: var(--ff-ot-surface-hover) !important;
+}
+
+.ff-ot-row:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--ff-ot-accent);
+}
+
+/* Visual attention indicator for orders currently On Hold */
+.ff-ot-row[data-hold="true"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--ff-ot-crimson);
+}
+
+.ff-ot-row[data-hold="true"]:hover {
+  background-color: rgba(220, 38, 38, 0.028) !important;
+}
+
+/* ==========================================================================
+   Refined Cell Elements
+   ========================================================================== */
+
+/* 1. Order CRN ID Chip */
+.ff-ot-crn-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5625rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface-header);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-ink);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+  transition: border-color 140ms ease, background-color 140ms ease,
+    color 140ms ease;
+}
+
+.ff-ot-crn-link:hover {
+  border-color: color-mix(in srgb, var(--ff-ot-accent) 45%, var(--ff-ot-border));
+  background-color: color-mix(in srgb, var(--ff-ot-accent) 8%, var(--ff-ot-surface));
+  color: var(--ff-ot-accent);
+}
+
+.ff-ot-crn-link:focus-visible {
+  outline: 2px solid var(--ff-ot-primary);
+  outline-offset: 2px;
+}
+
+/* 2. Customer Identity Cell (Name + Hold Alert) */
+.ff-ot-customer {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ff-ot-customer-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.ff-ot-customer-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ff-ot-ink);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 15rem;
+}
+
+.ff-ot-hold-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  width: fit-content;
+  max-width: 18rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 0.375rem;
+  background-color: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.dark .ff-ot-hold-pill {
+  background-color: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+.ff-ot-hold-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 3. Service Type Tag */
+.ff-ot-service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ff-ot-ink-secondary);
+  white-space: nowrap;
+}
+
+/* 4. Semantic Status Pill */
+.ff-ot-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.25rem 0.6875rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ff-ot-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ff-ot-status-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.ff-ot-status-pill[data-status="confirmed"] {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.ff-ot-status-pill[data-status="confirmed"] .ff-ot-status-dot {
+  background-color: #2563eb;
+  box-shadow: 0 0 0 2.5px rgba(37, 99, 235, 0.16);
+}
+
+.ff-ot-status-pill[data-status="processing"] {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.ff-ot-status-pill[data-status="processing"] .ff-ot-status-dot {
+  background-color: #d97706;
+  box-shadow: 0 0 0 2.5px rgba(217, 119, 6, 0.16);
+}
+
+.ff-ot-status-pill[data-status="out_for_delivery"] {
+  background-color: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.ff-ot-status-pill[data-status="out_for_delivery"] .ff-ot-status-dot {
+  background-color: #4f46e5;
+  box-shadow: 0 0 0 2.5px rgba(79, 70, 229, 0.16);
+}
+
+.ff-ot-status-pill[data-status="hold"] {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.ff-ot-status-pill[data-status="hold"] .ff-ot-status-dot {
+  background-color: #dc2626;
+  box-shadow: 0 0 0 2.5px rgba(220, 38, 38, 0.18);
+}
+
+.ff-ot-status-pill[data-status="delivered"] {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.ff-ot-status-pill[data-status="delivered"] .ff-ot-status-dot {
+  background-color: #16a34a;
+  box-shadow: 0 0 0 2.5px rgba(22, 163, 74, 0.16);
+}
+
+.ff-ot-status-pill[data-status="cancelled"] {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.ff-ot-status-pill[data-status="cancelled"] .ff-ot-status-dot {
+  background-color: #64748b;
+}
+
+.dark .ff-ot-status-pill[data-status="confirmed"] {
+  background-color: rgba(37, 99, 235, 0.16);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #93c5fd;
+}
+
+.dark .ff-ot-status-pill[data-status="processing"] {
+  background-color: rgba(217, 119, 6, 0.16);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fcd34d;
+}
+
+.dark .ff-ot-status-pill[data-status="out_for_delivery"] {
+  background-color: rgba(79, 70, 229, 0.18);
+  border-color: rgba(129, 140, 248, 0.28);
+  color: #a5b4fc;
+}
+
+.dark .ff-ot-status-pill[data-status="hold"] {
+  background-color: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
+
+.dark .ff-ot-status-pill[data-status="delivered"] {
+  background-color: rgba(22, 163, 74, 0.16);
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #86efac;
+}
+
+.dark .ff-ot-status-pill[data-status="cancelled"] {
+  background-color: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+}
+
+/* 5. Delivery Slot Window Cell */
+.ff-ot-slot-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-ink-secondary);
+  white-space: nowrap;
+}
+
+.ff-ot-slot-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ff-ot-muted);
+  flex-shrink: 0;
+}
+
+/* 6. Row Actions Cell */
+.ff-ot-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.ff-ot-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.875rem;
+  padding: 0 0.5625rem;
+  border-radius: 0.4375rem;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ff-ot-muted);
+  text-decoration: none;
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease;
+}
+
+.ff-ot-row:hover .ff-ot-open-btn,
+.ff-ot-open-btn:focus-visible {
+  border-color: var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-open-btn:hover {
+  border-color: color-mix(in srgb, var(--ff-ot-accent) 45%, var(--ff-ot-border));
+  color: var(--ff-ot-accent);
+}
+
+/* ==========================================================================
+   Loading & Empty States Inside Shell
+   ========================================================================== */
+
+.ff-ot-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.25rem;
+  text-align: center;
+}
+
+.ff-ot-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 0.875rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface-header);
+  color: var(--ff-ot-muted);
+}
+
+.ff-ot-empty-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-empty-desc {
+  margin: 0.25rem 0 0;
+  max-width: 22rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--ff-ot-muted);
+}
+
+/* ==========================================================================
+   Structured Mobile Order Cards (< 768px — iPhone / Compact Devices)
+   Distinct card separation + explicit field labels mirror the desktop table
+   columns so laundry staff never have to guess what any value means.
+   ========================================================================== */
+
+.ff-ot-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background-color: var(--ff-ot-surface-header);
+}
+
+.ff-ot-mcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.75rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  box-shadow: 0 1px 2px rgba(23, 47, 70, 0.04);
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.ff-ot-mcard[data-hold="true"] {
+  border-left: 3px solid var(--ff-ot-crimson);
+}
+
+.ff-ot-mcard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 0.9375rem 0.75rem;
+}
+
+.ff-ot-mcard-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.ff-ot-mcard-name {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--ff-ot-ink);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ff-ot-mcard-name:hover {
+  color: var(--ff-ot-accent);
+}
+
+.ff-ot-mcard-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-muted);
+  letter-spacing: -0.01em;
+}
+
+/* Explicitly labeled 2-column detail grid (Service | Delivery Slot) */
+.ff-ot-mcard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0.9375rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5625rem;
+  border: 1px solid var(--ff-ot-border-subtle);
+  background-color: var(--ff-ot-surface-header);
+  gap: 0.75rem;
+}
+
+.ff-ot-mcard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ff-ot-mcard-field + .ff-ot-mcard-field {
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--ff-ot-border);
+}
+
+.ff-ot-mcard-label {
+  font-size: 0.625rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ff-ot-muted);
+  line-height: 1.1;
+}
+
+.ff-ot-mcard-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-ink);
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.ff-ot-mcard-value span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ff-ot-mcard-hold {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4375rem;
+  margin: 0.625rem 0.9375rem 0;
+  padding: 0.5rem 0.6875rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background-color: rgba(220, 38, 38, 0.06);
+  color: #b91c1c;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.dark .ff-ot-mcard-hold {
+  border-color: rgba(248, 113, 113, 0.28);
+  background-color: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.ff-ot-mcard-hold strong {
+  font-weight: 650;
+}
+
+.ff-ot-mcard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.9375rem;
+  border-top: 1px solid var(--ff-ot-border-subtle);
+  background-color: color-mix(in srgb, var(--ff-ot-surface-header) 55%, var(--ff-ot-surface));
+}
+
+.ff-ot-mcard-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: 2.25rem;
+  padding: 0 0.5625rem;
+  margin-left: -0.5625rem;
+  border: none;
+  border-radius: 0.4375rem;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ff-ot-muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.ff-ot-mcard-copy:hover,
+.ff-ot-mcard-copy:active {
+  background-color: var(--ff-ot-surface-subtle);
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-mcard-copy[data-copied="true"] {
+  color: var(--ff-ot-accent);
+}
+
+.ff-ot-mcard-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ff-ot-ink);
+  text-decoration: none;
+  transition: border-color 140ms ease, color 140ms ease,
+    background-color 140ms ease;
+}
+
+.ff-ot-mcard-action:hover,
+.ff-ot-mcard-action:active {
+  border-color: color-mix(in srgb, var(--ff-ot-accent) 50%, var(--ff-ot-border));
+  color: var(--ff-ot-accent);
+}
+
+@media (max-width: 359px) {
+  .ff-ot-mcard-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .ff-ot-mcard-field + .ff-ot-mcard-field {
+    padding-left: 0;
+    padding-top: 0.5rem;
+    border-left: none;
+    border-top: 1px solid var(--ff-ot-border);
+  }
+}
+
+/* ==========================================================================
+   Table Footer Bar (Range Summary, Page Size & Pagination Controls)
+   ========================================================================== */
+
+.ff-ot-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface-header);
+}
+
+@container ff-orders-table (min-width: 600px) {
+  .ff-ot-footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+  }
+}
+
+.ff-ot-footer-summary {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-muted);
+}
+
+.ff-ot-footer-summary strong {
+  font-weight: 650;
+  color: var(--ff-ot-ink);
+}
+
+.ff-ot-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+@container ff-orders-table (min-width: 600px) {
+  .ff-ot-pagination {
+    justify-content: flex-end;
+  }
+}
+
+.ff-ot-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--ff-ot-muted);
+}
+
+.ff-ot-pagesize-select {
+  height: 1.875rem;
+  padding: 0 0.5rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--ff-ot-border);
+  background-color: var(--ff-ot-surface);
+  color: var(--ff-ot-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ff-ot-pagesize-select:focus-visible {
+  outline: 2px solid var(--ff-ot-primary);
+  outline-offset: 1px;
+}
+
+.ff-ot-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.ff-ot-page-indicator {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ff-ot-muted);
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Coarse-Pointer Ergonomics (iPadOS, iOS, Android Tablets) & Reduced Motion
+   ========================================================================== */
+
+@media (pointer: coarse) {
+  .ff-ot-tab {
+    min-height: 2.375rem !important;
+    padding: 0 0.875rem !important;
+  }
+
+  .ff-ot-row td {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .ff-ot-open-btn {
+    border-color: var(--ff-ot-border);
+    background-color: var(--ff-ot-surface);
+    color: var(--ff-ot-ink);
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+  }
+
+  .ff-ot-pagesize-select {
+    min-height: 2.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-ot-density-btn,
+  .ff-ot-tab,
+  .ff-ot-sort-btn,
+  .ff-ot-sort-icon,
+  .ff-ot-row,
+  .ff-ot-crn-link,
+  .ff-ot-open-btn,
+  .ff-ot-mcard,
+  .ff-ot-mcard-copy,
+  .ff-ot-mcard-action {
+    transition: none;
+  }
+}

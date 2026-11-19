@@ -1,0 +1,371 @@
+/*
+ * FreshFold Top Navbar — Custom Corporate Minimalist Stylesheet
+ *
+ * Engineered to sit cleanly inside the floating inset workspace card across
+ * iPhone (with safe-area top inset), iPad / Tablets (portrait & landscape),
+ * and Desktop viewports.
+ */
+
+:root {
+  --ff-topbar-bg: rgba(255, 255, 255, 0.92);
+  --ff-topbar-border: #e2e8f0;
+  --ff-topbar-border-strong: #cbd5e1;
+  --ff-topbar-ink: #0f172a;
+  --ff-topbar-muted: #64748b;
+  --ff-topbar-surface: #ffffff;
+  --ff-topbar-surface-subtle: #f8fafc;
+  --ff-topbar-surface-hover: #f1f5f9;
+  --ff-topbar-avatar-bg: #0f172a;
+  --ff-topbar-avatar-fg: #ffffff;
+  --ff-topbar-height: 3.5rem;
+}
+
+.dark {
+  --ff-topbar-bg: rgba(24, 24, 27, 0.9);
+  --ff-topbar-border: rgba(255, 255, 255, 0.09);
+  --ff-topbar-border-strong: rgba(255, 255, 255, 0.18);
+  --ff-topbar-ink: #f8fafc;
+  --ff-topbar-muted: #94a3b8;
+  --ff-topbar-surface: #18181b;
+  --ff-topbar-surface-subtle: rgba(255, 255, 255, 0.05);
+  --ff-topbar-surface-hover: rgba(255, 255, 255, 0.08);
+  --ff-topbar-avatar-bg: #f8fafc;
+  --ff-topbar-avatar-fg: #0f172a;
+}
+
+.ff-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: calc(var(--ff-topbar-height) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-inline: 0.875rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ff-topbar-border);
+  background-color: var(--ff-topbar-bg);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+@media (min-width: 768px) {
+  .ff-topbar {
+    padding-inline: 1.25rem;
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ff-topbar {
+    padding-inline: 1.5rem;
+  }
+}
+
+/* ==========================================================================
+   Left Zone (Sidebar Toggle, Hairline Divider & Breadcrumbs)
+   ========================================================================== */
+
+.ff-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ff-topbar-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem !important;
+  height: 2.125rem !important;
+  margin-left: -0.25rem;
+  border-radius: 0.5rem !important;
+  border: 1px solid transparent;
+  color: var(--ff-topbar-muted);
+  flex-shrink: 0;
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease;
+}
+
+.ff-topbar-trigger:hover {
+  background-color: var(--ff-topbar-surface-hover) !important;
+  border-color: var(--ff-topbar-border);
+  color: var(--ff-topbar-ink);
+}
+
+.ff-topbar-divider {
+  width: 1px !important;
+  height: 1.125rem !important;
+  margin-inline: 0.125rem;
+  background-color: var(--ff-topbar-border) !important;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.ff-topbar-breadcrumb {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ff-topbar-breadcrumb-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap !important;
+  gap: 0.375rem !important;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ff-topbar-crumb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.ff-topbar-crumb-link {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ff-topbar-muted);
+  white-space: nowrap;
+  transition: color 140ms ease;
+}
+
+.ff-topbar-crumb-link:hover {
+  color: var(--ff-topbar-ink);
+}
+
+.ff-topbar-crumb-current {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ff-topbar-ink) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   Right Zone (Global Search & Account Menu)
+   ========================================================================== */
+
+.ff-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-shrink: 0;
+}
+
+/* Global Search Input (iPad / Tablet / Desktop) */
+.ff-topbar-search {
+  position: relative;
+  display: none;
+  width: 14.5rem;
+}
+
+@media (min-width: 768px) {
+  .ff-topbar-search {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ff-topbar-search {
+    width: 17.5rem;
+  }
+}
+
+.ff-topbar-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.6875rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  transform: translateY(-50%);
+  color: var(--ff-topbar-muted);
+  pointer-events: none;
+  transition: color 140ms ease;
+}
+
+.ff-topbar-search:focus-within .ff-topbar-search-icon {
+  color: var(--ff-topbar-ink);
+}
+
+.ff-topbar-search-input {
+  height: 2.125rem !important;
+  width: 100%;
+  padding-left: 2.0625rem !important;
+  padding-right: 0.75rem !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid var(--ff-topbar-border) !important;
+  background-color: var(--ff-topbar-surface-subtle) !important;
+  color: var(--ff-topbar-ink);
+  font-size: 0.8125rem !important;
+  box-shadow: none !important;
+  transition: background-color 140ms ease, border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.ff-topbar-search-input::placeholder {
+  color: var(--ff-topbar-muted);
+}
+
+.ff-topbar-search-input:hover {
+  border-color: var(--ff-topbar-border-strong) !important;
+}
+
+.ff-topbar-search-input:focus {
+  background-color: var(--ff-topbar-surface) !important;
+  border-color: var(--ff-topbar-border-strong) !important;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+.dark .ff-topbar-search-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Account Menu Trigger */
+.ff-topbar-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem !important;
+  height: 2.25rem !important;
+  padding: 0.25rem 0.5rem 0.25rem 0.3125rem !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--ff-topbar-ink);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.ff-topbar-account-btn:hover,
+.ff-topbar-account-btn[aria-expanded="true"] {
+  background-color: var(--ff-topbar-surface-subtle) !important;
+  border-color: var(--ff-topbar-border);
+}
+
+.ff-topbar-avatar {
+  width: 1.75rem !important;
+  height: 1.75rem !important;
+  border-radius: 0.4375rem !important;
+  flex-shrink: 0;
+}
+
+.ff-topbar-avatar-fallback {
+  border-radius: 0.4375rem !important;
+  background-color: var(--ff-topbar-avatar-bg) !important;
+  color: var(--ff-topbar-avatar-fg) !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+}
+
+.ff-topbar-user-name {
+  display: none;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ff-topbar-ink);
+}
+
+.ff-topbar-chevron {
+  display: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ff-topbar-muted);
+  flex-shrink: 0;
+  transition: transform 160ms ease, color 140ms ease;
+}
+
+.ff-topbar-account-btn[aria-expanded="true"] .ff-topbar-chevron {
+  transform: rotate(180deg);
+  color: var(--ff-topbar-ink);
+}
+
+@media (min-width: 640px) {
+  .ff-topbar-user-name,
+  .ff-topbar-chevron {
+    display: inline-block;
+  }
+}
+
+/* Account Dropdown Menu Details */
+.ff-topbar-menu {
+  min-width: 14.5rem !important;
+  border-radius: 0.625rem !important;
+}
+
+.ff-topbar-menu-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  padding: 0.25rem 0.125rem;
+}
+
+.ff-topbar-menu-name {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ff-topbar-ink);
+  line-height: 1.25;
+}
+
+.ff-topbar-menu-email {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ff-topbar-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ff-topbar-role-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ff-topbar-border);
+  background-color: var(--ff-topbar-surface-subtle);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ff-topbar-muted);
+}
+
+/* ==========================================================================
+   Coarse-Pointer Touch Ergonomics (iPhone / iPad / Tablets) & Reduced Motion
+   ========================================================================== */
+
+@media (pointer: coarse) {
+  .ff-topbar-trigger {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+
+  .ff-topbar-account-btn {
+    min-height: 2.5rem !important;
+  }
+
+  .ff-topbar-search-input {
+    height: 2.375rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-topbar-trigger,
+  .ff-topbar-crumb-link,
+  .ff-topbar-search-icon,
+  .ff-topbar-search-input,
+  .ff-topbar-account-btn,
+  .ff-topbar-chevron {
+    transition: none;
+  }
+}

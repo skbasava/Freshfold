@@ -1,0 +1,19 @@
+{
+  "name": "@laundry/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "wrangler dev --config wrangler.jsonc --port 8787 --local",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply laundry-erp-db --local --config wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply laundry-erp-db --remote --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@laundry/calendar-client": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "hono": "4.13.17",
+    "zod": "4.6.7"
+  }
+}
