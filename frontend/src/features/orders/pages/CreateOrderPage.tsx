@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Building,
+  Building2,
   Check,
   CheckCircle2,
   Clock,
@@ -22,6 +23,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { useOptionalAuth } from "@/features/auth";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -67,18 +69,56 @@ import type {
   PricingQuoteResult,
 } from "../types/orders.types";
 import { ReceiptDocket } from "../components/ReceiptDocket";
+import { FloatingInput } from "../components/FloatingInput";
 
-function GoogleCalendarFlaticonIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <rect x="6" y="8" width="36" height="34" rx="6" fill="#FFFFFF" stroke="#4285F4" strokeWidth="2.5" />
-      <path d="M6 18H42V14C42 10.6863 39.3137 8 36 8H12C8.68629 8 6 10.6863 6 14V18Z" fill="#4285F4" />
-      <rect x="14" y="4" width="4" height="8" rx="2" fill="#EA4335" />
-      <rect x="30" y="4" width="4" height="8" rx="2" fill="#EA4335" />
-      <text x="24" y="34" textAnchor="middle" fill="#4285F4" fontSize="13" fontWeight="bold" fontFamily="sans-serif">31</text>
-    </svg>
-  );
-}
+
+const COLLECTION_MODES = [
+  { value: "full", title: "Pay in full", hint: "100% now" },
+  { value: "delivery", title: "On delivery", hint: "Pay on pickup" },
+  { value: "advance", title: "Advance", hint: "Partial deposit" },
+] as const;
+
+const PAYMENT_METHODS: {
+  value: PaymentMethod;
+  title: string;
+  hint: string;
+  icon: React.ReactNode;
+  activeClass: string;
+  refLabel: string;
+}[] = [
+    {
+      value: "cash",
+      title: "Cash",
+      hint: "Counter cash",
+      icon: <CashPaymentFlaticonIcon className="size-5" />,
+      activeClass: "border-emerald-600 bg-emerald-50/70 ring-1 ring-emerald-600/20",
+      refLabel: "Remarks (optional)",
+    },
+    {
+      value: "upi",
+      title: "UPI / QR",
+      hint: "GPay, PhonePe",
+      icon: <UpiPaymentFlaticonIcon className="size-5" />,
+      activeClass: "border-blue-600 bg-blue-50/70 ring-1 ring-blue-600/20",
+      refLabel: "UPI transaction ID",
+    },
+    {
+      value: "card",
+      title: "Card",
+      hint: "POS swipe",
+      icon: <CardPaymentFlaticonIcon className="size-5" />,
+      activeClass: "border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600/20",
+      refLabel: "Approval code / last 4 digits",
+    },
+    {
+      value: "net_banking",
+      title: "Bank transfer",
+      hint: "NEFT / IMPS",
+      icon: <Building className="size-5 text-purple-600" />,
+      activeClass: "border-purple-600 bg-purple-50/70 ring-1 ring-purple-600/20",
+      refLabel: "UTR / reference number",
+    },
+  ];
 
 interface CustomerOption {
   id: number;
@@ -118,6 +158,9 @@ export function CreateOrderPage({
   ordersService = defaultOrdersService,
 }: CreateOrderPageProps) {
   const navigate = useNavigate();
+  const auth = useOptionalAuth();
+  const activeHubName = auth?.session?.user.hubName ?? "Main Branch";
+  const [activeRateCardId, setActiveRateCardId] = useState<number>(1);
 
   // Catalogs
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -157,6 +200,7 @@ export function CreateOrderPage({
   const [customAdvanceRupees, setCustomAdvanceRupees] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [cashReceivedRupees, setCashReceivedRupees] = useState("");
 
   // Step 3: Complete State & Created Order Reference
   const [submitting, setSubmitting] = useState(false);
@@ -264,7 +308,9 @@ export function CreateOrderPage({
         apiFetch("/api/v1/customers?limit=100").catch(() => null),
         apiFetch("/api/v1/services").catch(() => null),
         apiFetch("/api/v1/items?limit=100&includeInactive=true").catch(() => null),
-        apiFetch("/api/v1/rate-cards/1/items").catch(() => null),
+        apiFetch("/api/v1/rate-cards/current/items")
+          .catch(() => apiFetch("/api/v1/rate-cards/1/items"))
+          .catch(() => null),
       ]);
 
       if (cRes && cRes.ok) {
@@ -335,7 +381,11 @@ export function CreateOrderPage({
       if (rRes && rRes.ok) {
         const rJson = (await rRes.json()) as {
           data?: RateCardItemLookup[];
+          rateCard?: { id: number };
         };
+        if (rJson.rateCard?.id) {
+          setActiveRateCardId(rJson.rateCard.id);
+        }
         const rates = rJson.data ?? [];
         const map: Record<string, number> = {};
         for (const r of rates) {
@@ -355,17 +405,22 @@ export function CreateOrderPage({
     void loadInitialData();
   }, []);
 
+  function toLocalInputValue(d: Date) {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   // Default delivery to +48 hours
   useEffect(() => {
     const d = new Date();
     d.setDate(d.getDate() + 2);
-    setPromisedDeliveryDate(d.toISOString().slice(0, 16));
+    setPromisedDeliveryDate(toLocalInputValue(d));
   }, []);
 
   function setTurnaroundPreset(hours: number) {
     const d = new Date();
     d.setHours(d.getHours() + hours);
-    setPromisedDeliveryDate(d.toISOString().slice(0, 16));
+    setPromisedDeliveryDate(toLocalInputValue(d));
   }
 
   // Active Service Record
@@ -406,6 +461,21 @@ export function CreateOrderPage({
         ? 0
         : Math.min(totalPayablePaise, advancePaise);
   const balanceDuePaise = Math.max(0, totalPayablePaise - collectNowPaise);
+  const advanceError =
+    paymentType === "advance" && customAdvanceRupees !== ""
+      ? advancePaise <= 0
+        ? "Enter an amount greater than ₹0"
+        : advancePaise > totalPayablePaise
+          ? `Advance can't exceed ${formatPaiseToInr(totalPayablePaise)}`
+          : null
+      : null;
+
+  const advanceInvalid =
+    paymentType === "advance" && (advancePaise <= 0 || advancePaise > totalPayablePaise);
+
+  const cashReceivedPaise = Math.round((parseFloat(cashReceivedRupees) || 0) * 100);
+  const changeDuePaise = Math.max(0, cashReceivedPaise - collectNowPaise);
+  const activeMethod = PAYMENT_METHODS.find((m) => m.value === paymentMethod);
 
   // Live Quote Engine
   useEffect(() => {
@@ -604,7 +674,7 @@ export function CreateOrderPage({
 
         rateUpdates[`${svc.id}:${createdItem.id}`] = svcPricePaise;
 
-        return apiFetch("/api/v1/rate-cards/1/items", {
+        return apiFetch(`/api/v1/rate-cards/${activeRateCardId}/items`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -652,6 +722,7 @@ export function CreateOrderPage({
     setCustomAdvanceRupees("");
     setPaymentNotes("");
     setCheckoutStep("payment");
+    setCashReceivedRupees("");
   }
 
   async function handleConfirmAndPlaceOrder() {
@@ -728,11 +799,11 @@ export function CreateOrderPage({
     const totalFormatted = formatPaiseToInr(createdOrder.order.totalAmountPaise);
     const paidFormatted = formatPaiseToInr(
       createdBilling?.capturedAmountPaise ??
-        (paymentType === "full" ? createdOrder.order.totalAmountPaise : 0),
+      (paymentType === "full" ? createdOrder.order.totalAmountPaise : 0),
     );
     const dueFormatted = formatPaiseToInr(
       createdBilling?.balanceDuePaise ??
-        (paymentType === "delivery" ? createdOrder.order.totalAmountPaise : 0),
+      (paymentType === "delivery" ? createdOrder.order.totalAmountPaise : 0),
     );
     const deliveryFormatted = formatDateTime(createdOrder.order.promisedDeliveryAt);
     const primarySvc = createdOrder.order.primaryService || "Laundry Services";
@@ -753,19 +824,17 @@ Thank you for choosing FreshFold!`;
     window.open(`https://wa.me/${targetPhone}?text=${encoded}`, "_blank");
 
     try {
-      if (ordersService.sendNotification) {
-        await ordersService.sendNotification(createdOrder.order.id, {
-          channel: "whatsapp",
-          recipientPhone: phone,
-          message,
-        });
-      }
-      setNotificationStatus((prev) => ({ ...prev, whatsapp: true }));
-      setNotificationNotice("WhatsApp confirmation dispatched!");
-      setTimeout(() => setNotificationNotice(null), 3000);
+      await ordersService.sendNotification?.(createdOrder.order.id, {
+        channel: "whatsapp",
+        recipientPhone: phone,
+        message,
+      });
+      setNotificationNotice("WhatsApp message opened and logged.");
     } catch {
-      setNotificationStatus((prev) => ({ ...prev, whatsapp: true }));
+      setNotificationNotice("WhatsApp opened, but the send could not be logged.");
     }
+    setNotificationStatus((prev) => ({ ...prev, whatsapp: true }));
+    setTimeout(() => setNotificationNotice(null), 3000);
   }
 
   async function handleSendSms() {
@@ -776,19 +845,20 @@ Thank you for choosing FreshFold!`;
     const message = `FreshFold: Your laundry order #${createdOrder.order.orderNumber} for ${totalFormatted} is confirmed! Estimated ready date: ${formatDateTime(createdOrder.order.promisedDeliveryAt)}.`;
 
     try {
-      if (ordersService.sendNotification) {
-        await ordersService.sendNotification(createdOrder.order.id, {
-          channel: "sms",
-          recipientPhone: phone,
-          message,
-        });
+      if (!ordersService.sendNotification) {
+        throw new Error("SMS is not configured");
       }
+      await ordersService.sendNotification(createdOrder.order.id, {
+        channel: "sms",
+        recipientPhone: phone,
+        message,
+      });
       setNotificationStatus((prev) => ({ ...prev, sms: true }));
-      setNotificationNotice("SMS notification triggered via provider!");
-      setTimeout(() => setNotificationNotice(null), 3000);
+      setNotificationNotice("SMS sent to customer.");
     } catch {
-      setNotificationStatus((prev) => ({ ...prev, sms: true }));
+      setNotificationNotice("Could not send SMS. Please try again.");
     }
+    setTimeout(() => setNotificationNotice(null), 3000);
   }
 
   function handleStartNewOrder() {
@@ -804,11 +874,40 @@ Thank you for choosing FreshFold!`;
     setCheckoutStep("cart");
   }
 
+
+  const settledPaidPaise = createdOrder
+    ? (createdBilling?.capturedAmountPaise ??
+      (paymentType === "full" ? createdOrder.order.totalAmountPaise : collectNowPaise))
+    : 0;
+
+  const settledDuePaise = createdOrder
+    ? (createdBilling?.balanceDuePaise ??
+      Math.max(0, createdOrder.order.totalAmountPaise - settledPaidPaise))
+    : 0;
+
+  const settledPieces = createdOrder
+    ? createdOrder.items.reduce((a: number, it: any) => a + (it.quantityPieces ?? 1), 0)
+    : 0;
+
+  const proceedHint = !selectedCustomerId
+    ? "Select a customer to continue"
+    : lines.length === 0
+      ? "Add at least one item to continue"
+      : null;
+
+  const placeOrderLabel = submitting
+    ? "Placing order…"
+    : collectNowPaise > 0
+      ? `Place order · Collect ${formatPaiseToInr(collectNowPaise)}`
+      : "Place order";
+
+  const placeOrderHint = advanceInvalid ? "Enter a valid advance amount" : null;
+
   return (
     <TooltipProvider delay={250}>
-      <div className="pos-workspace pb-6 select-none max-w-[1700px] mx-auto px-2 sm:px-4">
+      <div className="pos-workspace pb-6 select-none px-2 sm:px-4">
         {/* ================= HEADER BAR ================= */}
-        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl">
           <div className="flex items-center gap-3">
             <Tooltip>
               <TooltipTrigger
@@ -833,6 +932,10 @@ Thank you for choosing FreshFold!`;
                 <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900">
                   Laundry Counter POS
                 </h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  <Building2 className="size-3 text-blue-600" />
+                  {activeHubName}
+                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">
                 High-velocity counter checkout & docket generation (Per-Piece Services)
@@ -842,23 +945,23 @@ Thank you for choosing FreshFold!`;
 
           <div className="flex items-center gap-2 self-end sm:self-center">
             <Button
-              size="sm"
+              size="lg"
               variant="outline"
               onClick={() => setShowNewCustomerModal(true)}
-              className="h-8 gap-1.5 text-xs font-semibold rounded-xl border-slate-200 hover:border-blue-300 hover:bg-blue-50/60 hover:text-blue-700 transition-colors"
+              className="h-8 gap-1.5 p-5 font-semibold rounded-xl border-slate-200 hover:border-blue-300 hover:bg-blue-50/60 hover:text-blue-700 transition-colors"
             >
               <UserPlus className="size-3.5 text-blue-600" />
-              <span>New Customer</span>
+              <span>+ New Customer</span>
             </Button>
 
             <Button
-              size="sm"
+              size="lg"
               variant="outline"
               onClick={() => setShowNewItemModal(true)}
-              className="h-8 gap-1.5 text-xs font-semibold rounded-xl border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 transition-colors"
+              className="h-8 gap-1.5 p-5 font-semibold rounded-xl border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 transition-colors"
             >
               <Tag className="size-3.5 text-indigo-600" />
-              <span>New Garment</span>
+              <span>+ New Garment</span>
             </Button>
           </div>
         </div>
@@ -922,20 +1025,18 @@ Thank you for choosing FreshFold!`;
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setActiveServiceId(svc.id)}
-                    className={`pos-service-card p-3 rounded-2xl flex flex-col justify-between min-h-[92px] ${
-                      isActive ? "pos-service-card-active" : ""
-                    }`}
+                    className={`pos-service-card p-3 rounded-2xl flex flex-col justify-between min-h-[92px] ${isActive ? "pos-service-card-active" : ""
+                      }`}
                   >
                     <div className="flex items-center justify-between w-full">
                       <div className="p-1 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
                         {renderFlaticonService(svc.code, "size-7")}
                       </div>
                       <span
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          isActive
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isActive
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                          }`}
                       >
                         {priceHint}
                       </span>
@@ -955,7 +1056,7 @@ Thank you for choosing FreshFold!`;
             </div>
 
             {/* 2. Garment Search & Category Filter Pills */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-white py-2">
               <div className="relative flex-1 w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
                 <Input
@@ -963,7 +1064,7 @@ Thank you for choosing FreshFold!`;
                   placeholder="Search garments by name or code (e.g. Shirt, Saree, Suit)..."
                   value={garmentSearch}
                   onChange={(e) => setGarmentSearch(e.target.value)}
-                  className="pl-9 h-9 text-xs rounded-xl border-slate-200 bg-slate-50/70 focus-visible:bg-white"
+                  className="pl-9 h-10 text-xs rounded-xl border-slate-200 bg-slate-50/70 focus-visible:bg-white"
                 />
                 {garmentSearch ? (
                   <button
@@ -983,11 +1084,10 @@ Thank you for choosing FreshFold!`;
                     key={tab}
                     type="button"
                     onClick={() => setSelectedCategoryTab(tab)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      selectedCategoryTab === tab
-                        ? "bg-slate-900 text-white shadow-2xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedCategoryTab === tab
+                      ? "bg-slate-900 text-white shadow-2xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
                   >
                     {tab === "ALL" ? "All" : tab === "GARMENTS" ? "Apparel" : "Linen"}
                   </button>
@@ -1029,11 +1129,10 @@ Thank you for choosing FreshFold!`;
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.99 }}
                     onClick={() => handleAddGarmentToTicket(item)}
-                    className={`pos-garment-card p-3 rounded-2xl flex flex-col justify-between cursor-pointer border transition-all text-left w-full ${
-                      currentQty > 0
-                        ? "border-blue-500 bg-blue-50/20 shadow-xs"
-                        : "border-slate-200 hover:border-blue-300 hover:shadow-xs"
-                    }`}
+                    className={`pos-garment-card p-3 rounded-2xl flex flex-col justify-between cursor-pointer border transition-all text-left w-full ${currentQty > 0
+                      ? "border-blue-500 bg-blue-50/20 shadow-xs"
+                      : "border-slate-200 hover:border-blue-300 hover:shadow-xs"
+                      }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-1.5 mb-2">
@@ -1122,42 +1221,22 @@ Thank you for choosing FreshFold!`;
           <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-3 lg:h-[calc(100vh-15rem)] flex flex-col">
             <Card className="flex flex-col h-full rounded-2xl shadow-sm bg-slate-50 overflow-hidden">
               {/* FIXED TICKET HEADER */}
-              <CardHeader className="shrink-0 p-3.5 bg-slate-50/80 space-y-2">
+              <CardHeader className="shrink-0 bg-slate-50/80 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm font-black text-slate-900">
-                      Order Summary
-                    </CardTitle>
-                    {lines.length > 0 ? (
-                      <Badge className="bg-blue-600 text-white font-mono text-[10px] px-1.5 py-0">
-                        {totalTicketPieces} pcs
-                      </Badge>
-                    ) : null}
-                  </div>
-
-                  {lines.length > 0 && checkoutStep === "cart" ? (
-                    <button
-                      type="button"
-                      onClick={handleClearTicket}
-                      className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  ) : null}
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Order Ticket</span>
                 </div>
 
                 {/* 3-Step Navigation Pills */}
-                <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-1 rounded-xl text-center">
+                <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-2 rounded-xl text-center">
                   <button
                     type="button"
                     onClick={() => {
                       if (checkoutStep !== "complete") setCheckoutStep("cart");
                     }}
-                    className={`py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      checkoutStep === "cart"
-                        ? "bg-white text-blue-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`py-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${checkoutStep === "cart"
+                      ? "bg-white text-blue-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     1. Cart
                   </button>
@@ -1169,20 +1248,18 @@ Thank you for choosing FreshFold!`;
                       }
                     }}
                     disabled={lines.length === 0 || !selectedCustomerId || checkoutStep === "complete"}
-                    className={`py-1 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${
-                      checkoutStep === "payment"
-                        ? "bg-white text-blue-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`py-3 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${checkoutStep === "payment"
+                      ? "bg-white text-blue-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     2. Payment
                   </button>
                   <span
-                    className={`py-1 rounded-lg text-xs font-bold ${
-                      checkoutStep === "complete"
-                        ? "bg-emerald-600 text-white shadow-2xs"
-                        : "text-slate-400"
-                    }`}
+                    className={`py-3 rounded-lg text-xs font-bold ${checkoutStep === "complete"
+                      ? "bg-emerald-600 text-white shadow-2xs"
+                      : "text-slate-400"
+                      }`}
                   >
                     3. Print
                   </span>
@@ -1200,13 +1277,32 @@ Thank you for choosing FreshFold!`;
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                       transition={{ duration: 0.15 }}
-                      className="space-y-3.5"
+                      className="space-y-4"
                     >
-                      {/* Customer Selection Card */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                          <span>Customer Profile *</span>
-                          {selectedCustomer ? (
+                      {/* ============ CUSTOMER ============ */}
+                      <div>
+                        {selectedCustomer && !isChangingCustomer ? (
+                          <div className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50/50 p-2.5">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-2xs">
+                                {selectedCustomer.fullName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate text-xs font-bold text-slate-900">
+                                    {selectedCustomer.fullName}
+                                  </span>
+                                  <span className="rounded border border-slate-200 bg-white px-1.5 text-[10px] font-mono text-slate-500">
+                                    {selectedCustomer.customerCode}
+                                  </span>
+                                </div>
+                                <span className="mt-0.5 flex items-center gap-1 text-[11px] font-mono text-slate-500">
+                                  <Phone className="size-2.5 text-blue-600" />
+                                  {selectedCustomer.phone}
+                                </span>
+                              </div>
+                            </div>
+
                             <button
                               type="button"
                               onClick={() => {
@@ -1215,232 +1311,227 @@ Thank you for choosing FreshFold!`;
                                 setShowCustomerDropdown(false);
                                 setTimeout(() => customerInputRef.current?.focus(), 50);
                               }}
-                              className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                              className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-100 cursor-pointer"
                             >
                               Change
                             </button>
-                          ) : null}
-                        </Label>
-
-                        {selectedCustomer && !isChangingCustomer ? (
-                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/50 border border-blue-200">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="size-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                                {selectedCustomer.fullName.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold text-xs text-slate-900 truncate">
-                                    {selectedCustomer.fullName}
-                                  </span>
-                                  <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                                    {selectedCustomer.customerCode}
-                                  </span>
-                                </div>
-                                <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1 mt-0.5">
-                                  <Phone className="size-2.5 text-blue-600" />
-                                  <span>{selectedCustomer.phone}</span>
-                                </span>
-                              </div>
-                            </div>
                           </div>
                         ) : (
                           <div ref={customerSearchRef} className="relative">
-                            <div className="relative">
-                              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
-                              <Input
-                                ref={customerInputRef}
-                                type="tel"
-                                placeholder="Search mobile number (e.g. 9876)..."
-                                value={customerSearchQuery}
-                                onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                                onFocus={() => {
-                                  if (customerSearchResults.length > 0) setShowCustomerDropdown(true);
-                                }}
-                                className="pl-9 h-9 text-xs font-mono rounded-xl border-slate-200"
-                              />
-                              {isSearchingCustomer ? (
-                                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 animate-spin text-blue-600" />
-                              ) : null}
-                            </div>
+                            <FloatingInput
+                              ref={customerInputRef}
+                              type="tel"
+                              label="Customer mobile number *"
+                              placeholder="Search mobile number (e.g. 98765 43210)..."
+                              icon={<Phone className="size-3.5" />}
+                              value={customerSearchQuery}
+                              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                              onFocus={() => {
+                                if (customerSearchResults.length > 0) setShowCustomerDropdown(true);
+                              }}
+                              className="font-mono"
+                              trailing={
+                                isSearchingCustomer ? (
+                                  <Loader2 className="size-3.5 animate-spin text-blue-600" />
+                                ) : selectedCustomer ? (
+                                  <button
+                                    type="button"
+                                    aria-label="Cancel changing customer"
+                                    onClick={() => {
+                                      setIsChangingCustomer(false);
+                                      setCustomerSearchQuery("");
+                                      setShowCustomerDropdown(false);
+                                    }}
+                                    className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                ) : null
+                              }
+                            />
 
-                            {/* Lazy search prompt */}
-                            {customerSearchQuery.trim().replace(/\D/g, "").length === 1 && (
-                              <p className="text-[11px] text-slate-500 mt-1 pl-1">
-                                Type 2 more digits to search...
-                              </p>
-                            )}
-                            {customerSearchQuery.trim().replace(/\D/g, "").length === 2 && (
-                              <p className="text-[11px] text-slate-500 mt-1 pl-1">
-                                Type 1 more digit to search...
-                              </p>
-                            )}
+                            {/* Lazy search hint */}
+                            {(() => {
+                              const digits = customerSearchQuery.replace(/\D/g, "").length;
+                              if (digits === 0 || digits >= 3) return null;
+                              return (
+                                <p className="mt-1 pl-1 text-[11px] text-slate-500">
+                                  Type {3 - digits} more digit{3 - digits > 1 ? "s" : ""} to search...
+                                </p>
+                              );
+                            })()}
 
-                            {/* Autocomplete Dropdown */}
+                            {/* Results dropdown */}
                             {showCustomerDropdown && customerSearchResults.length > 0 ? (
-                              <div className="absolute z-30 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
+                              <div className="absolute left-0 right-0 z-30 mt-1 max-h-52 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
                                 {customerSearchResults.map((cust) => (
                                   <button
                                     key={cust.id}
                                     type="button"
                                     onClick={() => handleSelectCustomer(cust)}
-                                    className="w-full text-left p-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between cursor-pointer"
+                                    className="flex w-full items-center justify-between p-2.5 text-left transition-colors hover:bg-blue-50 cursor-pointer"
                                   >
                                     <div>
-                                      <div className="font-bold text-xs text-slate-900">
-                                        {cust.fullName}
-                                      </div>
+                                      <div className="text-xs font-bold text-slate-900">{cust.fullName}</div>
                                       <div className="font-mono text-[11px] text-slate-500">
                                         {cust.phone} • {cust.customerCode}
                                       </div>
                                     </div>
-                                    <Badge className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                                    <Badge className="border-blue-200 bg-blue-50 text-[10px] text-blue-700">
                                       Select
                                     </Badge>
                                   </button>
                                 ))}
                               </div>
                             ) : null}
+
+                            {/* Not found state */}
+                            {customerSearchQuery.trim().length >= 3 &&
+                              !isSearchingCustomer &&
+                              customerSearchResults.length === 0 ? (
+                              <div className="mt-1.5 flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 p-2.5">
+                                <span className="text-[11px] text-slate-600">No customer found</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewCustPhone(customerSearchQuery.trim());
+                                    setShowNewCustomerModal(true);
+                                  }}
+                                  className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  <UserPlus className="size-3" />
+                                  Register new
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </div>
 
-                      {/* Ticket Lines List (All Per Piece) */}
+                      {/* ============ CART ITEMS ============ */}
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-bold text-slate-700">
-                          Garment Items ({lines.length})
+                        <Label className="flex items-center justify-between text-xs font-bold text-slate-700">
+                          <span>Cart Items ({lines.length})</span>
                         </Label>
 
                         {lines.length === 0 ? (
-                          <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <FoldedLaundryStackIcon className="size-7 mx-auto mb-1.5 opacity-60" />
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
+                            <FoldedLaundryStackIcon className="mx-auto mb-1.5 size-7 opacity-60" />
                             <p className="text-xs font-bold text-slate-700">Cart is empty</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              Click any garment on the left to add
-                            </p>
+                            <p className="mt-0.5 text-[11px] text-slate-400">Tap any garment to add it</p>
                           </div>
                         ) : (
-                          <div className="divide-y divide-slate-100 max-h-92 overflow-y-auto pos-scroll pr-1">
-                            {lines.map((line, idx) => {
-                              const itm = items.find((i) => i.id === line.itemId);
-                              const svc = services.find((s) => s.id === line.serviceId);
-                              const quotedLine = quote?.lines?.[idx];
-                              const unitRatePaise =
-                                ratePrices[`${line.serviceId}:${line.itemId ?? "none"}`];
-                              const calculatedFallback = unitRatePaise
-                                ? unitRatePaise * (line.quantityPieces ?? 1)
-                                : 0;
+                          <div className="rounded-xl px-4 border border-dashed border-slate-200 bg-slate-50/60">
 
-                              return (
-                                <div
-                                  key={idx}
-                                  className="py-2 flex items-center justify-between gap-2"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="font-bold text-xs text-slate-900 truncate">
-                                      {itm?.name ?? "Garment"}
+                            <div className="pos-scroll max-h-92 divide-y divide-slate-100 overflow-y-auto pr-1">
+                              {lines.map((line, idx) => {
+                                const itm = items.find((i) => i.id === line.itemId);
+                                const svc = services.find((s) => s.id === line.serviceId);
+                                const quotedLine = quote?.lines?.[idx];
+                                const unitRatePaise = ratePrices[`${line.serviceId}:${line.itemId ?? "none"}`];
+                                const fallbackTotal = unitRatePaise
+                                  ? unitRatePaise * (line.quantityPieces ?? 1)
+                                  : 0;
+
+                                return (
+                                  <div
+                                    key={`${line.serviceId}-${line.itemId}`}
+                                    className="flex items-center justify-between gap-2 py-2.5"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="truncate text-xs font-bold text-slate-900">
+                                        {itm?.name ?? "Garment"}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-blue-700">
+                                        <span>{svc?.name}</span>
+                                        {unitRatePaise ? (
+                                          <span className="font-mono font-normal text-slate-400">
+                                            ({formatPaiseToInr(unitRatePaise)}/pc)
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] text-blue-700 font-semibold flex items-center gap-1.5">
-                                      <span>{svc?.name}</span>
-                                      {unitRatePaise ? (
-                                        <span className="text-slate-400 font-mono font-normal">
-                                          ({formatPaiseToInr(unitRatePaise)}/pc)
+
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                                        <button
+                                          type="button"
+                                          aria-label="Decrease quantity"
+                                          onClick={() => handleUpdateQuantity(idx, -1)}
+                                          className="flex size-7 items-center justify-center rounded text-slate-600 hover:bg-white active:scale-95 cursor-pointer"
+                                        >
+                                          <Minus className="size-3" />
+                                        </button>
+                                        <span className="w-6 text-center font-mono text-xs font-bold text-slate-900">
+                                          {line.quantityPieces ?? 1}
                                         </span>
-                                      ) : null}
-                                    </div>
-                                  </div>
+                                        <button
+                                          type="button"
+                                          aria-label="Increase quantity"
+                                          onClick={() => handleUpdateQuantity(idx, 1)}
+                                          className="flex size-7 items-center justify-center rounded text-slate-600 hover:bg-white active:scale-95 cursor-pointer"
+                                        >
+                                          <Plus className="size-3" />
+                                        </button>
+                                      </div>
 
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {/* Stepper */}
-                                    <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 p-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateQuantity(idx, -1)}
-                                        className="size-5 rounded flex items-center justify-center text-slate-600 hover:bg-white cursor-pointer"
-                                      >
-                                        <Minus className="size-2.5" />
-                                      </button>
-                                      <span className="w-6 text-center font-bold text-xs font-mono text-slate-900">
-                                        {line.quantityPieces ?? 1}
+                                      <span className="w-14 text-right font-mono text-xs font-bold text-slate-900">
+                                        {quotedLine
+                                          ? formatPaiseToInr(quotedLine.lineTotalPaise)
+                                          : fallbackTotal > 0
+                                            ? formatPaiseToInr(fallbackTotal)
+                                            : "—"}
                                       </span>
+
                                       <button
                                         type="button"
-                                        onClick={() => handleUpdateQuantity(idx, 1)}
-                                        className="size-5 rounded flex items-center justify-center text-slate-600 hover:bg-white cursor-pointer"
+                                        aria-label="Remove item"
+                                        onClick={() => handleRemoveLine(idx)}
+                                        className="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
                                       >
-                                        <Plus className="size-2.5" />
+                                        <Trash2 className="size-3.5" />
                                       </button>
                                     </div>
-
-                                    <span className="w-14 text-right font-mono font-bold text-xs text-slate-900">
-                                      {quotedLine
-                                        ? formatPaiseToInr(quotedLine.lineTotalPaise)
-                                        : calculatedFallback > 0
-                                          ? formatPaiseToInr(calculatedFallback)
-                                          : "—"}
-                                    </span>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveLine(idx)}
-                                      className="text-slate-400 hover:text-rose-600 p-1 rounded cursor-pointer"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </button>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Turnaround & Delivery Presets */}
-                      <div className="space-y-1 pt-2 border-t border-slate-100">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Clock className="size-3 text-blue-600" />
-                            <span>Promised Ready Date</span>
-                          </Label>
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <button
-                              type="button"
-                              onClick={() => setTurnaroundPreset(24)}
-                              className="font-bold text-blue-600 hover:underline cursor-pointer"
-                            >
-                              +24h
-                            </button>
-                            <span className="text-slate-300">•</span>
-                            <button
-                              type="button"
-                              onClick={() => setTurnaroundPreset(48)}
-                              className="font-bold text-blue-600 hover:underline cursor-pointer"
-                            >
-                              +48h
-                            </button>
-                          </div>
-                        </div>
-                        <Input
+                      {/* ============ PROMISED DATE ============ */}
+                      <div className="space-y-1.5 border-t border-slate-100 pt-5">
+                        <FloatingInput
                           type="datetime-local"
+                          label="Promised ready date"
+                          alwaysFloat
+                          icon={<Clock className="size-3.5" />}
                           value={promisedDeliveryDate}
                           onChange={(e) => setPromisedDeliveryDate(e.target.value)}
-                          className="h-8 text-xs font-mono rounded-xl border-slate-200"
+                          className="font-mono"
                         />
+                        <div className="flex items-center gap-2 pt-1">
+                          {[24, 48, 72].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => setTurnaroundPreset(h)}
+                              className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-blue-100 hover:text-blue-700 cursor-pointer"
+                            >
+                              +{h}h
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* Special Instructions Note */}
-                      <div className="space-y-1 pt-1">
-                        <Label className="text-xs font-bold text-slate-700">
-                          Care Instructions / Starch Notes
-                        </Label>
-                        <Input
-                          type="text"
-                          placeholder="e.g. Extra starch on collars, stain on left sleeve..."
-                          value={specialInstructions}
-                          onChange={(e) => setSpecialInstructions(e.target.value)}
-                          className="h-8 text-xs rounded-xl border-slate-200"
-                        />
-                      </div>
+                      {/* ============ NOTES ============ */}
+                      <FloatingInput
+                        type="text"
+                        label="Care instructions / starch notes"
+                        value={specialInstructions}
+                        onChange={(e) => setSpecialInstructions(e.target.value)}
+                      />
                     </motion.div>
                   )}
 
@@ -1452,193 +1543,195 @@ Thank you for choosing FreshFold!`;
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                       transition={{ duration: 0.15 }}
-                      className="space-y-3.5"
+                      className="space-y-4"
                     >
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/70 border border-blue-200">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">
-                            Step 2: Payment Settlement
-                          </span>
-                          <span className="font-bold text-xs text-slate-900 block truncate">
-                            {selectedCustomer?.fullName}
-                          </span>
+                      {/* ============ SUMMARY HERO ============ */}
+                      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-3.5 text-white shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">
+                              {selectedCustomer?.fullName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                                Payment
+                              </p>
+                              <p className="truncate text-xs font-bold">{selectedCustomer?.fullName}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                              Total payable
+                            </p>
+                            <p className="font-mono text-lg font-black leading-tight">
+                              {formatPaiseToInr(totalPayablePaise)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                            Total Payable
-                          </span>
-                          <span className="text-sm font-black font-mono text-blue-700">
-                            {formatPaiseToInr(totalPayablePaise)}
+                        <div className="mt-3 flex items-center justify-between border-t border-white/20 pt-2 text-[11px] text-blue-100">
+                          <span>{totalTicketPieces} pcs</span>
+                          <span>
+                            Collect now:{" "}
+                            <b className="font-mono text-white">{formatPaiseToInr(collectNowPaise)}</b>
                           </span>
                         </div>
                       </div>
 
-                      {/* Collection Mode */}
+                      {/* ============ COLLECTION MODE ============ */}
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-bold text-slate-800">
-                          Collection Mode *
-                        </Label>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPaymentType("full")}
-                            className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                              paymentType === "full"
-                                ? "border-blue-600 bg-blue-50/60 shadow-2xs"
-                                : "border-slate-200 bg-white hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900">Pay in Full</span>
-                              {paymentType === "full" ? (
-                                <CheckCircle2 className="size-3 text-blue-600" />
-                              ) : null}
-                            </div>
-                            <span className="text-[10px] text-slate-500 mt-0.5">100% upfront</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPaymentType("delivery")}
-                            className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                              paymentType === "delivery"
-                                ? "border-blue-600 bg-blue-50/60 shadow-2xs"
-                                : "border-slate-200 bg-white hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900">On Delivery</span>
-                              {paymentType === "delivery" ? (
-                                <CheckCircle2 className="size-3 text-blue-600" />
-                              ) : null}
-                            </div>
-                            <span className="text-[10px] text-slate-500 mt-0.5">Pay on pickup</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPaymentType("advance")}
-                            className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                              paymentType === "advance"
-                                ? "border-blue-600 bg-blue-50/60 shadow-2xs"
-                                : "border-slate-200 bg-white hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900">Advance</span>
-                              {paymentType === "advance" ? (
-                                <CheckCircle2 className="size-3 text-blue-600" />
-                              ) : null}
-                            </div>
-                            <span className="text-[10px] text-slate-500 mt-0.5">Partial deposit</span>
-                          </button>
+                        <Label className="text-xs font-bold text-slate-800">When will the customer pay?</Label>
+                        <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-slate-100 p-1">
+                          {COLLECTION_MODES.map((mode) => {
+                            const active = paymentType === mode.value;
+                            return (
+                              <button
+                                key={mode.value}
+                                type="button"
+                                onClick={() => setPaymentType(mode.value)}
+                                className={`rounded-lg px-2 py-2 text-left transition-all cursor-pointer ${active
+                                  ? "bg-white shadow-xs ring-1 ring-blue-600/30"
+                                  : "hover:bg-white/60"
+                                  }`}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span
+                                    className={`text-xs font-bold ${active ? "text-blue-700" : "text-slate-700"}`}
+                                  >
+                                    {mode.title}
+                                  </span>
+                                  {active ? <CheckCircle2 className="size-3.5 text-blue-600" /> : null}
+                                </div>
+                                <span className="text-[10px] text-slate-500">{mode.hint}</span>
+                              </button>
+                            );
+                          })}
                         </div>
 
+                        {/* Advance amount */}
                         {paymentType === "advance" && (
-                          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 mt-1.5">
-                            <Label className="text-xs font-bold text-slate-700">
-                              Advance Amount (₹)
-                            </Label>
-                            <Input
+                          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                            <FloatingInput
                               type="number"
-                              min="1"
+                              inputMode="decimal"
+                              min={1}
                               max={Math.floor(totalPayablePaise / 100)}
+                              label="Advance amount"
+                              icon={<span className="text-xs font-bold">₹</span>}
                               value={customAdvanceRupees}
                               onChange={(e) => setCustomAdvanceRupees(e.target.value)}
-                              placeholder="Enter advance deposit amount..."
-                              className="h-8 text-xs font-mono font-bold rounded-lg bg-white"
+                              className={`font-mono font-bold ${advanceError ? "border-rose-400 focus-visible:border-rose-500" : ""
+                                }`}
                             />
+                            {advanceError ? (
+                              <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600">
+                                <AlertCircle className="size-3" />
+                                {advanceError}
+                              </p>
+                            ) : null}
+                            <div className="flex items-center gap-1.5">
+                              {[25, 50, 75].map((pct) => (
+                                <button
+                                  key={pct}
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomAdvanceRupees(
+                                      String(Math.round((totalPayablePaise * pct) / 100) / 100),
+                                    )
+                                  }
+                                  className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:ring-blue-200 cursor-pointer"
+                                >
+                                  {pct}%
+                                </button>
+                              ))}
+                            </div>
                           </div>
+                        )}
+
+                        {paymentType === "delivery" && (
+                          <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">
+                            Nothing is collected now. The full amount is due when the customer picks up.
+                          </p>
                         )}
                       </div>
 
-                      {/* Payment Method Selector */}
+                      {/* ============ PAYMENT METHOD ============ */}
                       {collectNowPaise > 0 ? (
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-bold text-slate-800">
-                            Payment Method *
-                          </Label>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setPaymentMethod("cash")}
-                              className={`p-2 rounded-xl border flex items-center gap-2 text-left transition-all cursor-pointer ${
-                                paymentMethod === "cash"
-                                  ? "border-emerald-600 bg-emerald-50/60 shadow-2xs"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              }`}
-                            >
-                              <CashPaymentFlaticonIcon className="size-4 shrink-0" />
-                              <div>
-                                <span className="text-xs font-bold text-slate-900 block">Cash</span>
-                                <span className="text-[10px] text-slate-500">Counter Cash</span>
-                              </div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setPaymentMethod("upi")}
-                              className={`p-2 rounded-xl border flex items-center gap-2 text-left transition-all cursor-pointer ${
-                                paymentMethod === "upi"
-                                  ? "border-blue-600 bg-blue-50/60 shadow-2xs"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              }`}
-                            >
-                              <UpiPaymentFlaticonIcon className="size-4 shrink-0" />
-                              <div>
-                                <span className="text-xs font-bold text-slate-900 block">UPI / QR</span>
-                                <span className="text-[10px] text-slate-500">GPay, PhonePe</span>
-                              </div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setPaymentMethod("card")}
-                              className={`p-2 rounded-xl border flex items-center gap-2 text-left transition-all cursor-pointer ${
-                                paymentMethod === "card"
-                                  ? "border-indigo-600 bg-indigo-50/60 shadow-2xs"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              }`}
-                            >
-                              <CardPaymentFlaticonIcon className="size-4 shrink-0" />
-                              <div>
-                                <span className="text-xs font-bold text-slate-900 block">Card</span>
-                                <span className="text-[10px] text-slate-500">POS Swipe</span>
-                              </div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setPaymentMethod("net_banking")}
-                              className={`p-2 rounded-xl border flex items-center gap-2 text-left transition-all cursor-pointer ${
-                                paymentMethod === "net_banking"
-                                  ? "border-purple-600 bg-purple-50/60 shadow-2xs"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              }`}
-                            >
-                              <Building className="size-4 shrink-0 text-purple-600" />
-                              <div>
-                                <span className="text-xs font-bold text-slate-900 block">Bank Trf</span>
-                                <span className="text-[10px] text-slate-500">NEFT / IMPS</span>
-                              </div>
-                            </button>
+                          <Label className="text-xs font-bold text-slate-800">Payment method</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {PAYMENT_METHODS.map((m) => {
+                              const active = paymentMethod === m.value;
+                              return (
+                                <button
+                                  key={m.value}
+                                  type="button"
+                                  onClick={() => setPaymentMethod(m.value)}
+                                  className={`relative flex items-center gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer ${active
+                                    ? m.activeClass
+                                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                    }`}
+                                >
+                                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-2xs ring-1 ring-slate-100">
+                                    {m.icon}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-xs font-bold text-slate-900">
+                                      {m.title}
+                                    </span>
+                                    <span className="block truncate text-[10px] text-slate-500">{m.hint}</span>
+                                  </span>
+                                  {active ? (
+                                    <CheckCircle2 className="absolute right-1.5 top-1.5 size-3.5 text-slate-700" />
+                                  ) : null}
+                                </button>
+                              );
+                            })}
                           </div>
+
+                          {/* Cash helper: amount received & change */}
+                          {paymentMethod === "cash" && (
+                            <div className="space-y-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 p-2.5">
+                              <FloatingInput
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                label="Cash received (optional)"
+                                icon={<span className="text-xs font-bold">₹</span>}
+                                value={cashReceivedRupees}
+                                onChange={(e) => setCashReceivedRupees(e.target.value)}
+                                className="font-mono font-bold"
+                              />
+                              {cashReceivedPaise > 0 && (
+                                <div className="flex items-center justify-between text-xs">
+                                  {cashReceivedPaise >= collectNowPaise ? (
+                                    <>
+                                      <span className="font-semibold text-emerald-800">Return change</span>
+                                      <span className="font-mono text-sm font-black text-emerald-700">
+                                        {formatPaiseToInr(changeDuePaise)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="font-semibold text-rose-700">Short by</span>
+                                      <span className="font-mono text-sm font-black text-rose-600">
+                                        {formatPaiseToInr(collectNowPaise - cashReceivedPaise)}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : null}
 
-                      {/* Payment Notes */}
-                      <div className="space-y-1">
-                        <Label className="text-xs font-bold text-slate-700">
-                          Payment Reference / Remarks
-                        </Label>
-                        <Input
-                          type="text"
-                          placeholder="e.g. UPI ref #12345 or Counter Note..."
-                          value={paymentNotes}
-                          onChange={(e) => setPaymentNotes(e.target.value)}
-                          className="h-8 text-xs rounded-xl border-slate-200"
-                        />
-                      </div>
+                      {/* ============ REFERENCE / NOTES ============ */}
+                      <FloatingInput
+                        type="text"
+                        label={collectNowPaise > 0 ? (activeMethod?.refLabel ?? "Remarks") : "Remarks (optional)"}
+                        value={paymentNotes}
+                        onChange={(e) => setPaymentNotes(e.target.value)}
+                      />
                     </motion.div>
                   )}
 
@@ -1649,131 +1742,231 @@ Thank you for choosing FreshFold!`;
                       initial={{ opacity: 0, scale: 0.98 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0 }}
-                      className="space-y-3.5"
+                      className="space-y-4"
                     >
-                      <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-center space-y-1">
-                        <CheckCircle2 className="size-7 text-emerald-600 mx-auto" />
-                        <h3 className="text-sm font-black tracking-tight">
-                          Step 3: Confirmed & Tagged
-                        </h3>
-                        <div className="font-mono text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5 mt-0.5">
-                          <span>Order #{createdOrder.order.orderNumber}</span>
+                      {/* ============ SUCCESS HERO ============ */}
+                      <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-center text-white shadow-sm">
+                        <motion.div
+                          initial={{ scale: 0.4, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 260, damping: 16 }}
+                          className="mx-auto flex size-12 items-center justify-center rounded-full bg-white/20"
+                        >
+                          <CheckCircle2 className="size-7" />
+                        </motion.div>
+                        <h3 className="mt-2 text-sm font-black tracking-tight">Order placed</h3>
+                        <p className="text-[11px] text-emerald-100">Tag the garments, then print the receipt</p>
+
+                        <button
+                          type="button"
+                          onClick={handleCopyOrderNumber}
+                          className="mx-auto mt-2.5 flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 font-mono text-xs font-bold hover:bg-white/25 cursor-pointer"
+                          title="Copy order number"
+                        >
+                          <span>#{createdOrder.order.orderNumber}</span>
+                          {copiedOrderNumber ? <Check className="size-3" /> : <Copy className="size-3" />}
+                        </button>
+                      </div>
+
+                      {/* ============ SETTLEMENT SLIP ============ */}
+                      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <div className="space-y-1.5 p-3 text-xs">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-slate-500">Customer</span>
+                            <span className="truncate font-bold text-slate-900">
+                              {createdOrder.order.customerName}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <Clock className="size-3" /> Ready by
+                            </span>
+                            <span className="font-semibold text-slate-900">
+                              {formatDateTime(createdOrder.order.promisedDeliveryAt)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-slate-500">Items</span>
+                            <span className="font-semibold text-slate-900">{settledPieces} pcs</span>
+                          </div>
+                        </div>
+
+                        {/* Items list */}
+                        <div className="pos-scroll max-h-28 divide-y divide-slate-100 overflow-y-auto border-t border-slate-100 bg-slate-50/60 px-3">
+                          {createdOrder.items.map((it: any, i: number) => (
+                            <div key={it.id ?? i} className="flex justify-between gap-2 py-1.5 text-[11px]">
+                              <span className="truncate text-slate-700">
+                                {it.itemNameSnapshot || "Garment"}{" "}
+                                <span className="font-mono text-slate-400">× {it.quantityPieces ?? 1}</span>
+                              </span>
+                              <span className="shrink-0 font-mono text-slate-700">
+                                {formatPaiseToInr(it.lineTotalPaise)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Totals */}
+                        <div className="space-y-1 border-t border-dashed border-slate-300 p-3 text-xs">
+                          <div className="flex justify-between font-bold text-slate-900">
+                            <span>Total billed</span>
+                            <span className="font-mono">
+                              {formatPaiseToInr(createdOrder.order.totalAmountPaise)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-emerald-700">
+                            <span>Paid{collectNowPaise > 0 ? ` (${paymentMethod.toUpperCase()})` : ""}</span>
+                            <span className="font-mono font-bold">{formatPaiseToInr(settledPaidPaise)}</span>
+                          </div>
+                          <div
+                            className={`flex justify-between ${settledDuePaise > 0 ? "text-amber-700" : "text-slate-400"
+                              }`}
+                          >
+                            <span>Balance due</span>
+                            <span className="font-mono font-bold">{formatPaiseToInr(settledDuePaise)}</span>
+                          </div>
+                        </div>
+
+                        {/* Status strip */}
+                        <div
+                          className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold ${settledDuePaise <= 0
+                              ? "bg-emerald-50 text-emerald-700"
+                              : settledPaidPaise > 0
+                                ? "bg-amber-50 text-amber-800"
+                                : "bg-amber-50 text-amber-800"
+                            }`}
+                        >
+                          {settledDuePaise <= 0 ? (
+                            <>
+                              <CheckCircle2 className="size-3.5" /> Paid in full
+                            </>
+                          ) : settledPaidPaise > 0 ? (
+                            <>
+                              <AlertCircle className="size-3.5" /> Partially paid · collect{" "}
+                              {formatPaiseToInr(settledDuePaise)} on pickup
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="size-3.5" /> Payment pending · collect on pickup
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ============ NOTIFICATIONS ============ */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-slate-700">Send confirmation to customer</Label>
+                        <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={handleCopyOrderNumber}
-                            className="hover:text-emerald-950 p-0.5 rounded cursor-pointer"
-                            title="Copy order number"
+                            onClick={handleSendWhatsApp}
+                            className={`flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all cursor-pointer ${notificationStatus.whatsapp
+                                ? "border-emerald-500 bg-emerald-50"
+                                : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/50"
+                              }`}
                           >
-                            {copiedOrderNumber ? (
-                              <Check className="size-3 text-emerald-700" />
-                            ) : (
-                              <Copy className="size-3" />
-                            )}
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-slate-100">
+                              <WhatsAppFlaticonIcon className="size-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-xs font-bold text-slate-900">WhatsApp</span>
+                              <span className="block text-[10px] text-slate-500">
+                                {notificationStatus.whatsapp ? "Sent · tap to resend" : "Order summary"}
+                              </span>
+                            </span>
+                            {notificationStatus.whatsapp ? (
+                              <Check className="ml-auto size-4 shrink-0 text-emerald-600" />
+                            ) : null}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleSendSms}
+                            className={`flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all cursor-pointer ${notificationStatus.sms
+                                ? "border-blue-500 bg-blue-50"
+                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"
+                              }`}
+                          >
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-slate-100">
+                              <SmsMessageFlaticonIcon className="size-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-xs font-bold text-slate-900">SMS</span>
+                              <span className="block text-[10px] text-slate-500">
+                                {notificationStatus.sms ? "Sent · tap to resend" : "Short message"}
+                              </span>
+                            </span>
+                            {notificationStatus.sms ? (
+                              <Check className="ml-auto size-4 shrink-0 text-blue-600" />
+                            ) : null}
                           </button>
                         </div>
-                      </div>
 
-                      {/* Settlement Slip */}
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                        <div className="flex justify-between text-slate-600">
-                          <span>Customer:</span>
-                          <span className="font-bold text-slate-900">{createdOrder.order.customerName}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-600">
-                          <span>Promised Ready:</span>
-                          <span>{formatDateTime(createdOrder.order.promisedDeliveryAt)}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-200">
-                          <span>Total Billed:</span>
-                          <span className="font-mono">{formatPaiseToInr(createdOrder.order.totalAmountPaise)}</span>
-                        </div>
-                      </div>
-
-                      {/* Customer Notification Buttons */}
-                      <div className="space-y-1">
-                        <Label className="text-xs font-bold text-slate-700">
-                          Customer Notifications
-                        </Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleSendWhatsApp}
-                            className="h-8 border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100/70 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <WhatsAppFlaticonIcon className="size-3.5" />
-                            <span>{notificationStatus.whatsapp ? "WhatsApp Sent ✓" : "WhatsApp"}</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleSendSms}
-                            className="h-8 border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100/70 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <SmsMessageFlaticonIcon className="size-3.5" />
-                            <span>{notificationStatus.sms ? "SMS Sent ✓" : "SMS"}</span>
-                          </Button>
-                        </div>
+                        {notificationNotice ? (
+                          <p className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-700">
+                            {notificationNotice}
+                          </p>
+                        ) : null}
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </CardContent>
 
-              {/* ================= FIXED BOTTOM FOOTER (Always Visible On Desktop) ================= */}
-              <div className="shrink-0 bg-slate-50/95 p-3.5 space-y-2.5 shadow-xs">
+              {/* ================= FOOTER ================= */}
+              <div className="shrink-0 space-y-2.5 bg-slate-50/95 p-3.5">
                 {checkoutStep === "cart" && (
                   <>
-                    {/* Live Financial Summary */}
-                    <div className="p-3 rounded-xl bg-slate-900 text-white space-y-1 shadow-2xs">
+                    {/* Live summary */}
+                    <div className="space-y-1 rounded-xl bg-slate-900 p-3 text-white shadow-2xs">
                       <div className="flex items-center justify-between text-xs text-slate-300">
-                        <span>Subtotal:</span>
+                        <span>Subtotal{totalTicketPieces > 0 ? ` · ${totalTicketPieces} pcs` : ""}</span>
                         <span className="font-mono text-white">
                           {quote ? formatPaiseToInr(quote.subtotalPaise) : "₹0"}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs text-slate-300">
-                        <span>
-                          {quote?.taxSupplyType === "exempt" ? "GST Tax (Exempt):" : "GST Tax (18%):"}
-                        </span>
+                        <span>{quote?.taxSupplyType === "exempt" ? "GST (exempt)" : "GST (18%)"}</span>
                         <span className="font-mono text-white">
                           {quote ? formatPaiseToInr(quote.totalTaxPaise) : "₹0"}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-sm font-bold">
-                        <span>TOTAL:</span>
+                      <div className="flex items-center justify-between border-t border-slate-700 pt-1.5 text-sm font-bold">
+                        <span>Total</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-base font-black font-mono text-white">
+                          {quoting ? <Loader2 className="size-3 animate-spin text-blue-400" /> : null}
+                          <span className="font-mono text-base font-black">
                             {quote ? formatPaiseToInr(quote.totalAmountPaise) : "₹0"}
                           </span>
-                          {quoting ? <Loader2 className="size-3 animate-spin text-blue-400" /> : null}
                         </div>
                       </div>
                     </div>
 
-                    {/* CTA: Proceed to Payment */}
                     <Button
                       type="button"
                       disabled={lines.length === 0 || !selectedCustomerId}
                       onClick={handleProceedToPayment}
-                      className="w-full h-11 pos-cta-btn rounded-xl font-bold text-xs gap-2 shadow-sm cursor-pointer"
+                      className="pos-cta-btn h-11 w-full cursor-pointer gap-2 rounded-xl text-xs font-bold shadow-sm"
                     >
-                      <span>Proceed to Payment</span>
+                      <span>Continue to payment</span>
                       <ArrowRight className="size-4" />
                     </Button>
+
+                    {proceedHint ? (
+                      <p className="text-center text-[11px] font-medium text-slate-500">{proceedHint}</p>
+                    ) : null}
                   </>
                 )}
 
                 {checkoutStep === "payment" && (
                   <>
-                    <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs space-y-1">
-                      <div className="flex justify-between text-emerald-700 font-bold">
-                        <span>Collecting Now:</span>
+                    <div className="space-y-1 rounded-xl border border-slate-200 bg-white p-2.5 text-xs">
+                      <div className="flex justify-between font-bold text-emerald-700">
+                        <span>Collect now</span>
                         <span className="font-mono">{formatPaiseToInr(collectNowPaise)}</span>
                       </div>
-                      <div className="flex justify-between text-amber-700 font-bold pt-0.5 border-t border-slate-100">
-                        <span>Balance Due on Delivery:</span>
+                      <div className="flex justify-between border-t border-slate-100 pt-1 font-bold text-amber-700">
+                        <span>Due at pickup</span>
                         <span className="font-mono">{formatPaiseToInr(balanceDuePaise)}</span>
                       </div>
                     </div>
@@ -1782,26 +1975,32 @@ Thank you for choosing FreshFold!`;
                       <Button
                         type="button"
                         variant="outline"
+                        disabled={submitting}
                         onClick={() => setCheckoutStep("cart")}
-                        className="h-10 px-3 rounded-xl text-xs font-bold border-slate-200 cursor-pointer"
+                        className="h-10 cursor-pointer gap-1.5 rounded-xl border-slate-200 px-3 text-xs font-bold"
                       >
-                        ← Back
+                        <ArrowLeft className="size-3.5" />
+                        <span>Back</span>
                       </Button>
 
                       <Button
                         type="button"
-                        disabled={submitting}
+                        disabled={submitting || advanceInvalid}
                         onClick={handleConfirmAndPlaceOrder}
-                        className="flex-1 h-10 pos-cta-btn rounded-xl font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                        className="pos-cta-btn h-10 min-w-0 flex-1 cursor-pointer gap-1.5 rounded-xl text-xs font-bold shadow-sm"
                       >
                         {submitting ? (
-                          <Loader2 className="size-3.5 animate-spin" />
+                          <Loader2 className="size-3.5 shrink-0 animate-spin" />
                         ) : (
-                          <Check className="size-3.5" />
+                          <Check className="size-3.5 shrink-0" />
                         )}
-                        <span>Place Order & Collect</span>
+                        <span className="truncate">{placeOrderLabel}</span>
                       </Button>
                     </div>
+
+                    {placeOrderHint ? (
+                      <p className="text-center text-[11px] font-medium text-rose-600">{placeOrderHint}</p>
+                    ) : null}
                   </>
                 )}
 
@@ -1810,12 +2009,21 @@ Thank you for choosing FreshFold!`;
                     <Button
                       type="button"
                       onClick={handlePrintDocket}
-                      className="w-full h-10 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer text-xs"
+                      className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 text-xs font-bold text-white shadow-sm hover:bg-slate-800"
                     >
-                      <Printer className="size-3.5" />
-                      <span>Print Receipt</span>
+                      <Printer className="size-4" />
+                      <span>Print receipt</span>
                     </Button>
 
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleStartNewOrder}
+                      className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-slate-200 text-xs font-bold"
+                    >
+                      <Plus className="size-3.5" />
+                      <span>New order</span>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -2005,21 +2213,21 @@ Thank you for choosing FreshFold!`;
 
         {/* ================= PRINT DOCKET (Hidden from screen, active during window.print) ================= */}
         {createdOrder && (
-  <ReceiptDocket
-    order={createdOrder.order}
-    items={createdOrder.items}
-    paidPaise={
-      createdBilling?.capturedAmountPaise ??
-      (paymentType === "full" ? createdOrder.order.totalAmountPaise : collectNowPaise)
-    }
-    balanceDuePaise={
-      createdBilling?.balanceDuePaise ??
-      Math.max(0, createdOrder.order.totalAmountPaise - collectNowPaise)
-    }
-    paymentMethodLabel={collectNowPaise > 0 ? paymentMethod.toUpperCase() : undefined}
-    specialInstructions={specialInstructions}
-  />
-)}
+          <ReceiptDocket
+            order={createdOrder.order}
+            items={createdOrder.items}
+            paidPaise={
+              createdBilling?.capturedAmountPaise ??
+              (paymentType === "full" ? createdOrder.order.totalAmountPaise : collectNowPaise)
+            }
+            balanceDuePaise={
+              createdBilling?.balanceDuePaise ??
+              Math.max(0, createdOrder.order.totalAmountPaise - collectNowPaise)
+            }
+            paymentMethodLabel={collectNowPaise > 0 ? paymentMethod.toUpperCase() : undefined}
+            specialInstructions={specialInstructions}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

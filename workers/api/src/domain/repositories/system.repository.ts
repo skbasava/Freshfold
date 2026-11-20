@@ -2,6 +2,7 @@ import type { RoleCode } from "../../shared/constants";
 
 export interface StaffUserRecord {
   id: number;
+  tenantId: number;
   branchId: number;
   supabaseUserId: string;
   email: string;
@@ -46,6 +47,7 @@ export interface AccessRepository {
   findBySupabaseUserId(supabaseUserId: string): Promise<StaffUserRecord | null>;
   findByEmail(email: string): Promise<StaffUserRecord | null>;
   upsertStaffUser(input: {
+    tenantId?: number;
     branchId: number;
     supabaseUserId: string;
     email: string;

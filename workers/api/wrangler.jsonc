@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-11",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": false,
+  "workers_dev": true,
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -12,8 +12,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "laundry-erp-db",
-      "database_id": "382ef6b2-19c9-47f3-a09f-3bf1dc7a227b",
+      "database_name": "laundry-core",
+      "database_id": "542f026d-c72f-49d8-8cee-587ced45701d",
       "migrations_dir": "../../migrations/api"
     }
   ],

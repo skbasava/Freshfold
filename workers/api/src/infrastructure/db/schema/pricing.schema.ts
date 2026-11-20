@@ -10,6 +10,7 @@ import {
 import { branches } from "./branch.schema";
 import { items, services } from "./catalog.schema";
 import { customers } from "./customer.schema";
+import { tenants } from "./tenant.schema";
 
 export const taxRates = sqliteTable(
   "tax_rates",
@@ -59,6 +60,10 @@ export const rateCards = sqliteTable(
   "rate_cards",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .default(1)
+      .references(() => tenants.id, { onDelete: "restrict" }),
     branchId: integer("branch_id")
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
@@ -75,6 +80,7 @@ export const rateCards = sqliteTable(
   },
   (table) => [
     uniqueIndex("uq_rate_cards_code").on(table.code),
+    index("idx_rate_cards_tenant_hub").on(table.tenantId, table.branchId, table.isDefault, table.isActive),
     index("idx_rate_cards_branch_default").on(table.branchId, table.isDefault, table.isActive),
     check("chk_rate_cards_is_default", sql`${table.isDefault} IN (0, 1)`),
     check("chk_rate_cards_is_active", sql`${table.isActive} IN (0, 1)`),

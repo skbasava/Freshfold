@@ -3,6 +3,7 @@ import type { CursorPage, CursorPayload } from "../../shared/pagination";
 
 export interface BranchRecord {
   id: number;
+  tenantId: number;
   code: string;
   name: string;
   legalName: string;
@@ -23,6 +24,7 @@ export interface BranchRecord {
 
 export interface CustomerRecord {
   id: number;
+  tenantId: number;
   branchId: number;
   customerCode: string;
   fullName: string;
@@ -69,6 +71,7 @@ export interface CustomerPreferenceRecord {
 }
 
 export interface CreateCustomerInput {
+  tenantId?: number;
   branchId: number;
   customerCode: string;
   fullName: string;
@@ -117,9 +120,31 @@ export interface UpsertCustomerPreferencesInput {
   nowIso: string;
 }
 
+export interface CreateBranchInput {
+  tenantId: number;
+  code: string;
+  name: string;
+  legalName?: string;
+  gstin?: string | null;
+  stateCode?: string;
+  addressLine1?: string;
+  addressLine2?: string | null;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  phone?: string;
+  email?: string | null;
+  isDefault?: boolean;
+  isActive?: boolean;
+  nowIso: string;
+}
+
 export interface BranchRepository {
   findDefault(): Promise<BranchRecord | null>;
   findById(id: number): Promise<BranchRecord | null>;
+  findByCode(code: string): Promise<BranchRecord | null>;
+  findByTenantId(tenantId: number): Promise<BranchRecord[]>;
+  create(input: CreateBranchInput): Promise<BranchRecord>;
 }
 
 export interface CustomerRepository {
@@ -127,6 +152,7 @@ export interface CustomerRepository {
   findById(id: number): Promise<CustomerRecord | null>;
   findByCode(code: string): Promise<CustomerRecord | null>;
   list(params: {
+    tenantId?: number;
     branchId?: number;
     search?: string;
     includeInactive?: boolean;

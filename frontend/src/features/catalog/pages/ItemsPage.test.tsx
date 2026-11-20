@@ -140,11 +140,11 @@ vi.mock("@/lib/http/api-client", () => ({
         json: async () => ({ data: MOCK_SERVICES }),
       };
     }
-    if (path.includes("/api/v1/rate-cards/1/items")) {
+    if (path.includes("/api/v1/rate-cards")) {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ data: MOCK_RATES }),
+        json: async () => ({ data: MOCK_RATES, rateCard: { id: 1 } }),
       };
     }
     if (path.includes("/api/v1/items/") && options?.method === "PATCH") {

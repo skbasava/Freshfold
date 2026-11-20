@@ -8,11 +8,16 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { branches } from "./branch.schema";
+import { tenants } from "./tenant.schema";
 
 export const customers = sqliteTable(
   "customers",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .default(1)
+      .references(() => tenants.id, { onDelete: "restrict" }),
     branchId: integer("branch_id")
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
@@ -33,6 +38,7 @@ export const customers = sqliteTable(
     uniqueIndex("uq_customers_code").on(table.customerCode),
     index("idx_customers_phone").on(table.phone),
     index("idx_customers_branch_created").on(table.branchId, table.createdAt, table.id),
+    index("idx_customers_tenant_hub").on(table.tenantId, table.branchId, table.isActive),
     check("chk_customers_is_active", sql`${table.isActive} IN (0, 1)`),
     check(
       "chk_customers_state_code",

@@ -15,6 +15,7 @@ import {
   Copy,
   CreditCard,
   DollarSign,
+  Eye,
   FileText,
   Loader2,
   MessageSquare,
@@ -109,6 +110,7 @@ import type {
   PricingQuoteResult,
   RefundItem,
 } from "../types/orders.types";
+import { ReceiptDocket } from "../components/ReceiptDocket";
 
 export interface OrderDetailPageProps {
   ordersService?: OrdersService;
@@ -198,6 +200,13 @@ export function OrderDetailPage({
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+
+  // Receipt Docket Modal state
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+
+  function handlePrintDocket() {
+    window.print();
+  }
 
   // Edit Order Modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -435,7 +444,9 @@ export function OrderDetailPage({
       const [sRes, iRes, rRes] = await Promise.all([
         apiFetch("/api/v1/services"),
         apiFetch("/api/v1/items?limit=100"),
-        apiFetch("/api/v1/rate-cards/1/items").catch(() => null),
+        apiFetch("/api/v1/rate-cards/current/items")
+          .catch(() => apiFetch("/api/v1/rate-cards/1/items"))
+          .catch(() => null),
       ]);
 
       if (sRes.ok) {
@@ -853,7 +864,7 @@ export function OrderDetailPage({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.print()}
+                    onClick={handlePrintDocket}
                     className="h-9 px-3.5 text-xs font-semibold rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 gap-1.5 shadow-2xs cursor-pointer"
                   >
                     <Printer className="size-3.5 text-blue-600" />
@@ -861,7 +872,7 @@ export function OrderDetailPage({
                   </Button>
                 }
               />
-              <TooltipContent>Print Customer Receipt & Bag Tag</TooltipContent>
+              <TooltipContent>Reprint Customer Thermal Receipt & Docket</TooltipContent>
             </Tooltip>
 
             {/* Edit Order Button (Available when active) */}
@@ -1447,6 +1458,29 @@ export function OrderDetailPage({
                   <span className="text-xl font-black text-blue-700 tracking-tight">
                     {formatPaiseToInr(order.totalAmountPaise)}
                   </span>
+                </div>
+
+                {/* Reprint Thermal Receipt Actions */}
+                <div className="pt-3.5 mt-3 border-t border-slate-100 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReceiptModalOpen(true)}
+                    className="flex-1 h-8 text-xs font-semibold rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5 cursor-pointer"
+                  >
+                    <Eye className="size-3.5 text-slate-500" />
+                    <span>Preview Receipt</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handlePrintDocket}
+                    className="flex-1 h-8 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Printer className="size-3.5 text-white" />
+                    <span>Reprint Docket</span>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2587,115 +2621,76 @@ export function OrderDetailPage({
           </DialogPopup>
         </Dialog>
 
-        {/* ================= PRINT DOCKET VIEW (VISIBLE ONLY WHEN PRINTING) ================= */}
-        <div className="order-printable-section hidden print:block text-black bg-white p-6 font-sans">
-          <div className="border-b-2 border-black pb-4 mb-4">
-            <h1 className="text-2xl font-black uppercase tracking-wider">
-              FreshFold Laundry Services
-            </h1>
-            <p className="text-xs text-gray-700 mt-0.5">
-              Workshop Docket & Customer Receipt • SAC 999712
-            </p>
-            <div className="flex justify-between items-center mt-3 text-sm">
-              <span className="font-mono font-bold text-lg">
-                ORDER #{order.orderNumber}
-              </span>
-              <span>{formatDateTime(order.createdAt)}</span>
-            </div>
-          </div>
+        {/* ================= THERMAL RECEIPT DOCKET PREVIEW MODAL ================= */}
+        <Dialog open={receiptModalOpen} onOpenChange={setReceiptModalOpen}>
+          <DialogPopup className="max-w-md p-6 bg-slate-50 rounded-3xl">
+            <DialogHeader className="mb-4">
+              <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Printer className="size-4 text-blue-600" />
+                <span>Thermal Receipt Docket Preview</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                80mm thermal receipt format with live tracking & UPI QR code.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-4 text-xs border-b border-gray-300 pb-3 mb-3">
-            <div>
-              <span className="font-bold text-gray-600 block">Customer:</span>
-              <span className="font-bold text-sm">{order.customerName}</span>
-              {order.customerPhone ? <div>{order.customerPhone}</div> : null}
+            <div className="max-h-[60vh] overflow-y-auto pos-scroll py-2">
+              <ReceiptDocket
+                order={order}
+                items={items}
+                paidPaise={effectiveCapturedPaise}
+                balanceDuePaise={effectiveBalanceDuePaise}
+                refundedPaise={effectiveRefundedPaise}
+                paymentMethodLabel={
+                  paymentsList.length > 0
+                    ? paymentsList[0].paymentMethod.toUpperCase()
+                    : undefined
+                }
+                specialInstructions={order.specialInstructions ?? undefined}
+                isReprint={true}
+                inlinePreview={true}
+              />
             </div>
-            <div>
-              <span className="font-bold text-gray-600 block">Promised Delivery:</span>
-              <span className="font-bold text-sm">
-                {formatDateTime(order.promisedDeliveryAt)}
-              </span>
-              {order.specialInstructions ? (
-                <div className="mt-1 font-semibold text-gray-800">
-                  Note: {order.specialInstructions}
-                </div>
-              ) : null}
-            </div>
-          </div>
 
-          <div className="mb-4">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="border-b border-black">
-                  <th className="py-1">Garment & Service</th>
-                  <th className="py-1 text-center">Qty / Wt</th>
-                  <th className="py-1 text-right">Taxable</th>
-                  <th className="py-1 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-200">
-                    <td className="py-1.5 font-medium">
-                      {item.itemNameSnapshot || "Garment"} ({item.serviceNameSnapshot})
-                    </td>
-                    <td className="py-1.5 text-center">
-                      {item.pricingBasis === "per_item"
-                        ? `${item.quantityPieces} pcs`
-                        : `${item.weightGrams ? (item.weightGrams / 1000).toFixed(2) : ""} kg`}
-                    </td>
-                    <td className="py-1.5 text-right font-mono">
-                      {formatPaiseToInr(item.taxableAmountPaise)}
-                    </td>
-                    <td className="py-1.5 text-right font-bold font-mono">
-                      {formatPaiseToInr(item.lineTotalPaise)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <DialogFooter className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setReceiptModalOpen(false)}
+                className="h-9 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setReceiptModalOpen(false);
+                  setTimeout(() => handlePrintDocket(), 150);
+                }}
+                className="h-9 px-4 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Printer className="size-3.5" />
+                <span>Print Thermal Docket</span>
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
 
-          <div className="border-t-2 border-black pt-3 text-xs space-y-1">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span className="font-mono">{formatPaiseToInr(order.subtotalPaise)}</span>
-            </div>
-            {order.discountPaise > 0 ? (
-              <div className="flex justify-between">
-                <span>Discount:</span>
-                <span className="font-mono">-{formatPaiseToInr(order.discountPaise)}</span>
-              </div>
-            ) : null}
-            <div className="flex justify-between">
-              <span>{order.taxSupplyType === "exempt" ? "GST Tax (Exempt):" : "GST Tax (18%):"}</span>
-              <span className="font-mono">{formatPaiseToInr(order.totalTaxPaise)}</span>
-            </div>
-            <div className="flex justify-between text-base font-black border-t border-black pt-2 mt-2">
-              <span>GRAND TOTAL:</span>
-              <span className="font-mono">{formatPaiseToInr(order.totalAmountPaise)}</span>
-            </div>
-            <div className="flex justify-between text-xs font-bold pt-1">
-              <span>AMOUNT PAID:</span>
-              <span className="font-mono">{formatPaiseToInr(effectiveCapturedPaise)}</span>
-            </div>
-            <div className="flex justify-between text-xs font-bold">
-              <span>BALANCE DUE:</span>
-              <span className="font-mono">{formatPaiseToInr(effectiveBalanceDuePaise)}</span>
-            </div>
-            {effectiveRefundedPaise > 0 ? (
-              <div className="flex justify-between text-xs font-bold">
-                <span>REFUNDED:</span>
-                <span className="font-mono">-{formatPaiseToInr(effectiveRefundedPaise)}</span>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-8 pt-4 border-t border-dashed border-gray-400 text-[10px] text-gray-500 flex justify-between">
-            <span>Customer Signature: _______________________</span>
-            <span>Staff Initial: _______________________</span>
-          </div>
-        </div>
+        {/* ================= ACTIVE PRINT DOCKET (Thermal / Standard ReceiptDocket) ================= */}
+        <ReceiptDocket
+          order={order}
+          items={items}
+          paidPaise={effectiveCapturedPaise}
+          balanceDuePaise={effectiveBalanceDuePaise}
+          refundedPaise={effectiveRefundedPaise}
+          paymentMethodLabel={
+            paymentsList.length > 0
+              ? paymentsList[0].paymentMethod.toUpperCase()
+              : undefined
+          }
+          specialInstructions={order.specialInstructions ?? undefined}
+          isReprint={true}
+        />
       </div>
     </TooltipProvider>
   );

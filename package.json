@@ -8,19 +8,26 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p frontend/tsconfig.json && tsc -p workers/api/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p frontend/tsconfig.json && tsc -p workers/api/tsconfig.json && tsc -p workers/notifications/tsconfig.json",
     "typecheck:web": "tsc -p frontend/tsconfig.json",
     "typecheck:api": "tsc -p workers/api/tsconfig.json",
+    "typecheck:notifications": "tsc -p workers/notifications/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:web": "pnpm --filter @laundry/frontend test",
     "build:web": "pnpm --filter @laundry/frontend build",
     "dev:web": "pnpm --filter @laundry/frontend dev",
     "dev:api": "pnpm --filter @laundry/api dev",
+    "dev:notifications": "pnpm --filter @laundry/notifications dev",
     "db:generate": "pnpm --filter @laundry/api db:generate",
     "db:migrate:local": "pnpm --filter @laundry/api db:migrate:local",
     "db:migrate:remote": "pnpm --filter @laundry/api db:migrate:remote",
     "db:seed:local": "node scripts/seed-local-db.mjs",
+    "deploy:api": "pnpm db:migrate:remote && wrangler deploy --config workers/api/wrangler.jsonc",
+    "deploy:notifications": "wrangler deploy --config workers/notifications/wrangler.jsonc",
+    "deploy:web": "node scripts/deploy-vercel.mjs --prod",
+    "deploy:vercel": "node scripts/deploy-vercel.mjs",
+    "deploy": "pnpm deploy:api && pnpm deploy:web",
     "check": "pnpm typecheck && pnpm test && pnpm test:web && pnpm build:web"
   },
   "dependencies": {

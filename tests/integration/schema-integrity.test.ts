@@ -17,6 +17,7 @@ const EXPECTED_TABLES = [
   "item_attributes",
   "item_categories",
   "items",
+  "notification_logs",
   "order_adjustments",
   "order_items",
   "order_notes",
@@ -32,12 +33,14 @@ const EXPECTED_TABLES = [
   "service_categories",
   "services",
   "tax_rates",
+  "tenant_notification_configs",
+  "tenants",
   "user_roles",
   "users",
 ];
 
 describe("D1 Schema, Foreign Keys, Triggers, Constraints & Query Plans", () => {
-  it("applies reviewed migrations to fresh D1 with all 32 tables and foreign_keys enabled", async () => {
+  it("applies reviewed migrations to fresh D1 with all 35 tables and foreign_keys enabled", async () => {
     const harness = await createTestHarness();
 
     const tablesRes = await harness.env.DB.prepare(

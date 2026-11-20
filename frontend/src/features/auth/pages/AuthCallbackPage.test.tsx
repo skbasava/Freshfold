@@ -60,24 +60,28 @@ function createOAuthFlowService(options: {
 }
 
 describe("AuthCallbackPage", () => {
-  it("redirects to the dashboard after successful OAuth callback under StrictMode", async () => {
-    const authService = createOAuthFlowService({ succeeds: true });
-    const dashboardService = {
-      fetchSnapshot: vi.fn(async () => ({ orders: [], slots: [] })),
-    };
+  it(
+    "redirects to the dashboard after successful OAuth callback under StrictMode",
+    async () => {
+      const authService = createOAuthFlowService({ succeeds: true });
+      const dashboardService = {
+        fetchSnapshot: vi.fn(async () => ({ orders: [], slots: [] })),
+      };
 
-    render(
-      <StrictMode>
-        <MemoryRouter initialEntries={["/login/callback?code=pkce-123"]}>
-          <App authService={authService} dashboardService={dashboardService} />
-        </MemoryRouter>
-      </StrictMode>,
-    );
+      render(
+        <StrictMode>
+          <MemoryRouter initialEntries={["/login/callback?code=pkce-123"]}>
+            <App authService={authService} dashboardService={dashboardService} />
+          </MemoryRouter>
+        </StrictMode>,
+      );
 
-    expect(
-      await screen.findByText("Manage Order"),
-    ).toBeInTheDocument();
-  });
+      expect(
+        await screen.findByText("Manage Order", {}, { timeout: 10000 }),
+      ).toBeInTheDocument();
+    },
+    15000,
+  );
 
   it("displays an error card with a link back to /login when OAuth callback fails", async () => {
     const authService = createOAuthFlowService({

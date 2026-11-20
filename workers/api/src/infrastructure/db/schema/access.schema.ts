@@ -8,6 +8,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { branches } from "./branch.schema";
+import { tenants } from "./tenant.schema";
 
 /**
  * Staff identity and RBAC tables linked to Supabase Auth (`supabase_user_id`).
@@ -20,6 +21,10 @@ export const users = sqliteTable(
   "users",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .default(1)
+      .references(() => tenants.id, { onDelete: "restrict" }),
     branchId: integer("branch_id")
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
@@ -36,6 +41,7 @@ export const users = sqliteTable(
   (table) => [
     uniqueIndex("uq_users_supabase_user_id").on(table.supabaseUserId),
     uniqueIndex("uq_users_email").on(table.email),
+    index("idx_users_tenant_hub").on(table.tenantId, table.branchId, table.isActive),
     index("idx_users_branch_active").on(table.branchId, table.isActive),
     check("chk_users_is_active", sql`${table.isActive} IN (0, 1)`),
   ],

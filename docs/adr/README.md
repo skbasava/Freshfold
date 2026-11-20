@@ -20,3 +20,4 @@
 | [ADR-014](ADR-014-supabase-auth.md) | Supabase Auth as external staff identity provider | Superseded in part by ADR-015 |
 | [ADR-015](ADR-015-supabase-full-authz.md) | Retire Auth Worker & auth D1 tables; Supabase for authn & authz | Accepted |
 | [ADR-016](ADR-016-order-crn-and-kv-state-model.md) | Order CRN Identifier and Cloudflare KV State Model (Decoupled from D1) | Accepted |
+| [ADR-017](ADR-017-multi-tenant-multi-hub-hierarchy.md) | Multi-Tenant and Multi-Hub Hierarchy with Scoped Customers, Rate Cards, and Orders | Proposed |

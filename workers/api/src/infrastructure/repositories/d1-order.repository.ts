@@ -65,15 +65,16 @@ export class D1OrderRepository implements OrderRepository {
         this.d1
           .prepare(
             `INSERT INTO orders (
-              branch_id, customer_id, rate_card_id, pickup_address_id, delivery_address_id,
+              tenant_id, branch_id, customer_id, rate_card_id, pickup_address_id, delivery_address_id,
               order_number, status, currency, supplier_state_code, place_of_supply_state_code,
               tax_supply_type, subtotal_paise, discount_paise, taxable_amount_paise,
               cgst_paise, sgst_paise, igst_paise, total_tax_paise, adjustments_paise,
               total_amount_paise, promised_delivery_at, special_instructions,
               created_by_user_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
+            o.tenantId ?? 1,
             o.branchId,
             o.customerId,
             o.rateCardId,
@@ -247,6 +248,7 @@ export class D1OrderRepository implements OrderRepository {
   }
 
   async list(params: {
+    tenantId?: number;
     branchId?: number;
     customerId?: number;
     status?: OrderStatus;
@@ -254,6 +256,9 @@ export class D1OrderRepository implements OrderRepository {
     cursor?: CursorPayload;
   }): Promise<CursorPage<OrderRecord>> {
     const conditions = [];
+    if (params.tenantId !== undefined) {
+      conditions.push(eq(orders.tenantId, params.tenantId));
+    }
     if (params.branchId !== undefined) {
       conditions.push(eq(orders.branchId, params.branchId));
     }

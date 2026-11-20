@@ -58,6 +58,7 @@ export class D1AccessRepository implements AccessRepository {
   }
 
   async upsertStaffUser(input: {
+    tenantId?: number;
     branchId: number;
     supabaseUserId: string;
     email: string;
@@ -69,6 +70,7 @@ export class D1AccessRepository implements AccessRepository {
       await this.db
         .insert(users)
         .values({
+          tenantId: input.tenantId ?? 1,
           branchId: input.branchId,
           supabaseUserId: input.supabaseUserId,
           email: input.email,
@@ -119,6 +121,7 @@ export class D1AccessRepository implements AccessRepository {
 
     return {
       id: user.id,
+      tenantId: user.tenantId,
       branchId: user.branchId,
       supabaseUserId: user.supabaseUserId,
       email: user.email,

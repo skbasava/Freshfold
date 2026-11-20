@@ -12,11 +12,16 @@ import { branches } from "./branch.schema";
 import { items, services } from "./catalog.schema";
 import { customerAddresses, customers } from "./customer.schema";
 import { rateCards, taxRates } from "./pricing.schema";
+import { tenants } from "./tenant.schema";
 
 export const orders = sqliteTable(
   "orders",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .default(1)
+      .references(() => tenants.id, { onDelete: "restrict" }),
     branchId: integer("branch_id")
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
@@ -64,6 +69,7 @@ export const orders = sqliteTable(
     index("idx_orders_customer_created").on(table.customerId, table.createdAt, table.id),
     index("idx_orders_status_created").on(table.status, table.createdAt, table.id),
     index("idx_orders_branch_created").on(table.branchId, table.createdAt, table.id),
+    index("idx_orders_tenant_hub").on(table.tenantId, table.branchId, table.status, table.createdAt),
     check(
       "chk_orders_status",
       sql`${table.status} IN ('draft', 'confirmed', 'pickup_scheduled', 'picked_up', 'received', 'processing', 'ready', 'out_for_delivery', 'delivered', 'hold', 'cancelled')`,

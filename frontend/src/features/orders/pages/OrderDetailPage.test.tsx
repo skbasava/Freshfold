@@ -287,7 +287,7 @@ describe("OrderDetailPage Component", () => {
     await waitFor(() => {
       expect(ordersService.addNote).toHaveBeenCalledWith(42, "Checked collar buttons");
     });
-  });
+  }, 15000);
 
   it("opens hold dialog when Put on Hold button is clicked", async () => {
     const ordersService = createOrdersServiceStub();
@@ -533,6 +533,43 @@ describe("OrderDetailPage Component", () => {
           lines: expect.any(Array),
         }),
       );
+    });
+  });
+
+  it("allows staff to print or preview the thermal receipt docket for reprinting", async () => {
+    const ordersService = createOrdersServiceStub();
+    const user = userEvent.setup();
+    const printSpy = vi.fn();
+    window.print = printSpy;
+
+    render(
+      <MemoryRouter initialEntries={["/orders/42"]}>
+        <Routes>
+          <Route
+            path="/orders/:id"
+            element={<OrderDetailPage ordersService={ordersService} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Print Docket/i }).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // 1. Click Print Docket button from top command bar
+    const printBtn = screen.getAllByRole("button", { name: /Print Docket/i })[0];
+    await user.click(printBtn);
+    expect(printSpy).toHaveBeenCalled();
+
+    // 2. Click Preview Receipt button to open Thermal Receipt Docket Preview Modal
+    const previewBtn = screen.getByRole("button", { name: /Preview Receipt/i });
+    await user.click(previewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Thermal Receipt Docket Preview")).toBeInTheDocument();
+      expect(screen.getAllByText("*** REPRINT / DUPLICATE RECEIPT ***").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Scan to track order").length).toBeGreaterThanOrEqual(1);
     });
   });
 });

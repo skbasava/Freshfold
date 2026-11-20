@@ -7,11 +7,23 @@ import {
   HardDrive,
   Info,
   Loader2,
+  Plus,
   ShieldCheck,
   User,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useOptionalAuth } from "@/features/auth";
 import { apiFetch } from "@/lib/http/api-client";
@@ -129,7 +141,70 @@ export function SettingsPage() {
 
     void checkHealth();
     void loadGstSetting();
+    void loadHubs();
   }, []);
+
+  // Hubs & Multi-Tenant State
+  const [hubs, setHubs] = useState<any[]>([]);
+  const [loadingHubs, setLoadingHubs] = useState<boolean>(true);
+  const [showAddHubModal, setShowAddHubModal] = useState<boolean>(false);
+  const [newHubCode, setNewHubCode] = useState<string>("");
+  const [newHubName, setNewHubName] = useState<string>("");
+  const [newHubStateCode, setNewHubStateCode] = useState<string>("29");
+  const [newHubPhone, setNewHubPhone] = useState<string>("+919900000000");
+  const [savingHub, setSavingHub] = useState<boolean>(false);
+  const [hubModalError, setHubModalError] = useState<string | null>(null);
+
+  async function loadHubs() {
+    try {
+      setLoadingHubs(true);
+      const res = await apiFetch("/api/v1/hubs");
+      if (res.ok) {
+        const json = (await res.json()) as { data: any[] };
+        setHubs(json.data ?? []);
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setLoadingHubs(false);
+    }
+  }
+
+  async function handleCreateHub(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newHubCode.trim() || !newHubName.trim()) {
+      setHubModalError("Hub code and name are required");
+      return;
+    }
+    setSavingHub(true);
+    setHubModalError(null);
+    try {
+      const res = await apiFetch("/api/v1/hubs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: newHubCode.trim().toUpperCase(),
+          name: newHubName.trim(),
+          stateCode: newHubStateCode.trim(),
+          phone: newHubPhone.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const errJson = (await res.json().catch(() => null)) as any;
+        throw new Error(errJson?.error?.message ?? "Failed to create hub");
+      }
+      setShowAddHubModal(false);
+      setNewHubCode("");
+      setNewHubName("");
+      await loadHubs();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      setHubModalError(err instanceof Error ? err.message : "Failed to create hub");
+    } finally {
+      setSavingHub(false);
+    }
+  }
 
   async function handleToggleGst(nextVal: boolean) {
     setSavingGst(true);
@@ -172,34 +247,63 @@ export function SettingsPage() {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        {/* Branch Card */}
-        <Card className="border border-border/80 bg-surface shadow-xs">
-          <CardHeader className="pb-3 border-b border-border/60">
+        {/* Hubs & Multi-Tenant Management Card */}
+        <Card className="border border-border/80 bg-surface shadow-xs sm:col-span-2">
+          <CardHeader className="pb-3 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2.5">
               <HubBranchFlaticonIcon className="size-6 shrink-0" />
-              <span>Operational Hub Configuration</span>
+              <div>
+                <span>Hubs & Outlets Master</span>
+                <p className="text-xs font-normal text-muted-foreground mt-0.5">
+                  Tenant: <strong className="text-foreground">{auth?.session?.tenant?.name ?? "FreshFold India"}</strong> ({hubs.length} Active Hubs)
+                </p>
+              </div>
             </CardTitle>
+            <Button
+              size="sm"
+              onClick={() => {
+                setHubModalError(null);
+                setShowAddHubModal(true);
+              }}
+              className="gap-1.5 h-8 text-xs font-semibold cursor-pointer shrink-0"
+            >
+              <Plus className="size-3.5" />
+              <span>Add New Hub</span>
+            </Button>
           </CardHeader>
-          <CardContent className="pt-4 space-y-2.5 text-xs">
-            <div className="flex justify-between py-1 border-b border-border/40">
-              <span className="text-muted-foreground">Branch Code:</span>
-              <span className="font-mono font-semibold text-foreground">MAIN</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-border/40">
-              <span className="text-muted-foreground">Branch Name:</span>
-              <span className="font-medium text-foreground">FreshFold Main Branch</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-border/40">
-              <span className="text-muted-foreground">State Code (Place of Supply):</span>
-              <span className="font-mono text-foreground">29 (Karnataka)</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-border/40">
-              <span className="text-muted-foreground">Currency:</span>
-              <span className="font-medium text-foreground">INR (₹)</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-muted-foreground">Timezone:</span>
-              <span className="font-mono text-foreground">Asia/Kolkata (IST)</span>
+          <CardContent className="pt-4">
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {hubs.map((hub) => (
+                <div
+                  key={hub.id}
+                  className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-blue-300 transition-all shadow-2xs space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-foreground">{hub.name}</span>
+                    <Badge variant={hub.isDefault ? "default" : "outline"} className="text-2xs font-semibold">
+                      {hub.isDefault ? "Default Hub" : "Hub Outlet"}
+                    </Badge>
+                  </div>
+                  <div className="text-xs space-y-1 text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Code:</span>
+                      <span className="font-mono font-semibold text-foreground">{hub.code}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>State Code:</span>
+                      <span className="font-mono text-foreground">{hub.stateCode || "29"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Rate Card:</span>
+                      <span className="text-blue-600 font-medium">Independent</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Phone:</span>
+                      <span className="text-foreground">{hub.phone || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -482,6 +586,85 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Add New Hub Dialog */}
+      <Dialog open={showAddHubModal} onOpenChange={setShowAddHubModal}>
+        <DialogPopup className="sm:max-w-md">
+          <form onSubmit={handleCreateHub}>
+            <DialogHeader>
+              <DialogTitle>Add New Laundry Hub</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4 text-xs">
+              {hubModalError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="size-4" />
+                  <AlertDescription>{hubModalError}</AlertDescription>
+                </Alert>
+              ) : null}
+              <div className="space-y-1.5">
+                <Label htmlFor="hub-code">Hub Code *</Label>
+                <Input
+                  id="hub-code"
+                  placeholder="e.g. INDIRA"
+                  value={newHubCode}
+                  onChange={(e) => setNewHubCode(e.target.value.toUpperCase())}
+                  required
+                  maxLength={16}
+                />
+                <p className="text-2xs text-muted-foreground">Short alphanumeric identifier for staff and orders</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hub-name">Hub / Outlet Name *</Label>
+                <Input
+                  id="hub-name"
+                  placeholder="e.g. Indiranagar Branch"
+                  value={newHubName}
+                  onChange={(e) => setNewHubName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="hub-state">State Code (GST)</Label>
+                  <Input
+                    id="hub-state"
+                    placeholder="29"
+                    value={newHubStateCode}
+                    onChange={(e) => setNewHubStateCode(e.target.value)}
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hub-phone">Phone</Label>
+                  <Input
+                    id="hub-phone"
+                    placeholder="+919900000000"
+                    value={newHubPhone}
+                    onChange={(e) => setNewHubPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 text-2xs text-blue-800 leading-relaxed">
+                ✨ <strong>Auto-Rate Card:</strong> Standard retail laundry rates will be automatically cloned for this new hub, allowing counter staff to start taking orders right away.
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddHubModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={savingHub}>
+                {savingHub ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                Create Hub
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }

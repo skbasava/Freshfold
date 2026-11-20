@@ -3,6 +3,7 @@ import type { TaxRateConfig } from "../entities/tax";
 
 export interface RateCardRecord {
   id: number;
+  tenantId: number;
   branchId: number;
   code: string;
   name: string;
@@ -61,6 +62,7 @@ export interface PricingRepository {
   listTaxRates(activeOnly?: boolean): Promise<TaxRateConfig[]>;
 
   createRateCard(input: {
+    tenantId?: number;
     branchId: number;
     code: string;
     name: string;
@@ -72,7 +74,7 @@ export interface PricingRepository {
   }): Promise<RateCardRecord>;
   findRateCardById(id: number): Promise<RateCardRecord | null>;
   findDefaultRateCard(branchId: number, atIso: string): Promise<RateCardRecord | null>;
-  listRateCards(branchId?: number): Promise<RateCardRecord[]>;
+  listRateCards(branchId?: number, tenantId?: number): Promise<RateCardRecord[]>;
 
   addRateCardItem(input: {
     rateCardId: number;

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { ChevronDown, LogOut, Search } from "lucide-react";
+import { Building2, Check, ChevronDown, LogOut, Search } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { HubOption } from "@/features/auth/types/auth.types";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -32,6 +33,11 @@ export interface TopNavbarBreadcrumb {
 export interface TopNavbarBlockProps {
   breadcrumbs: TopNavbarBreadcrumb[];
   user: SidebarUserInfo;
+  tenantName?: string;
+  currentHubName?: string;
+  currentHubCode?: string;
+  availableHubs?: HubOption[];
+  onSelectHub?: (hub: HubOption) => void;
   searchValue: string;
   onSearchChange: (value: string) => void;
   onSignOut: () => void;
@@ -47,6 +53,11 @@ function getInitials(name: string): string {
 export function TopNavbarBlock({
   breadcrumbs,
   user,
+  tenantName = "FreshFold India",
+  currentHubName = "Main Branch",
+  currentHubCode = "MAIN",
+  availableHubs = [],
+  onSelectHub,
   searchValue,
   onSearchChange,
   onSignOut,
@@ -62,7 +73,67 @@ export function TopNavbarBlock({
         />
         <Separator orientation="vertical" className="ff-topbar-divider" />
 
-        <Breadcrumb className="ff-topbar-breadcrumb">
+        {/* Tenant & Hub Selector */}
+        {availableHubs.length > 0 && onSelectHub ? (
+          <div className="flex items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2.5 text-xs font-medium border-blue-200 bg-blue-50/60 hover:bg-blue-100/70 hover:border-blue-300 text-blue-900 transition-colors"
+                    aria-label="Select Hub"
+                  />
+                }
+              >
+                <Building2 className="size-3.5 text-primary shrink-0" />
+                <span className="font-semibold text-primary truncate max-w-[130px] sm:max-w-[180px]">
+                  {currentHubName}
+                </span>
+                <ChevronDown className="size-3 text-blue-500 shrink-0 ml-0.5 opacity-70" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 p-1.5">
+                <div className="px-2 py-1.5 border-b border-border/60 mb-1">
+                  <div className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tenant
+                  </div>
+                  <div className="text-xs font-bold text-foreground truncate">
+                    {tenantName}
+                  </div>
+                </div>
+                <div className="px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Switch Hub / Outlet
+                </div>
+                {availableHubs.map((hub) => {
+                  const isSelected = hub.code === currentHubCode;
+                  return (
+                    <DropdownMenuItem
+                      key={hub.code}
+                      onClick={() => onSelectHub(hub)}
+                      className="flex items-center justify-between text-xs py-2 px-2 cursor-pointer rounded-md"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className={`font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+                          {hub.name}
+                        </span>
+                        <span className="text-2xs text-muted-foreground">
+                          {hub.code} {hub.stateCode ? `• State ${hub.stateCode}` : ""}
+                        </span>
+                      </div>
+                      {isSelected ? (
+                        <Check className="size-4 text-primary shrink-0 ml-2" />
+                      ) : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Separator orientation="vertical" className="ff-topbar-divider ml-2" />
+          </div>
+        ) : null}
+
+        <Breadcrumb className="ff-topbar-breadcrumb hidden sm:flex">
           <BreadcrumbList className="ff-topbar-breadcrumb-list">
             {breadcrumbs.map((crumb, index) => {
               const isLast = index === breadcrumbs.length - 1;

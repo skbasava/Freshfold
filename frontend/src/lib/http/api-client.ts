@@ -27,7 +27,22 @@ export function readApiBaseUrl(
     (typeof env.VITE_API_BASE_URL === "string" &&
       env.VITE_API_BASE_URL.trim()) ||
     "";
-  return raw.replace(/\/+$/, "");
+  const trimmed = raw.replace(/\/+$/, "");
+
+  // Safety guard: if running in a deployed browser (e.g. *.vercel.app) and the baseUrl is pointing to localhost,
+  // do not contact localhost from the remote client. Fallback directly to the production Cloudflare Worker API.
+  if (
+    typeof window !== "undefined" &&
+    window.location &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    if (trimmed.includes("localhost") || trimmed.includes("127.0.0.1") || !trimmed) {
+      return "https://laundry-erp-api.abhidigitechblr.workers.dev";
+    }
+  }
+
+  return trimmed;
 }
 
 function createRequestId(): string {

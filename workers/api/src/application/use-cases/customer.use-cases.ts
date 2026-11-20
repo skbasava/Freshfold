@@ -26,6 +26,8 @@ export class CustomerUseCases {
   constructor(private readonly deps: CustomerUseCasesDeps) {}
 
   async createCustomer(input: {
+    tenantId?: number;
+    branchId?: number;
     customerCode?: string;
     fullName: string;
     phone: string;
@@ -35,9 +37,15 @@ export class CustomerUseCases {
     actorUserId?: number | null;
     requestId?: string;
   }): Promise<CustomerRecord> {
-    const branch = await this.deps.branches.findDefault();
+    const branch = input.branchId
+      ? await this.deps.branches.findById(input.branchId)
+      : await this.deps.branches.findDefault();
     if (!branch) {
-      throw new NotFoundError("Default branch is not configured");
+      throw new NotFoundError(
+        input.branchId
+          ? `Branch #${input.branchId} not found`
+          : "Default branch is not configured",
+      );
     }
 
     const nowIso = this.deps.clock.nowIso();
@@ -51,6 +59,7 @@ export class CustomerUseCases {
     }
 
     const created = await this.deps.customers.create({
+      tenantId: input.tenantId ?? branch.tenantId,
       branchId: branch.id,
       customerCode: code,
       fullName: input.fullName,
@@ -91,6 +100,8 @@ export class CustomerUseCases {
   }
 
   async listCustomers(params: {
+    tenantId?: number;
+    branchId?: number;
     search?: string;
     includeInactive?: boolean;
     limit?: number;
@@ -99,6 +110,8 @@ export class CustomerUseCases {
     const limit = clampPageLimit(params.limit);
     const cursor = params.cursor ? decodeCursor(params.cursor) : undefined;
     return this.deps.customers.list({
+      tenantId: params.tenantId,
+      branchId: params.branchId,
       search: params.search,
       includeInactive: params.includeInactive,
       limit,

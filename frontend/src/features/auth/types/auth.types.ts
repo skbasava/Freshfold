@@ -17,6 +17,21 @@ export interface AuthActionResult {
   error?: string;
 }
 
+export interface HubOption {
+  id: string;
+  numericId?: number;
+  name: string;
+  code: string;
+  stateCode?: string;
+  isDefault?: boolean;
+}
+
+export interface TenantOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -25,6 +40,7 @@ export interface AuthUser {
   hubId: string;
   hubName: string;
   tenantId: string;
+  tenantName?: string;
 }
 
 export interface AuthSession {
@@ -33,6 +49,8 @@ export interface AuthSession {
   rcVersion: string;
   tenantEnabled: boolean;
   hubEnabled: boolean;
+  tenant?: TenantOption;
+  availableHubs?: HubOption[];
 }
 
 export type AuthDeniedCode = "membership_missing" | "membership_inactive";

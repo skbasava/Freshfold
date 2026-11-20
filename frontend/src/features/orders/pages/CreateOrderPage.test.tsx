@@ -104,7 +104,7 @@ vi.mock("@/lib/http/api-client", () => ({
         }),
       };
     }
-    if (path.includes("/api/v1/rate-cards/1/items")) {
+    if (path.includes("/api/v1/rate-cards")) {
       return {
         ok: true,
         status: 200,
@@ -116,6 +116,7 @@ vi.mock("@/lib/http/api-client", () => ({
               unitPricePaise: 25000,
             },
           ],
+          rateCard: { id: 1 },
         }),
       };
     }
@@ -343,30 +344,30 @@ describe("CreateOrderPage", () => {
     expect(garmentButton).toBeTruthy();
     fireEvent.click(garmentButton!);
 
-    // Verify Proceed to Payment button appears and click it
+    // Verify Continue to payment button appears and click it
     await waitFor(() => {
-      expect(screen.getByText(/Proceed to Payment/i)).toBeInTheDocument();
+      expect(screen.getByText(/Continue to payment/i)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText(/Proceed to Payment/i));
+    fireEvent.click(screen.getByText(/Continue to payment/i));
 
     // Step 2: Payment settlement view
     await waitFor(() => {
-      expect(screen.getByText("Step 2: Payment Settlement")).toBeInTheDocument();
-      expect(screen.getByText("Collection Mode *")).toBeInTheDocument();
-      expect(screen.getByText("Pay in Full")).toBeInTheDocument();
+      expect(screen.getByText("2. Payment")).toBeInTheDocument();
+      expect(screen.getByText("When will the customer pay?")).toBeInTheDocument();
+      expect(screen.getByText("Pay in full")).toBeInTheDocument();
     });
 
     // Confirm and place order
-    const placeOrderBtn = screen.getByRole("button", { name: /Place Order & Collect/i });
+    const placeOrderBtn = screen.getByRole("button", { name: /Place order/i });
     fireEvent.click(placeOrderBtn);
 
     // Step 3: Print & Notify view
     await waitFor(() => {
-      expect(screen.getByText("Step 3: Confirmed & Tagged")).toBeInTheDocument();
-      expect(screen.getByText("Print Thermal Receipt Docket")).toBeInTheDocument();
+      expect(screen.getByText("Order placed")).toBeInTheDocument();
+      expect(screen.getByText("Print receipt")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /WhatsApp/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /SMS/i })).toBeInTheDocument();
-      expect(screen.getByText("+ Next Customer / New Order")).toBeInTheDocument();
+      expect(screen.getByText("New order")).toBeInTheDocument();
     });
 
     // Test WhatsApp notification click
@@ -391,10 +392,10 @@ describe("CreateOrderPage", () => {
     });
 
     // Test Next Customer / New Order reset
-    const nextOrderBtn = screen.getByText("+ Next Customer / New Order");
+    const nextOrderBtn = screen.getByText("New order");
     fireEvent.click(nextOrderBtn);
     await waitFor(() => {
-      expect(screen.getByText("Ticket is empty")).toBeInTheDocument();
+      expect(screen.getByText("Cart is empty")).toBeInTheDocument();
     });
   });
 

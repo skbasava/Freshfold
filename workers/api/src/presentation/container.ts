@@ -13,6 +13,7 @@ import {
   D1BranchRepository,
   D1CustomerRepository,
 } from "../infrastructure/repositories/d1-customer.repository";
+import { D1TenantRepository } from "../infrastructure/repositories/d1-tenant.repository";
 import { D1DeliveryRepository } from "../infrastructure/repositories/d1-delivery.repository";
 import { D1OrderRepository } from "../infrastructure/repositories/d1-order.repository";
 import { D1PricingRepository } from "../infrastructure/repositories/d1-pricing.repository";
@@ -41,6 +42,7 @@ export function createAppContainer(env: ApiEnv): AppContainer {
       }
     : systemClock;
 
+  const tenants = new D1TenantRepository(db);
   const branches = new D1BranchRepository(db);
   const customers = new D1CustomerRepository(db);
   const catalog = new D1CatalogRepository(db);
@@ -67,6 +69,7 @@ export function createAppContainer(env: ApiEnv): AppContainer {
       : DEFAULT_D1_CEILING_BYTES;
 
   return {
+    tenants,
     branches,
     access,
     system,

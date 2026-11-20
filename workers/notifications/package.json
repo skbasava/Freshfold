@@ -1,0 +1,16 @@
+{
+  "name": "@laundry/notifications",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "wrangler dev --config wrangler.jsonc --port 8788 --local"
+  },
+  "dependencies": {
+    "@laundry/contracts": "workspace:*",
+    "@laundry/notification-client": "workspace:*",
+    "hono": "4.13.17",
+    "zod": "4.6.7"
+  }
+}

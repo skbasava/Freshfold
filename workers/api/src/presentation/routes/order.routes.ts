@@ -47,7 +47,13 @@ orderRoutes.get("/", async (c) => {
     throw new ValidationError(`Invalid order status filter '${rawStatus}'`);
   }
 
+  const hubId =
+    parseOptionalIntQuery(c.req.query("hubId") ?? c.req.query("branchId"), "hubId") ??
+    c.var.actor?.branchId;
+
   const page = await c.var.container.orderUseCases.listOrders({
+    tenantId: c.var.actor?.tenantId,
+    branchId: hubId,
     customerId: parseOptionalIntQuery(c.req.query("customerId"), "customerId"),
     status: (rawStatus as OrderStatus | undefined) ?? undefined,
     limit: q.limit,

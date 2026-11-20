@@ -71,7 +71,7 @@ const args = process.argv.slice(2);
 let token = process.env.VERCEL_TOKEN || "";
 let isProd = false;
 let scope = process.env.VERCEL_ORG_ID || "";
-let apiUrl = process.env.VITE_API_URL || "";
+let apiUrl = process.env.VITE_API_URL || "https://laundry-erp-api.abhidigitechblr.workers.dev";
 let skipChecks = false;
 let skipBuild = false;
 let dryRun = false;
@@ -119,11 +119,8 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!token) {
-  console.error("\x1b[31mError: Vercel access token is required.\x1b[0m");
-  console.error("Pass the token using --token <token> (or -t <token>), or set VERCEL_TOKEN in your environment.");
-  console.error("Generate a personal access token at: https://vercel.com/account/tokens\n");
-  console.error("Run 'pnpm deploy:vercel --help' for all options.");
-  process.exit(1);
+  console.log("\x1b[33mNotice: No --token or VERCEL_TOKEN provided. Falling back to active Vercel CLI session.\x1b[0m");
+  console.log("If not logged in, run 'npx vercel login' or pass '--token <token>'.\n");
 }
 
 const isWin = process.platform === "win32";
@@ -191,6 +188,14 @@ if (!skipBuild) {
     cleanUrls: true,
     rewrites: [
       {
+        source: "/api/:path*",
+        destination: `${apiUrl}/api/:path*`,
+      },
+      {
+        source: "/health",
+        destination: `${apiUrl}/health`,
+      },
+      {
         source: "/(.*)",
         destination: "/index.html",
       },
@@ -219,6 +224,14 @@ if (!skipBuild) {
   const buildOutputConfig = {
     version: 3,
     routes: [
+      {
+        src: "/api/(.*)",
+        dest: `${apiUrl}/api/$1`,
+      },
+      {
+        src: "/health",
+        dest: `${apiUrl}/health`,
+      },
       { handle: "filesystem" },
       { src: "/(.*)", dest: "/index.html" },
     ],
@@ -248,7 +261,10 @@ console.log(`\n\x1b[34m[3/3] Deploying to Vercel (${isProd ? "production" : "pre
 // Target path: frontend/dist
 const targetPath = path.relative(rootDir, distDir);
 
-const vercelArgs = ["deploy", targetPath, "--token", token];
+const vercelArgs = ["deploy", targetPath];
+if (token) {
+  vercelArgs.push("--token", token);
+}
 
 // Check if prebuilt output exists
 const hasPrebuilt = fs.existsSync(path.join(distVercelDir, "output", "config.json"));

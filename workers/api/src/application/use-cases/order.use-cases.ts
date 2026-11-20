@@ -122,8 +122,12 @@ export class OrderUseCases {
 
         const orderNumber = `ORD-${nowIso.slice(0, 10).replace(/-/g, "")}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
+        const branch = await this.deps.branches.findById(quote.branchId);
+        const tenantId = branch?.tenantId ?? 1;
+
         const created = await this.deps.orders.createOrderAggregate({
           order: {
+            tenantId,
             branchId: quote.branchId,
             customerId: quote.customerId,
             rateCardId: quote.rateCardId,
@@ -318,12 +322,16 @@ export class OrderUseCases {
   }
 
   listOrders(params: {
+    tenantId?: number;
+    branchId?: number;
     customerId?: number;
     status?: OrderStatus;
     limit?: number;
     cursor?: string;
   }): Promise<CursorPage<OrderRecord>> {
     return this.deps.orders.list({
+      tenantId: params.tenantId,
+      branchId: params.branchId,
       customerId: params.customerId,
       status: params.status,
       limit: clampPageLimit(params.limit),

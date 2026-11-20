@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
+  Building2,
   Check,
   Edit3,
   Loader2,
@@ -15,6 +16,7 @@ import {
   Tag,
   X,
 } from "lucide-react";
+import { useOptionalAuth } from "@/features/auth";
 import {
   MetricCard,
   PageHeader,
@@ -105,6 +107,10 @@ export function ItemsPage() {
   const isMobile = useIsMobile();
 
   const [items, setItems] = useState<CatalogItemRecord[]>([]);
+  const auth = useOptionalAuth();
+  const activeHubName = auth?.session?.user.hubName ?? "Main Branch";
+  const [activeRateCardId, setActiveRateCardId] = useState<number>(1);
+
   const [categories, setCategories] = useState<ItemCategoryRecord[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [rateItems, setRateItems] = useState<RateCardItemRecord[]>([]);
@@ -155,7 +161,9 @@ export function ItemsPage() {
         apiFetch("/api/v1/items?limit=100&includeInactive=true"),
         apiFetch("/api/v1/item-categories?includeInactive=true").catch(() => null),
         apiFetch("/api/v1/services").catch(() => null),
-        apiFetch("/api/v1/rate-cards/1/items").catch(() => null),
+        apiFetch("/api/v1/rate-cards/current/items")
+          .catch(() => apiFetch("/api/v1/rate-cards/1/items"))
+          .catch(() => null),
       ]);
 
       if (!iRes.ok) throw new Error(`Failed to load items (HTTP ${iRes.status})`);
@@ -211,7 +219,13 @@ export function ItemsPage() {
       }
 
       if (rRes && rRes.ok) {
-        const rJson = (await rRes.json()) as { data: RateCardItemRecord[] };
+        const rJson = (await rRes.json()) as {
+          data: RateCardItemRecord[];
+          rateCard?: { id: number };
+        };
+        if (rJson.rateCard?.id) {
+          setActiveRateCardId(rJson.rateCard.id);
+        }
         const rates = rJson.data ?? [];
         setRateItems(rates);
         const map: Record<string, number> = {};
@@ -356,7 +370,7 @@ export function ItemsPage() {
 
       if (dryCleanService && parseFloat(newDryCleanRateRupees) > 0) {
         ratePromises.push(
-          apiFetch("/api/v1/rate-cards/1/items", {
+          apiFetch(`/api/v1/rate-cards/${activeRateCardId}/items`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -373,7 +387,7 @@ export function ItemsPage() {
 
       if (steamIronService && parseFloat(newSteamIronRateRupees) > 0) {
         ratePromises.push(
-          apiFetch("/api/v1/rate-cards/1/items", {
+          apiFetch(`/api/v1/rate-cards/${activeRateCardId}/items`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -463,7 +477,7 @@ export function ItemsPage() {
 
       if (newDcPaise > 0) {
         ratePromises.push(
-          apiFetch("/api/v1/rate-cards/1/items", {
+          apiFetch(`/api/v1/rate-cards/${activeRateCardId}/items`, {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -480,7 +494,7 @@ export function ItemsPage() {
 
       if (newIronPaise > 0) {
         ratePromises.push(
-          apiFetch("/api/v1/rate-cards/1/items", {
+          apiFetch(`/api/v1/rate-cards/${activeRateCardId}/items`, {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -540,12 +554,18 @@ export function ItemsPage() {
           subtitle="Manage garment catalog, laundry rate card pricing, SAC codes & service basis"
           icon={<FoldedLaundryStackIcon className="size-8" />}
           badge={
-            <Badge
-              variant="outline"
-              className="bg-blue-50 text-blue-700 border-blue-200 font-bold text-xs"
-            >
-              {items.length} Registered Items
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className="bg-blue-50 text-blue-700 border-blue-200 font-bold text-xs"
+              >
+                {items.length} Registered Items
+              </Badge>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                <Building2 className="size-3 text-primary" />
+                {activeHubName} Rates
+              </span>
+            </div>
           }
           actions={
             <div className="flex items-center gap-2.5 shrink-0">

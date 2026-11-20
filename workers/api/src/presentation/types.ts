@@ -7,6 +7,7 @@ import type { OrderUseCases } from "../application/use-cases/order.use-cases";
 import type { PricingUseCases } from "../application/use-cases/pricing.use-cases";
 import type { CalendarPort } from "../domain/ports/calendar.port";
 import type { BranchRepository } from "../domain/repositories/customer.repository";
+import type { TenantRepository } from "../domain/repositories/tenant.repository";
 import type {
   AccessRepository,
   StaffUserRecord,
@@ -35,6 +36,7 @@ export interface ApiEnv {
 }
 
 export interface AppContainer {
+  tenants: TenantRepository;
   branches: BranchRepository;
   access: AccessRepository;
   system: SystemRepository;

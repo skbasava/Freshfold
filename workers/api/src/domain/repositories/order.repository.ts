@@ -9,6 +9,7 @@ import type { CalendarEventResult } from "../ports/calendar.port";
 
 export interface OrderRecord {
   id: number;
+  tenantId: number;
   branchId: number;
   customerId: number;
   rateCardId: number;
@@ -118,6 +119,7 @@ export interface OrderRepository {
   findById(id: number): Promise<OrderRecord | null>;
   findWithDetails(id: number): Promise<OrderWithDetails | null>;
   list(params: {
+    tenantId?: number;
     branchId?: number;
     customerId?: number;
     status?: OrderStatus;

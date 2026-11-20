@@ -38,8 +38,27 @@ export function seedLocalDatabase(dbPath) {
     db.exec(sql1);
   }
 
+  const usersColumns = db.prepare("PRAGMA table_info(users)").all();
+  const hasTenantColumn = usersColumns.some((col) => col.name === "tenant_id");
+  if (!hasTenantColumn) {
+    const sql2 = fs.readFileSync(
+      path.join(rootDir, "migrations", "api", "0002_multi_tenant_hub.sql"),
+      "utf8",
+    );
+    db.exec(sql2);
+  }
+
   const now = new Date().toISOString();
   const effectiveFrom = "2026-01-01T00:00:00.000Z";
+
+  // 1b. Default Tenant
+  db.prepare(`
+    INSERT OR IGNORE INTO tenants (
+      id, code, name, slug, plan_tier, status, contact_email, contact_phone, created_at, updated_at
+    ) VALUES (
+      1, 'TENANT-001', 'FreshFold India', 'freshfold-india', 'enterprise', 'active', 'admin@freshfold.in', '+919900000000', ?, ?
+    )
+  `).run(now, now);
 
   // 2. Default Branch
   db.prepare(`
@@ -263,26 +282,29 @@ export function seedLocalDatabase(dbPath) {
     }
   }
 
-  for (const row of rciRows) {
-    const key = buildPricingKey(row.serviceId, row.itemId, row.pricingBasis);
-    db.prepare(`
-      INSERT OR REPLACE INTO rate_card_items (
-        rate_card_id, service_id, item_id, tax_rate_id, pricing_basis, pricing_key, unit_price_paise, min_quantity, effective_from, is_active, created_at, updated_at
-      ) VALUES (
-        1, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
-      )
-    `).run(
-      row.serviceId,
-      row.itemId,
-      row.taxRateId,
-      row.pricingBasis,
-      key,
-      row.unitPricePaise,
-      row.minQuantity,
-      effectiveFrom,
-      now,
-      now,
-    );
+  const rciCount = db.prepare("SELECT count(*) as count FROM rate_card_items").get();
+  if (rciCount?.count === 0) {
+    for (const row of rciRows) {
+      const key = buildPricingKey(row.serviceId, row.itemId, row.pricingBasis);
+      db.prepare(`
+        INSERT OR IGNORE INTO rate_card_items (
+          rate_card_id, service_id, item_id, tax_rate_id, pricing_basis, pricing_key, unit_price_paise, min_quantity, effective_from, is_active, created_at, updated_at
+        ) VALUES (
+          1, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+        )
+      `).run(
+        row.serviceId,
+        row.itemId,
+        row.taxRateId,
+        row.pricingBasis,
+        key,
+        row.unitPricePaise,
+        row.minQuantity,
+        effectiveFrom,
+        now,
+        now,
+      );
+    }
   }
 
   // Default Sample Customer (if none exist)
@@ -290,9 +312,9 @@ export function seedLocalDatabase(dbPath) {
   if (custCount?.count === 0) {
     db.prepare(`
       INSERT INTO customers (
-        branch_id, customer_code, full_name, phone, email, state_code, is_active, created_at, updated_at
+        tenant_id, branch_id, customer_code, full_name, phone, email, state_code, is_active, created_at, updated_at
       ) VALUES (
-        1, 'CUST-001', 'Rahul Sharma', '+919876543210', 'customer@freshfold.local', '29', 1, ?, ?
+        1, 1, 'CUST-001', 'Rahul Sharma', '+919876543210', 'customer@freshfold.local', '29', 1, ?, ?
       )
     `).run(now, now);
   }
@@ -307,9 +329,9 @@ export function seedLocalDatabase(dbPath) {
   for (const sub of knownSubs) {
     db.prepare(`
       INSERT OR IGNORE INTO users (
-        branch_id, supabase_user_id, email, full_name, is_active, created_at, updated_at
+        tenant_id, branch_id, supabase_user_id, email, full_name, is_active, created_at, updated_at
       ) VALUES (
-        1, ?, 'manager@freshfold.in', 'Store Manager', 1, ?, ?
+        1, 1, ?, 'manager@freshfold.in', 'Store Manager', 1, ?, ?
       )
     `).run(sub, now, now);
 

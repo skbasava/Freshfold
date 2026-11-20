@@ -114,7 +114,25 @@ export const requireAuth: MiddlewareHandler<ApiHonoEnv> = async (c, next) => {
     });
   }
 
-  c.set("actor", staff);
+  const requestedHub = c.req.header("x-hub-id")?.trim();
+  let effectiveBranchId = staff.branchId;
+
+  if (requestedHub) {
+    const numericId = Number(requestedHub);
+    const branch =
+      Number.isInteger(numericId) && numericId > 0
+        ? await c.var.container.branches.findById(numericId)
+        : await c.var.container.branches.findByCode(requestedHub);
+
+    if (branch && branch.tenantId === staff.tenantId && branch.isActive) {
+      effectiveBranchId = branch.id;
+    }
+  }
+
+  c.set("actor", {
+    ...staff,
+    branchId: effectiveBranchId,
+  });
   await next();
 };
 

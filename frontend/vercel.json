@@ -1,9 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "outputDirectory": "dist",
   "cleanUrls": true,
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://laundry-erp-api.abhidigitechblr.workers.dev/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://laundry-erp-api.abhidigitechblr.workers.dev/health"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

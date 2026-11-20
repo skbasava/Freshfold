@@ -3,6 +3,8 @@ import { Outlet, useLocation, useOutletContext } from "react-router-dom";
 import type { Role } from "@laundry/contracts";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAuth } from "@/features/auth";
+import type { HubOption } from "@/features/auth/types/auth.types";
+import { setActiveHubId } from "@/lib/http/session-store";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
   AppSidebarBlock,
@@ -65,6 +67,27 @@ export function WorkspaceShell({
     roleLabel: formatRoleLabel(session?.user.role ?? "front_desk")
   };
 
+  const currentHubCode = session?.user.hubId ?? "MAIN";
+  const currentHubName = session?.user.hubName ?? "Main Branch";
+  const tenantName =
+    session?.tenant?.name ?? session?.user.tenantName ?? "FreshFold India";
+  const availableHubs: HubOption[] =
+    session?.availableHubs && session.availableHubs.length > 0
+      ? session.availableHubs
+      : [
+          {
+            id: currentHubCode,
+            code: currentHubCode,
+            name: currentHubName,
+            isDefault: true,
+          },
+        ];
+
+  const handleSelectHub = (hub: HubOption) => {
+    setActiveHubId(hub.code);
+    window.location.reload();
+  };
+
   const breadcrumbs = resolveBreadcrumbs(pathname);
 
   return (
@@ -78,6 +101,11 @@ export function WorkspaceShell({
         <TopNavbarBlock
           breadcrumbs={breadcrumbs}
           user={userInfo}
+          tenantName={tenantName}
+          currentHubName={currentHubName}
+          currentHubCode={currentHubCode}
+          availableHubs={availableHubs}
+          onSelectHub={handleSelectHub}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           onSignOut={() => void signOut()}

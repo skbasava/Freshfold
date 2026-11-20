@@ -13,9 +13,11 @@ import {
   serviceCategories,
   services,
   taxRates,
+  tenants,
 } from "./schema";
 
 export interface SeedResult {
+  tenantId: number;
   branchId: number;
   defaultRateCardId: number;
   taxRateIds: Record<string, number>;
@@ -24,7 +26,7 @@ export interface SeedResult {
 }
 
 /**
- * Idempotent database seed for the single default branch, roles, settings,
+ * Idempotent database seed for the default tenant, branch, roles, settings,
  * service & item catalog, configurable placeholder GST rates (requiring
  * tax-advisor validation prior to production), and a default rate card.
  */
@@ -35,10 +37,33 @@ export async function seedDatabase(
   const db = createDbClient(d1);
   const effectiveFrom = "2026-01-01T00:00:00.000Z";
 
-  // 1. Default single branch (configurable placeholder state code '29' = Karnataka)
+  // 1. Default Tenant
+  await db
+    .insert(tenants)
+    .values({
+      id: 1,
+      code: "TENANT-001",
+      name: "FreshFold India",
+      slug: "freshfold-india",
+      planTier: "enterprise",
+      status: "active",
+      contactEmail: "admin@freshfold.in",
+      contactPhone: "+919900000000",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    })
+    .onConflictDoNothing({ target: tenants.code });
+
+  const [tenant] = await db.select().from(tenants).limit(1);
+  if (!tenant) {
+    throw new Error("Failed to seed default tenant");
+  }
+
+  // 2. Default single branch (configurable placeholder state code '29' = Karnataka)
   await db
     .insert(branches)
     .values({
+      tenantId: tenant.id,
       code: DEFAULT_BRANCH_CODE,
       name: "FreshFold Main Branch",
       legalName: "FreshFold Laundry Services",
@@ -259,6 +284,7 @@ export async function seedDatabase(
   await db
     .insert(rateCards)
     .values({
+      tenantId: tenant.id,
       branchId: branch.id,
       code: "STD_2026",
       name: "Standard Retail Rate Card 2026",
@@ -359,6 +385,7 @@ export async function seedDatabase(
   }
 
   return {
+    tenantId: tenant.id,
     branchId: branch.id,
     defaultRateCardId: defaultRateCard.id,
     taxRateIds,

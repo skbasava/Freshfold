@@ -53,20 +53,24 @@ function toAuthSession(
   verified: SessionResponse,
   rcVersion: string,
 ): AuthSession {
-  const tenantId = verified.tenantId ?? verified.hub.tenantId;
+  const tenantId = verified.tenant?.id ?? verified.tenantId ?? verified.hub.tenantId;
+  const hubName = verified.hub.name ?? formatHubName(verified.hub.id);
   return {
     accessToken,
     rcVersion,
-    tenantEnabled: Boolean(verified.tenantEnabled),
-    hubEnabled: Boolean(verified.hubEnabled),
+    tenantEnabled: verified.tenantEnabled ?? true,
+    hubEnabled: verified.hubEnabled ?? true,
+    tenant: verified.tenant,
+    availableHubs: verified.availableHubs,
     user: {
       id: verified.user.id,
       email: verified.user.email,
       displayName: verified.user.displayName,
       role: verified.role,
       hubId: verified.hub.id,
-      hubName: formatHubName(verified.hub.id),
+      hubName,
       tenantId,
+      tenantName: verified.tenant?.name,
     },
   };
 }

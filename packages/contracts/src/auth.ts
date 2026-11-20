@@ -29,6 +29,8 @@ export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export const authenticatedHubSchema = z.object({
   id: z.string().min(1),
   tenantId: z.string().min(1),
+  name: z.string().optional(),
+  code: z.string().optional(),
 });
 export type AuthenticatedHub = z.infer<typeof authenticatedHubSchema>;
 
@@ -36,6 +38,26 @@ export const sessionResponseSchema = z.object({
   user: authenticatedUserSchema,
   hub: authenticatedHubSchema,
   role: roleSchema,
+  roles: z.array(roleSchema).optional(),
+  tenant: z
+    .object({
+      id: z.string().min(1),
+      name: z.string(),
+      code: z.string(),
+    })
+    .optional(),
+  availableHubs: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        numericId: z.number().optional(),
+        name: z.string(),
+        code: z.string(),
+        stateCode: z.string().optional(),
+        isDefault: z.boolean().optional(),
+      }),
+    )
+    .optional(),
   tenantId: z.string().optional(),
   rcVersion: z.string().optional(),
   tenantEnabled: z.boolean().optional(),

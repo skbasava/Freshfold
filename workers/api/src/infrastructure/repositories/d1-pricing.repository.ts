@@ -74,6 +74,7 @@ export class D1PricingRepository implements PricingRepository {
   }
 
   async createRateCard(input: {
+    tenantId?: number;
     branchId: number;
     code: string;
     name: string;
@@ -87,6 +88,7 @@ export class D1PricingRepository implements PricingRepository {
       const [row] = await this.db
         .insert(rateCards)
         .values({
+          tenantId: input.tenantId ?? 1,
           branchId: input.branchId,
           code: input.code,
           name: input.name,
@@ -135,11 +137,17 @@ export class D1PricingRepository implements PricingRepository {
     return row ?? null;
   }
 
-  async listRateCards(branchId?: number): Promise<RateCardRecord[]> {
+  async listRateCards(
+    branchId?: number,
+    tenantId?: number,
+  ): Promise<RateCardRecord[]> {
+    const conditions = [];
+    if (branchId !== undefined) conditions.push(eq(rateCards.branchId, branchId));
+    if (tenantId !== undefined) conditions.push(eq(rateCards.tenantId, tenantId));
     return this.db
       .select()
       .from(rateCards)
-      .where(branchId !== undefined ? eq(rateCards.branchId, branchId) : undefined)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(rateCards.isDefault), asc(rateCards.id));
   }
 

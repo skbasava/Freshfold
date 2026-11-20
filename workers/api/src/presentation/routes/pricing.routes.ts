@@ -9,7 +9,7 @@ import {
 import { ValidationError } from "../../shared/errors";
 import { requireAuth } from "../middleware/auth";
 import type { ApiHonoEnv } from "../types";
-import { parsePositiveIntParam } from "./helpers";
+import { parseOptionalIntQuery, parsePositiveIntParam } from "./helpers";
 
 export const pricingRoutes = new Hono<ApiHonoEnv>();
 
@@ -34,8 +34,26 @@ pricingRoutes.post("/tax-rates", async (c) => {
 
 /* Rate Cards & Items */
 pricingRoutes.get("/rate-cards", async (c) => {
-  const rows = await c.var.container.pricingUseCases.listRateCards();
+  const hubId =
+    parseOptionalIntQuery(c.req.query("hubId") ?? c.req.query("branchId"), "hubId") ??
+    c.var.actor?.branchId;
+  const rows = await c.var.container.pricingUseCases.listRateCards(
+    hubId,
+    c.var.actor?.tenantId,
+  );
   return c.json({ data: rows }, 200);
+});
+
+pricingRoutes.get("/rate-cards/current/items", async (c) => {
+  const hubId =
+    parseOptionalIntQuery(c.req.query("hubId") ?? c.req.query("branchId"), "hubId") ??
+    c.var.actor?.branchId;
+  if (!hubId) {
+    throw new ValidationError("No active hub found");
+  }
+  const defaultCard = await c.var.container.pricingUseCases.getDefaultRateCardForBranch(hubId);
+  const rows = await c.var.container.pricingUseCases.listRateCardItems(defaultCard.id);
+  return c.json({ data: rows, rateCard: defaultCard }, 200);
 });
 
 pricingRoutes.post("/rate-cards", async (c) => {

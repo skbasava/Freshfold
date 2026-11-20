@@ -8,7 +8,7 @@ import {
 } from "../../application/dto/schemas";
 import { requireAuth } from "../middleware/auth";
 import type { ApiHonoEnv } from "../types";
-import { parsePositiveIntParam } from "./helpers";
+import { parseOptionalIntQuery, parsePositiveIntParam } from "./helpers";
 
 export const customerRoutes = new Hono<ApiHonoEnv>();
 
@@ -18,6 +18,8 @@ customerRoutes.post("/", async (c) => {
   const body = createCustomerSchema.parse(await c.req.json());
   const created = await c.var.container.customerUseCases.createCustomer({
     ...body,
+    tenantId: c.var.actor?.tenantId,
+    branchId: c.var.actor?.branchId,
     actorUserId: c.var.actor?.id ?? null,
     requestId: c.var.requestId,
   });
@@ -29,7 +31,12 @@ customerRoutes.get("/", async (c) => {
     limit: c.req.query("limit"),
     cursor: c.req.query("cursor"),
   });
+  const hubId =
+    parseOptionalIntQuery(c.req.query("hubId") ?? c.req.query("branchId"), "hubId") ??
+    c.var.actor?.branchId;
   const page = await c.var.container.customerUseCases.listCustomers({
+    tenantId: c.var.actor?.tenantId,
+    branchId: hubId,
     search: c.req.query("search"),
     includeInactive: c.req.query("includeInactive") === "true",
     limit: q.limit,

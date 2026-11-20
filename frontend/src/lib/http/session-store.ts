@@ -12,6 +12,18 @@ let state: ActiveSessionContext = {
   rcVersion: null,
 };
 
+type ContextChangeListener = (ctx: Readonly<ActiveSessionContext>) => void;
+const listeners = new Set<ContextChangeListener>();
+
+export function onSessionContextChange(
+  listener: ContextChangeListener,
+): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function getActiveSessionContext(): Readonly<ActiveSessionContext> {
   return state;
 }
@@ -23,6 +35,22 @@ export function setActiveSessionContext(
     ...state,
     ...next,
   };
+  listeners.forEach((fn) => {
+    try {
+      fn(state);
+    } catch {
+      // Ignore listener error
+    }
+  });
+}
+
+export function setActiveHubId(hubId: string): void {
+  setActiveSessionContext({ hubId });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("freshfold:hub-changed", { detail: { hubId } }),
+    );
+  }
 }
 
 export function setActiveRcVersion(rcVersion: string | null): void {

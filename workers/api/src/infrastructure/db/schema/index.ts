@@ -1,3 +1,4 @@
+export { tenants } from "./tenant.schema";
 export { branches } from "./branch.schema";
 export { roles, userRoles, users } from "./access.schema";
 export {

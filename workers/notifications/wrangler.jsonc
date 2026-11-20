@@ -1,0 +1,37 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "laundry-erp-notifications",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NOTIFICATION_QUEUE",
+        "class_name": "NotificationQueueDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["NotificationQueueDurableObject"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "laundry-core",
+      "database_id": "542f026d-c72f-49d8-8cee-587ced45701d"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SERVICE_NAME": "laundry-notifications"
+  }
+}

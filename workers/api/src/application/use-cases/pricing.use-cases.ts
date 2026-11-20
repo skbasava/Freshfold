@@ -73,6 +73,8 @@ export class PricingUseCases {
   }
 
   async createRateCard(input: {
+    tenantId?: number;
+    branchId?: number;
     code: string;
     name: string;
     description?: string | null;
@@ -80,22 +82,38 @@ export class PricingUseCases {
     effectiveFrom: string;
     effectiveTo?: string | null;
   }): Promise<RateCardRecord> {
-    const branch = await this.deps.branches.findDefault();
+    const branch = input.branchId
+      ? await this.deps.branches.findById(input.branchId)
+      : await this.deps.branches.findDefault();
     if (!branch) {
-      throw new NotFoundError("Default branch not configured");
+      throw new NotFoundError("Branch not configured");
     }
     if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
       throw new ValidationError("effectiveTo cannot be earlier than effectiveFrom");
     }
     return this.deps.pricing.createRateCard({
+      tenantId: input.tenantId ?? branch.tenantId,
       branchId: branch.id,
       ...input,
       nowIso: this.deps.clock.nowIso(),
     });
   }
 
-  listRateCards(): Promise<RateCardRecord[]> {
-    return this.deps.pricing.listRateCards();
+  listRateCards(branchId?: number, tenantId?: number): Promise<RateCardRecord[]> {
+    return this.deps.pricing.listRateCards(branchId, tenantId);
+  }
+
+  async getDefaultRateCardForBranch(branchId: number): Promise<RateCardRecord> {
+    const card = await this.deps.pricing.findDefaultRateCard(
+      branchId,
+      this.deps.clock.nowIso(),
+    );
+    if (!card) {
+      throw new NotFoundError(
+        `No active default rate card found for branch #${branchId}`,
+      );
+    }
+    return card;
   }
 
   async addRateCardItem(

@@ -7,11 +7,16 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { tenants } from "./tenant.schema";
 
 export const branches = sqliteTable(
   "branches",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .default(1)
+      .references(() => tenants.id, { onDelete: "restrict" }),
     code: text("code").notNull(),
     name: text("name").notNull(),
     legalName: text("legal_name").notNull(),
@@ -33,6 +38,8 @@ export const branches = sqliteTable(
   },
   (table) => [
     uniqueIndex("uq_branches_code").on(table.code),
+    uniqueIndex("uq_branches_tenant_code").on(table.tenantId, table.code),
+    index("idx_branches_tenant").on(table.tenantId, table.isActive),
     index("idx_branches_active").on(table.isActive),
     check("chk_branches_is_default", sql`${table.isDefault} IN (0, 1)`),
     check("chk_branches_is_active", sql`${table.isActive} IN (0, 1)`),
