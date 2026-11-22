@@ -1,27 +1,6 @@
 import type { AddressType } from "../../shared/constants";
 import type { CursorPage, CursorPayload } from "../../shared/pagination";
 
-export interface BranchRecord {
-  id: number;
-  tenantId: number;
-  code: string;
-  name: string;
-  legalName: string;
-  gstin: string | null;
-  stateCode: string;
-  addressLine1: string;
-  addressLine2: string | null;
-  city: string;
-  state: string;
-  postalCode: string;
-  phone: string;
-  email: string | null;
-  isDefault: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface CustomerRecord {
   id: number;
   tenantId: number;
@@ -118,33 +97,6 @@ export interface UpsertCustomerPreferencesInput {
   fragranceFree?: boolean;
   specialInstructions?: string | null;
   nowIso: string;
-}
-
-export interface CreateBranchInput {
-  tenantId: number;
-  code: string;
-  name: string;
-  legalName?: string;
-  gstin?: string | null;
-  stateCode?: string;
-  addressLine1?: string;
-  addressLine2?: string | null;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  phone?: string;
-  email?: string | null;
-  isDefault?: boolean;
-  isActive?: boolean;
-  nowIso: string;
-}
-
-export interface BranchRepository {
-  findDefault(): Promise<BranchRecord | null>;
-  findById(id: number): Promise<BranchRecord | null>;
-  findByCode(code: string): Promise<BranchRecord | null>;
-  findByTenantId(tenantId: number): Promise<BranchRecord[]>;
-  create(input: CreateBranchInput): Promise<BranchRecord>;
 }
 
 export interface CustomerRepository {

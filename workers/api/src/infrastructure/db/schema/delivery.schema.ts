@@ -7,17 +7,13 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 import { users } from "./access.schema";
-import { branches } from "./branch.schema";
-import { customerAddresses, customers } from "./customer.schema";
+import { customers, customerAddresses } from "./customer.schema";
 import { orders } from "./order.schema";
-
 export const deliveries = sqliteTable(
   "deliveries",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: integer("branch_id").notNull().default(1),
     orderId: integer("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),

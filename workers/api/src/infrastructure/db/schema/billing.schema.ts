@@ -8,7 +8,6 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { users } from "./access.schema";
-import { branches } from "./branch.schema";
 import { customers } from "./customer.schema";
 import { orderItems, orders } from "./order.schema";
 
@@ -16,9 +15,7 @@ export const invoices = sqliteTable(
   "invoices",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: integer("branch_id").notNull().default(1),
     orderId: integer("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
@@ -126,9 +123,7 @@ export const payments = sqliteTable(
   "payments",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: integer("branch_id").notNull().default(1),
     customerId: integer("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),

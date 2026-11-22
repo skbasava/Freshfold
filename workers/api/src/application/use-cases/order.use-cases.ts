@@ -4,15 +4,13 @@ import type {
   CalendarPort,
 } from "../../domain/ports/calendar.port";
 import type { CatalogRepository } from "../../domain/repositories/catalog.repository";
-import type {
-  BranchRepository,
-  CustomerRepository,
-} from "../../domain/repositories/customer.repository";
+import type { CustomerRepository } from "../../domain/repositories/customer.repository";
 import type {
   OrderAdjustmentRecord,
   OrderNoteRecord,
   OrderRecord,
   OrderRepository,
+  OrderScope,
   OrderWithDetails,
 } from "../../domain/repositories/order.repository";
 import type { PricingRepository } from "../../domain/repositories/pricing.repository";
@@ -39,7 +37,6 @@ import {
 } from "../services/pricing-engine.service";
 
 export interface OrderUseCasesDeps {
-  branches: BranchRepository;
   customers: CustomerRepository;
   catalog: CatalogRepository;
   pricing: PricingRepository;
@@ -55,7 +52,6 @@ export class OrderUseCases {
 
   constructor(private readonly deps: OrderUseCasesDeps) {
     this.pricingEngine = new PricingEngineService({
-      branches: deps.branches,
       customers: deps.customers,
       catalog: deps.catalog,
       pricing: deps.pricing,
@@ -65,6 +61,8 @@ export class OrderUseCases {
   }
 
   async createOrder(input: {
+    tenantId?: number;
+    branchId?: number;
     customerId: number;
     rateCardId?: number;
     pickupAddressId?: number | null;
@@ -81,6 +79,8 @@ export class OrderUseCases {
       operation: "orders.create",
       idempotencyKey: input.idempotencyKey,
       payload: {
+        tenantId: input.tenantId ?? null,
+        branchId: input.branchId ?? null,
         customerId: input.customerId,
         rateCardId: input.rateCardId ?? null,
         pickupAddressId: input.pickupAddressId ?? null,
@@ -120,15 +120,18 @@ export class OrderUseCases {
           lines: input.lines,
         });
 
+
+        // Next Release we need to update the CRN Number with tenantID and hubID and authUserMobNumb(3) and Random Order ID
+
         const orderNumber = `ORD-${nowIso.slice(0, 10).replace(/-/g, "")}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
-        const branch = await this.deps.branches.findById(quote.branchId);
-        const tenantId = branch?.tenantId ?? 1;
+        const tenantId = input.tenantId ?? 1;
+        const branchId = input.branchId ?? quote.branchId;
 
         const created = await this.deps.orders.createOrderAggregate({
           order: {
             tenantId,
-            branchId: quote.branchId,
+            branchId,
             customerId: quote.customerId,
             rateCardId: quote.rateCardId,
             pickupAddressId: input.pickupAddressId ?? null,
@@ -239,8 +242,8 @@ export class OrderUseCases {
     });
   }
 
-  async getOrder(id: number): Promise<OrderWithDetails> {
-    const details = await this.deps.orders.findWithDetails(id);
+  async getOrder(id: number, scope?: OrderScope): Promise<OrderWithDetails> {
+    const details = await this.deps.orders.findWithDetails(id, scope);
     if (!details) {
       throw new NotFoundError(`Order #${id} not found`);
     }
@@ -253,7 +256,14 @@ export class OrderUseCases {
     };
   }
 
-  async getOrderCalendarEvent(orderId: number): Promise<CalendarEventResult | null> {
+  async getOrderCalendarEvent(
+    orderId: number,
+    scope?: OrderScope,
+  ): Promise<CalendarEventResult | null> {
+    const order = await this.deps.orders.findById(orderId, scope);
+    if (!order) {
+      throw new NotFoundError(`Order #${orderId} not found`);
+    }
     const event = await this.deps.system.getSetting<CalendarEventResult>(
       `order_calendar_${orderId}`,
     );
@@ -263,8 +273,9 @@ export class OrderUseCases {
   async syncOrderCalendarEvent(
     orderId: number,
     actorUserId?: number | null,
+    scope?: OrderScope,
   ): Promise<CalendarEventResult> {
-    const details = await this.deps.orders.findWithDetails(orderId);
+    const details = await this.deps.orders.findWithDetails(orderId, scope);
     if (!details) {
       throw new NotFoundError(`Order #${orderId} not found`);
     }
@@ -347,8 +358,9 @@ export class OrderUseCases {
       actorUserId?: number | null;
       requestId?: string;
     },
+    scope?: OrderScope,
   ): Promise<OrderRecord> {
-    const existing = await this.deps.orders.findById(orderId);
+    const existing = await this.deps.orders.findById(orderId, scope);
     if (!existing) {
       throw new NotFoundError(`Order #${orderId} not found`);
     }
@@ -387,8 +399,9 @@ export class OrderUseCases {
       isInternal: boolean;
       actorUserId?: number | null;
     },
+    scope?: OrderScope,
   ): Promise<OrderNoteRecord> {
-    const existing = await this.deps.orders.findById(orderId);
+    const existing = await this.deps.orders.findById(orderId, scope);
     if (!existing) {
       throw new NotFoundError(`Order #${orderId} not found`);
     }
@@ -409,8 +422,9 @@ export class OrderUseCases {
       amountPaise: number;
       actorUserId?: number | null;
     },
+    scope?: OrderScope,
   ): Promise<{ adjustment: OrderAdjustmentRecord; order: OrderRecord }> {
-    const existing = await this.deps.orders.findById(orderId);
+    const existing = await this.deps.orders.findById(orderId, scope);
     if (!existing) {
       throw new NotFoundError(`Order #${orderId} not found`);
     }
@@ -436,8 +450,9 @@ export class OrderUseCases {
       actorUserId?: number | null;
       requestId?: string | null;
     },
+    scope?: OrderScope,
   ): Promise<OrderWithDetails> {
-    const existing = await this.deps.orders.findWithDetails(id);
+    const existing = await this.deps.orders.findWithDetails(id, scope);
     if (!existing) {
       throw new NotFoundError(`Order #${id} not found`);
     }

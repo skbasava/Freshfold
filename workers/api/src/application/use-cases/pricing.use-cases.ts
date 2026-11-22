@@ -4,10 +4,7 @@ import {
 } from "../../domain/entities/pricing";
 import { validateTaxRateConfig, type TaxRateConfig } from "../../domain/entities/tax";
 import type { CatalogRepository } from "../../domain/repositories/catalog.repository";
-import type {
-  BranchRepository,
-  CustomerRepository,
-} from "../../domain/repositories/customer.repository";
+import type { CustomerRepository } from "../../domain/repositories/customer.repository";
 import type {
   CustomerRateCardRecord,
   PricingRepository,
@@ -25,7 +22,6 @@ import {
 } from "../services/pricing-engine.service";
 
 export interface PricingUseCasesDeps {
-  branches: BranchRepository;
   customers: CustomerRepository;
   catalog: CatalogRepository;
   pricing: PricingRepository;
@@ -38,7 +34,6 @@ export class PricingUseCases {
 
   constructor(private readonly deps: PricingUseCasesDeps) {
     this.engine = new PricingEngineService({
-      branches: deps.branches,
       customers: deps.customers,
       catalog: deps.catalog,
       pricing: deps.pricing,
@@ -82,18 +77,14 @@ export class PricingUseCases {
     effectiveFrom: string;
     effectiveTo?: string | null;
   }): Promise<RateCardRecord> {
-    const branch = input.branchId
-      ? await this.deps.branches.findById(input.branchId)
-      : await this.deps.branches.findDefault();
-    if (!branch) {
-      throw new NotFoundError("Branch not configured");
-    }
+    const branchId = input.branchId ?? 1;
+    const tenantId = input.tenantId ?? 1;
     if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
       throw new ValidationError("effectiveTo cannot be earlier than effectiveFrom");
     }
     return this.deps.pricing.createRateCard({
-      tenantId: input.tenantId ?? branch.tenantId,
-      branchId: branch.id,
+      tenantId,
+      branchId,
       ...input,
       nowIso: this.deps.clock.nowIso(),
     });

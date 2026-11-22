@@ -1,10 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { buildPricingKey } from "../../domain/entities/pricing";
-import { DEFAULT_BRANCH_CODE } from "../../shared/constants";
 import { createDbClient } from "./client";
 import {
   appSettings,
-  branches,
   itemCategories,
   items,
   rateCardItems,
@@ -13,7 +11,6 @@ import {
   serviceCategories,
   services,
   taxRates,
-  tenants,
 } from "./schema";
 
 export interface SeedResult {
@@ -26,9 +23,10 @@ export interface SeedResult {
 }
 
 /**
- * Idempotent database seed for the default tenant, branch, roles, settings,
+ * Idempotent database seed for the roles, settings,
  * service & item catalog, configurable placeholder GST rates (requiring
  * tax-advisor validation prior to production), and a default rate card.
+ * Tenants and hubs are managed externally in Supabase Auth.
  */
 export async function seedDatabase(
   d1: D1Database,
@@ -36,58 +34,10 @@ export async function seedDatabase(
 ): Promise<SeedResult> {
   const db = createDbClient(d1);
   const effectiveFrom = "2026-01-01T00:00:00.000Z";
+  const tenantId = 1;
+  const branchId = 1;
 
-  // 1. Default Tenant
-  await db
-    .insert(tenants)
-    .values({
-      id: 1,
-      code: "TENANT-001",
-      name: "FreshFold India",
-      slug: "freshfold-india",
-      planTier: "enterprise",
-      status: "active",
-      contactEmail: "admin@freshfold.in",
-      contactPhone: "+919900000000",
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    })
-    .onConflictDoNothing({ target: tenants.code });
-
-  const [tenant] = await db.select().from(tenants).limit(1);
-  if (!tenant) {
-    throw new Error("Failed to seed default tenant");
-  }
-
-  // 2. Default single branch (configurable placeholder state code '29' = Karnataka)
-  await db
-    .insert(branches)
-    .values({
-      tenantId: tenant.id,
-      code: DEFAULT_BRANCH_CODE,
-      name: "FreshFold Main Branch",
-      legalName: "FreshFold Laundry Services",
-      gstin: null,
-      stateCode: "29",
-      addressLine1: "Main Operations Center",
-      city: "Bengaluru",
-      state: "Karnataka",
-      postalCode: "560001",
-      phone: "+919900000001",
-      email: "ops@freshfold.local",
-      isDefault: true,
-      isActive: true,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    })
-    .onConflictDoNothing({ target: branches.code });
-
-  const [branch] = await db.select().from(branches).limit(1);
-  if (!branch) {
-    throw new Error("Failed to seed default branch");
-  }
-
-  // 2. Roles
+  // 1. Roles
   const roleSeeds = [
     { code: "super_admin", name: "Super Admin", description: "Full system administration" },
     { code: "admin", name: "Admin", description: "Branch configuration, pricing, and billing" },
@@ -284,8 +234,8 @@ export async function seedDatabase(
   await db
     .insert(rateCards)
     .values({
-      tenantId: tenant.id,
-      branchId: branch.id,
+      tenantId,
+      branchId,
       code: "STD_2026",
       name: "Standard Retail Rate Card 2026",
       description: "Default branch rate card supporting per-item and per-kg pricing",
@@ -385,8 +335,8 @@ export async function seedDatabase(
   }
 
   return {
-    tenantId: tenant.id,
-    branchId: branch.id,
+    tenantId,
+    branchId,
     defaultRateCardId: defaultRateCard.id,
     taxRateIds,
     serviceIds,

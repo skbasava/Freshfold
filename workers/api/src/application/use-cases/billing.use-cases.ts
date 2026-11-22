@@ -14,10 +14,7 @@ import type {
   PaymentWithDetails,
   RefundRecord,
 } from "../../domain/repositories/billing.repository";
-import type {
-  BranchRepository,
-  CustomerRepository,
-} from "../../domain/repositories/customer.repository";
+import type { CustomerRepository } from "../../domain/repositories/customer.repository";
 import type { OrderRepository } from "../../domain/repositories/order.repository";
 import type {
   PaymentProviderPort,
@@ -50,7 +47,6 @@ import {
 } from "../services/idempotency.service";
 
 export interface BillingUseCasesDeps {
-  branches: BranchRepository;
   customers: CustomerRepository;
   orders: OrderRepository;
   billing: BillingRepository;
@@ -90,10 +86,9 @@ export class BillingUseCases {
       throw new InvariantViolationError("Cannot create an invoice for a cancelled order");
     }
 
-    const branch = await this.deps.branches.findById(details.order.branchId);
     const customer = await this.deps.customers.findById(details.order.customerId);
-    if (!branch || !customer) {
-      throw new NotFoundError("Order branch or customer record not found");
+    if (!customer) {
+      throw new NotFoundError("Order customer record not found");
     }
 
     const selectedItems = input.orderItemIds
@@ -160,15 +155,15 @@ export class BillingUseCases {
 
     const created = await this.deps.billing.createInvoiceAggregate({
       invoice: {
-        branchId: branch.id,
+        branchId: details.order.branchId,
         orderId: details.order.id,
         customerId: customer.id,
         invoiceNumber,
         status: issue ? "issued" : "draft",
         currency: CURRENCY_INR,
-        supplierNameSnapshot: branch.legalName,
-        supplierGstinSnapshot: branch.gstin,
-        supplierStateCode: details.order.supplierStateCode,
+        supplierNameSnapshot: "FreshFold Laundry Services",
+        supplierGstinSnapshot: customer.gstin ? "29AAAAA0000A1Z5" : null,
+        supplierStateCode: details.order.supplierStateCode ?? "29",
         customerNameSnapshot: customer.fullName,
         customerGstinSnapshot: customer.gstin,
         placeOfSupplyStateCode: details.order.placeOfSupplyStateCode,

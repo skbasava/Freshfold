@@ -1,8 +1,5 @@
 import { and, asc, desc, eq, isNull, like, lt, or } from "drizzle-orm";
 import type {
-  BranchRecord,
-  BranchRepository,
-  CreateBranchInput,
   CreateCustomerAddressInput,
   CreateCustomerInput,
   CustomerAddressRecord,
@@ -20,145 +17,10 @@ import {
 } from "../../shared/pagination";
 import { mapSqliteError, type ApiDatabase } from "../db/client";
 import {
-  branches,
   customerAddresses,
   customerPreferences,
   customers,
-  rateCardItems,
-  rateCards,
 } from "../db/schema";
-
-export class D1BranchRepository implements BranchRepository {
-  constructor(private readonly db: ApiDatabase) {}
-
-  async findDefault(): Promise<BranchRecord | null> {
-    const [row] = await this.db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.isDefault, true), eq(branches.isActive, true)))
-      .limit(1);
-    return row ?? null;
-  }
-
-  async findById(id: number): Promise<BranchRecord | null> {
-    const [row] = await this.db
-      .select()
-      .from(branches)
-      .where(eq(branches.id, id))
-      .limit(1);
-    return row ?? null;
-  }
-
-  async findByCode(code: string): Promise<BranchRecord | null> {
-    const [row] = await this.db
-      .select()
-      .from(branches)
-      .where(eq(branches.code, code))
-      .limit(1);
-    return row ?? null;
-  }
-
-  async findByTenantId(tenantId: number): Promise<BranchRecord[]> {
-    return this.db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.tenantId, tenantId), eq(branches.isActive, true)))
-      .orderBy(asc(branches.name));
-  }
-
-  async create(input: CreateBranchInput): Promise<BranchRecord> {
-    try {
-      const [branch] = await this.db
-        .insert(branches)
-        .values({
-          tenantId: input.tenantId,
-          code: input.code,
-          name: input.name,
-          legalName: input.legalName ?? input.name,
-          gstin: input.gstin ?? null,
-          stateCode: input.stateCode ?? "29",
-          addressLine1: input.addressLine1 ?? "Hub Location",
-          addressLine2: input.addressLine2 ?? null,
-          city: input.city ?? "Bengaluru",
-          state: input.state ?? "Karnataka",
-          postalCode: input.postalCode ?? "560001",
-          phone: input.phone ?? "+919900000000",
-          email: input.email ?? null,
-          isDefault: Boolean(input.isDefault),
-          isActive: input.isActive ?? true,
-          createdAt: input.nowIso,
-          updatedAt: input.nowIso,
-        })
-        .returning();
-
-      // Auto-clone default rate card for the new hub
-      const [sourceRateCard] = await this.db
-        .select()
-        .from(rateCards)
-        .where(
-          and(
-            eq(rateCards.tenantId, input.tenantId),
-            eq(rateCards.isDefault, true),
-            eq(rateCards.isActive, true),
-          ),
-        )
-        .limit(1);
-
-      if (sourceRateCard) {
-        const [newRateCard] = await this.db
-          .insert(rateCards)
-          .values({
-            tenantId: input.tenantId,
-            branchId: branch!.id,
-            code: `RATE_${input.code}_${Date.now().toString(36).toUpperCase()}`,
-            name: `${input.name} Standard Rate Card`,
-            description: `Auto-cloned rate card for hub ${input.name}`,
-            isDefault: true,
-            isActive: true,
-            effectiveFrom: input.nowIso,
-            effectiveTo: null,
-            createdAt: input.nowIso,
-            updatedAt: input.nowIso,
-          })
-          .returning();
-
-        if (newRateCard) {
-          const itemsToClone = await this.db
-            .select()
-            .from(rateCardItems)
-            .where(
-              and(
-                eq(rateCardItems.rateCardId, sourceRateCard.id),
-                eq(rateCardItems.isActive, true),
-              ),
-            );
-
-          for (const item of itemsToClone) {
-            await this.db.insert(rateCardItems).values({
-              rateCardId: newRateCard.id,
-              serviceId: item.serviceId,
-              itemId: item.itemId,
-              taxRateId: item.taxRateId,
-              pricingBasis: item.pricingBasis,
-              pricingKey: item.pricingKey,
-              unitPricePaise: item.unitPricePaise,
-              minQuantity: item.minQuantity,
-              effectiveFrom: input.nowIso,
-              effectiveTo: null,
-              isActive: true,
-              createdAt: input.nowIso,
-              updatedAt: input.nowIso,
-            });
-          }
-        }
-      }
-
-      return branch!;
-    } catch (error) {
-      mapSqliteError(error);
-    }
-  }
-}
 
 export class D1CustomerRepository implements CustomerRepository {
   constructor(private readonly db: ApiDatabase) {}

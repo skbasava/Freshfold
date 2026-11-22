@@ -10,10 +10,9 @@ export const authRoutes = new Hono<ApiHonoEnv>();
  */
 async function handleMe(c: import("hono").Context<ApiHonoEnv>) {
   const actor = c.var.actor!;
-  const tenant = await c.var.container.tenants.findById(actor.tenantId);
-  const branch = await c.var.container.branches.findById(actor.branchId);
-  const availableBranches = await c.var.container.branches.findByTenantId(actor.tenantId);
   const primaryRole = actor.roles[0] ?? "front_desk";
+  const tenantIdStr = String(actor.tenantId ?? 1);
+  const branchId = actor.branchId ?? 1;
 
   c.header("x-rc-version", "1.0.0");
   return c.json(
@@ -26,31 +25,27 @@ async function handleMe(c: import("hono").Context<ApiHonoEnv>) {
       role: primaryRole,
       roles: actor.roles,
       hub: {
-        id: branch?.code ?? "MAIN",
-        name: branch?.name ?? "FreshFold Main Branch",
-        code: branch?.code ?? "MAIN",
-        tenantId: String(tenant?.id ?? actor.tenantId ?? 1),
+        id: "MAIN",
+        name: "FreshFold Main Branch",
+        code: "MAIN",
+        tenantId: tenantIdStr,
       },
-      tenant: tenant
-        ? {
-            id: String(tenant.id),
-            name: tenant.name,
-            code: tenant.code,
-          }
-        : {
-            id: "1",
-            name: "FreshFold India",
-            code: "TENANT-001",
-          },
-      availableHubs: (availableBranches.length > 0 ? availableBranches : (branch ? [branch] : [])).map((b) => ({
-        id: b.code,
-        numericId: b.id,
-        name: b.name,
-        code: b.code,
-        stateCode: b.stateCode,
-        isDefault: b.isDefault,
-      })),
-      tenantId: String(tenant?.id ?? actor.tenantId ?? 1),
+      tenant: {
+        id: tenantIdStr,
+        name: "FreshFold India",
+        code: "TENANT-001",
+      },
+      availableHubs: [
+        {
+          id: "MAIN",
+          numericId: branchId,
+          name: "FreshFold Main Branch",
+          code: "MAIN",
+          stateCode: "29",
+          isDefault: true,
+        },
+      ],
+      tenantId: tenantIdStr,
       tenantEnabled: true,
       hubEnabled: true,
     },

@@ -26,6 +26,7 @@
   "vars": {
     "ENVIRONMENT": "development",
     "D1_STORAGE_LIMIT_BYTES": "524288000",
+    // SUPABASE NEED TO MOVE SECRET VALUT
     "SUPABASE_URL": "https://cnxprbxuztftolilepvz.supabase.co",
     "SUPABASE_JWKS_URL": "https://cnxprbxuztftolilepvz.supabase.co/auth/v1/.well-known/jwks.json",
     "SUPABASE_JWT_ISSUER": "https://cnxprbxuztftolilepvz.supabase.co/auth/v1",

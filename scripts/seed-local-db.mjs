@@ -51,24 +51,6 @@ export function seedLocalDatabase(dbPath) {
   const now = new Date().toISOString();
   const effectiveFrom = "2026-01-01T00:00:00.000Z";
 
-  // 1b. Default Tenant
-  db.prepare(`
-    INSERT OR IGNORE INTO tenants (
-      id, code, name, slug, plan_tier, status, contact_email, contact_phone, created_at, updated_at
-    ) VALUES (
-      1, 'TENANT-001', 'FreshFold India', 'freshfold-india', 'enterprise', 'active', 'admin@freshfold.in', '+919900000000', ?, ?
-    )
-  `).run(now, now);
-
-  // 2. Default Branch
-  db.prepare(`
-    INSERT OR IGNORE INTO branches (
-      id, code, name, legal_name, gstin, state_code, address_line1, city, state, postal_code, phone, email, is_default, is_active, created_at, updated_at
-    ) VALUES (
-      1, 'MAIN', 'FreshFold Main Branch', 'FreshFold Laundry Services', NULL, '29', 'Main Operations Center', 'Bengaluru', 'Karnataka', '560001', '+919900000001', 'ops@freshfold.local', 1, 1, ?, ?
-    )
-  `).run(now, now);
-
   // 3. Roles
   const roles = [
     ["super_admin", "Super Admin", "Full system administration"],

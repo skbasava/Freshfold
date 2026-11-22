@@ -7,20 +7,12 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { branches } from "./branch.schema";
-import { tenants } from "./tenant.schema";
-
 export const customers = sqliteTable(
   "customers",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    tenantId: integer("tenant_id")
-      .notNull()
-      .default(1)
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    tenantId: integer("tenant_id").notNull().default(1),
+    branchId: integer("branch_id").notNull().default(1),
     customerCode: text("customer_code").notNull(),
     fullName: text("full_name").notNull(),
     phone: text("phone").notNull(),

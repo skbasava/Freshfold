@@ -6,6 +6,7 @@ import type {
   OrderNoteRecord,
   OrderRecord,
   OrderRepository,
+  OrderScope,
   OrderStatusHistoryRecord,
   OrderWithDetails,
 } from "../../domain/repositories/order.repository";
@@ -191,17 +192,25 @@ export class D1OrderRepository implements OrderRepository {
     }
   }
 
-  async findById(id: number): Promise<OrderRecord | null> {
+  async findById(id: number, scope?: OrderScope): Promise<OrderRecord | null> {
+    const conditions = [eq(orders.id, id)];
+    if (scope?.tenantId !== undefined) {
+      conditions.push(eq(orders.tenantId, scope.tenantId));
+    }
+    if (scope?.branchId !== undefined) {
+      conditions.push(eq(orders.branchId, scope.branchId));
+    }
+
     const [row] = await this.db
       .select()
       .from(orders)
-      .where(eq(orders.id, id))
+      .where(and(...conditions))
       .limit(1);
     return row ? mapOrderRow(row) : null;
   }
 
-  async findWithDetails(id: number): Promise<OrderWithDetails | null> {
-    const order = await this.findById(id);
+  async findWithDetails(id: number, scope?: OrderScope): Promise<OrderWithDetails | null> {
+    const order = await this.findById(id, scope);
     if (!order) return null;
 
     const [itemRows, historyRows, noteRows, adjustmentRows] = await Promise.all([
@@ -302,6 +311,23 @@ export class D1OrderRepository implements OrderRepository {
 
     return buildCursorPage(mapped, params.limit);
   }
+
+// We need to implement optimistic locking using versioning in transitionStatus to handle concurrent update scenarios.
+
+// Example: Suppose the manager and frontend attempt to update the same order simultaneously with different statuses:
+
+// The manager tries to update the order from PENDING to APPROVED.
+// At the same time, the frontend tries to update the same order from PENDING to CANCELLED.
+
+// To handle this, we should maintain a version field for each order.
+
+// Both requests initially read the order with version = 1.
+// The manager's update succeeds, changing the status to APPROVED and incrementing the version to 2.
+// When the frontend attempts to update the order using the old version (1), the update should fail because the current version is now 2.
+
+// The second request should receive an appropriate error indicating that the order has already been modified by another user or process and needs to be refreshed.
+
+// This ensures that only one concurrent status update succeeds, preventing conflicting or inconsistent order updates without requiring explicit locking.
 
   async transitionStatus(input: {
     orderId: number;

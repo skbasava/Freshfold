@@ -7,27 +7,12 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { branches } from "./branch.schema";
-import { tenants } from "./tenant.schema";
-
-/**
- * Staff identity and RBAC tables linked to Supabase Auth (`supabase_user_id`).
- *
- * Security invariant (ADR-015): Supabase Auth is the sole identity & session
- * provider. No password hashes or local session tokens are stored in D1.
- * The `sessions` table from laundry.md is intentionally omitted and documented.
- */
 export const users = sqliteTable(
   "users",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    tenantId: integer("tenant_id")
-      .notNull()
-      .default(1)
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    tenantId: integer("tenant_id").notNull().default(1),
+    branchId: integer("branch_id").notNull().default(1),
     /** Verified Supabase Auth `sub` UUID */
     supabaseUserId: text("supabase_user_id").notNull(),
     email: text("email").notNull(),

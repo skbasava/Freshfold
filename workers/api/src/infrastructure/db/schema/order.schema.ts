@@ -8,23 +8,16 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { users } from "./access.schema";
-import { branches } from "./branch.schema";
 import { items, services } from "./catalog.schema";
 import { customerAddresses, customers } from "./customer.schema";
 import { rateCards, taxRates } from "./pricing.schema";
-import { tenants } from "./tenant.schema";
 
 export const orders = sqliteTable(
   "orders",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    tenantId: integer("tenant_id")
-      .notNull()
-      .default(1)
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    tenantId: integer("tenant_id").notNull().default(1),
+    branchId: integer("branch_id").notNull().default(1),
     customerId: integer("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),

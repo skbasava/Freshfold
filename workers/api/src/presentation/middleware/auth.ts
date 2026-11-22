@@ -51,11 +51,11 @@ export const requireAuth: MiddlewareHandler<ApiHonoEnv> = async (c, next) => {
     throw new UnauthorizedError(`Invalid token: ${verified.reason}`);
   }
 
-  // In local development, ensure base branch & roles are seeded
+  // In local development, ensure base roles and settings are seeded
   if (c.env.ENVIRONMENT === "development") {
     try {
-      const defaultBranch = await c.var.container.branches.findDefault();
-      if (!defaultBranch) {
+      const seeded = await c.var.container.system.getSetting("gst_config");
+      if (!seeded) {
         await seedDatabase(c.env.DB);
       }
     } catch {
@@ -75,8 +75,7 @@ export const requireAuth: MiddlewareHandler<ApiHonoEnv> = async (c, next) => {
   // In development mode, auto-provision authenticated user as manager if not present
   if (!staff && c.env.ENVIRONMENT === "development") {
     try {
-      const defaultBranch = await c.var.container.branches.findDefault();
-      const branchId = defaultBranch?.id ?? 1;
+      const branchId = 1;
       const email =
         verified.identity.email ??
         `${verified.identity.subject}@freshfold.local`;
@@ -119,13 +118,8 @@ export const requireAuth: MiddlewareHandler<ApiHonoEnv> = async (c, next) => {
 
   if (requestedHub) {
     const numericId = Number(requestedHub);
-    const branch =
-      Number.isInteger(numericId) && numericId > 0
-        ? await c.var.container.branches.findById(numericId)
-        : await c.var.container.branches.findByCode(requestedHub);
-
-    if (branch && branch.tenantId === staff.tenantId && branch.isActive) {
-      effectiveBranchId = branch.id;
+    if (Number.isInteger(numericId) && numericId > 0) {
+      effectiveBranchId = numericId;
     }
   }
 

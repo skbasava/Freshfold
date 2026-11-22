@@ -114,10 +114,15 @@ export interface CreateOrderAggregateInput {
   changedByUserId?: number | null;
 }
 
+export interface OrderScope {
+  tenantId?: number;
+  branchId?: number;
+}
+
 export interface OrderRepository {
   createOrderAggregate(input: CreateOrderAggregateInput): Promise<OrderWithDetails>;
-  findById(id: number): Promise<OrderRecord | null>;
-  findWithDetails(id: number): Promise<OrderWithDetails | null>;
+  findById(id: number, scope?: OrderScope): Promise<OrderRecord | null>;
+  findWithDetails(id: number, scope?: OrderScope): Promise<OrderWithDetails | null>;
   list(params: {
     tenantId?: number;
     branchId?: number;

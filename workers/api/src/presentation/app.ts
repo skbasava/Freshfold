@@ -9,7 +9,6 @@ import { catalogRoutes } from "./routes/catalog.routes";
 import { customerRoutes } from "./routes/customer.routes";
 import { deliveryRoutes } from "./routes/delivery.routes";
 import { healthRoutes } from "./routes/health.routes";
-import { hubRoutes } from "./routes/hub.routes";
 import { orderRoutes } from "./routes/order.routes";
 import { pricingRoutes } from "./routes/pricing.routes";
 import type { ApiHonoEnv } from "./types";
@@ -32,7 +31,7 @@ export function createApiApp(): Hono<ApiHonoEnv> {
         "Accept",
         "Origin",
         "X-Requested-With",
-        "idempotency-key",
+        "idempotency-key", // Need to add only one key instead of three keys in the header
         "Idempotency-Key",
         "x-idempotency-key",
         "x-request-id",
@@ -66,7 +65,6 @@ export function createApiApp(): Hono<ApiHonoEnv> {
   app.route("/", authRoutes);
 
   // Versioned API routes under /api/v1
-  app.route("/api/v1/hubs", hubRoutes);
   app.route("/api/v1/customers", customerRoutes);
   app.route("/api/v1", catalogRoutes);
   app.route("/api/v1", pricingRoutes);
@@ -76,7 +74,6 @@ export function createApiApp(): Hono<ApiHonoEnv> {
   app.route("/api/v1", deliveryRoutes);
 
   // Backward compatibility aliases for dashboard and legacy client callers
-  app.route("/api/hubs", hubRoutes);
   app.route("/api/orders", orderRoutes);
   app.route("/api", pricingRoutes);
   app.get("/api/delivery-slots", async (c) => {

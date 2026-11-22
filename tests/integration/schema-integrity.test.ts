@@ -4,7 +4,6 @@ import { createTestHarness } from "../helpers/test-app";
 const EXPECTED_TABLES = [
   "app_settings",
   "audit_logs",
-  "branches",
   "customer_addresses",
   "customer_preferences",
   "customer_rate_cards",
@@ -34,13 +33,12 @@ const EXPECTED_TABLES = [
   "services",
   "tax_rates",
   "tenant_notification_configs",
-  "tenants",
   "user_roles",
   "users",
 ];
 
 describe("D1 Schema, Foreign Keys, Triggers, Constraints & Query Plans", () => {
-  it("applies reviewed migrations to fresh D1 with all 35 tables and foreign_keys enabled", async () => {
+  it("applies reviewed migrations to fresh D1 with all 33 tables and foreign_keys enabled", async () => {
     const harness = await createTestHarness();
 
     const tablesRes = await harness.env.DB.prepare(

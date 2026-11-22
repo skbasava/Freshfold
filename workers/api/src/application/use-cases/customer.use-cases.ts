@@ -1,5 +1,4 @@
 import type {
-  BranchRepository,
   CustomerAddressRecord,
   CustomerPreferenceRecord,
   CustomerRecord,
@@ -16,7 +15,6 @@ import {
 import type { Clock } from "../../shared/time";
 
 export interface CustomerUseCasesDeps {
-  branches: BranchRepository;
   customers: CustomerRepository;
   system: SystemRepository;
   clock: Clock;
@@ -37,16 +35,8 @@ export class CustomerUseCases {
     actorUserId?: number | null;
     requestId?: string;
   }): Promise<CustomerRecord> {
-    const branch = input.branchId
-      ? await this.deps.branches.findById(input.branchId)
-      : await this.deps.branches.findDefault();
-    if (!branch) {
-      throw new NotFoundError(
-        input.branchId
-          ? `Branch #${input.branchId} not found`
-          : "Default branch is not configured",
-      );
-    }
+    const branchId = input.branchId ?? 1;
+    const tenantId = input.tenantId ?? 1;
 
     const nowIso = this.deps.clock.nowIso();
     const code =
@@ -59,14 +49,14 @@ export class CustomerUseCases {
     }
 
     const created = await this.deps.customers.create({
-      tenantId: input.tenantId ?? branch.tenantId,
-      branchId: branch.id,
+      tenantId,
+      branchId,
       customerCode: code,
       fullName: input.fullName,
       phone: input.phone,
       email: input.email ?? null,
       gstin: input.gstin ?? null,
-      stateCode: input.stateCode ?? branch.stateCode,
+      stateCode: input.stateCode ?? "29",
       nowIso,
     });
 

@@ -4,10 +4,7 @@ import {
 } from "../../domain/entities/pricing";
 import { calculateLineGstSnapshot } from "../../domain/entities/tax";
 import type { CatalogRepository } from "../../domain/repositories/catalog.repository";
-import type {
-  BranchRepository,
-  CustomerRepository,
-} from "../../domain/repositories/customer.repository";
+import type { CustomerRepository } from "../../domain/repositories/customer.repository";
 import type { PricingRepository } from "../../domain/repositories/pricing.repository";
 import type { SystemRepository } from "../../domain/repositories/system.repository";
 import type { PricingBasis, TaxSupplyType } from "../../shared/constants";
@@ -68,7 +65,6 @@ export interface PricedQuoteResult {
 }
 
 export interface PricingEngineDeps {
-  branches: BranchRepository;
   customers: CustomerRepository;
   catalog: CatalogRepository;
   pricing: PricingRepository;
@@ -94,20 +90,18 @@ export class PricingEngineService {
       throw new NotFoundError(`Active customer #${input.customerId} not found`);
     }
 
-    const branch = await this.deps.branches.findById(customer.branchId);
-    if (!branch || !branch.isActive) {
-      throw new NotFoundError(`Active branch #${customer.branchId} not found`);
-    }
+    const branchId = customer.branchId ?? 1;
+    const supplierStateCode = "29";
 
     const resolvedRateCardId = await this.resolveRateCardId(
       customer.id,
-      branch.id,
+      branchId,
       input.asOfIso,
       input.rateCardId,
     );
 
     const placeOfSupplyStateCode =
-      input.placeOfSupplyStateCode ?? customer.stateCode ?? branch.stateCode;
+      input.placeOfSupplyStateCode ?? customer.stateCode ?? supplierStateCode;
 
     const gstConfig = await this.deps.system?.getSetting<{ enabled: boolean }>("gst_config");
     const isGstEnabled = gstConfig?.enabled !== false;
@@ -196,7 +190,7 @@ export class PricingEngineService {
       const gst = calculateLineGstSnapshot({
         grossAmountPaise: base.grossAmountPaise,
         discountPaise: line.discountPaise ?? 0,
-        supplierStateCode: branch.stateCode,
+        supplierStateCode,
         placeOfSupplyStateCode,
         taxRate,
       });
@@ -242,10 +236,10 @@ export class PricingEngineService {
     }
 
     return {
-      branchId: branch.id,
+      branchId,
       customerId: customer.id,
       rateCardId: resolvedRateCardId,
-      supplierStateCode: branch.stateCode,
+      supplierStateCode,
       placeOfSupplyStateCode,
       taxSupplyType: orderSupplyType,
       lines: pricedLines,

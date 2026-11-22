@@ -7,10 +7,8 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { branches } from "./branch.schema";
 import { items, services } from "./catalog.schema";
 import { customers } from "./customer.schema";
-import { tenants } from "./tenant.schema";
 
 export const taxRates = sqliteTable(
   "tax_rates",
@@ -60,13 +58,8 @@ export const rateCards = sqliteTable(
   "rate_cards",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    tenantId: integer("tenant_id")
-      .notNull()
-      .default(1)
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    branchId: integer("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    tenantId: integer("tenant_id").notNull().default(1),
+    branchId: integer("branch_id").notNull().default(1),
     code: text("code").notNull(),
     name: text("name").notNull(),
     description: text("description"),
