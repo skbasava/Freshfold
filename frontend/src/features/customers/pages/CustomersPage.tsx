@@ -255,8 +255,8 @@ export function maskPhoneNumber(phone?: string | null): string {
 }
 
 /** Extract customer initials for avatar */
-function getCustomerInitials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
+function getCustomerInitials(fullName?: string | null): string {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0 || !parts[0]) return "C";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -2046,7 +2046,7 @@ export function CustomersPage() {
                                       <div className="flex items-center gap-2">
                                         {renderFlaticonService(ord.primaryService, "size-5")}
                                         <span className="font-semibold text-slate-700">
-                                          {ord.primaryService}
+                                          {ord.primaryService || "General Service"}
                                         </span>
                                       </div>
                                     </TableCell>

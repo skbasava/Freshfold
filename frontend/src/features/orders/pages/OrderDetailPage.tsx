@@ -2642,7 +2642,7 @@ export function OrderDetailPage({
                 balanceDuePaise={effectiveBalanceDuePaise}
                 refundedPaise={effectiveRefundedPaise}
                 paymentMethodLabel={
-                  paymentsList.length > 0
+                  paymentsList.length > 0 && paymentsList[0]?.paymentMethod
                     ? paymentsList[0].paymentMethod.toUpperCase()
                     : undefined
                 }
@@ -2684,7 +2684,7 @@ export function OrderDetailPage({
           balanceDuePaise={effectiveBalanceDuePaise}
           refundedPaise={effectiveRefundedPaise}
           paymentMethodLabel={
-            paymentsList.length > 0
+            paymentsList.length > 0 && paymentsList[0]?.paymentMethod
               ? paymentsList[0].paymentMethod.toUpperCase()
               : undefined
           }

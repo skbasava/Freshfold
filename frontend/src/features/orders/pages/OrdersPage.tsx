@@ -135,10 +135,10 @@ export function OrdersPage({ ordersService = defaultOrdersService }: OrdersPageP
     if (!q) return orders;
     return orders.filter(
       (o) =>
-        o.orderNumber.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
+        (o.orderNumber && o.orderNumber.toLowerCase().includes(q)) ||
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
         (o.customerPhone && o.customerPhone.includes(q)) ||
-        o.primaryService.toLowerCase().includes(q),
+        (o.primaryService && o.primaryService.toLowerCase().includes(q)),
     );
   }, [orders, search]);
 
@@ -361,10 +361,10 @@ export function OrdersPage({ ordersService = defaultOrdersService }: OrdersPageP
                       </Link>
                       <div className="flex items-center gap-2 mt-1">
                         <div className="size-6 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center">
-                          {order.customerName.charAt(0).toUpperCase()}
+                          {(order.customerName || "C").charAt(0).toUpperCase()}
                         </div>
                         <span className="font-bold text-xs text-slate-900">
-                          {order.customerName}
+                          {order.customerName || "Walk-in Customer"}
                         </span>
                       </div>
                     </div>
@@ -387,7 +387,7 @@ export function OrdersPage({ ordersService = defaultOrdersService }: OrdersPageP
                           {renderFlaticonService(order.primaryService, "size-5")}
                         </div>
                         <span className="font-semibold text-slate-800 truncate">
-                          {order.primaryService}
+                          {order.primaryService || "General Service"}
                         </span>
                       </div>
                     </div>
@@ -471,7 +471,7 @@ export function OrdersPage({ ordersService = defaultOrdersService }: OrdersPageP
                       <div className="flex items-center gap-2.5">
                         <div className="flex flex-col min-w-0">
                           <span className="font-bold text-xs text-slate-900 truncate">
-                            {order.customerName}
+                            {order.customerName || "Walk-in Customer"}
                           </span>
                           {order.customerPhone ? (
                             <span
@@ -490,7 +490,7 @@ export function OrdersPage({ ordersService = defaultOrdersService }: OrdersPageP
                       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/80">
                         {renderFlaticonService(order.primaryService, "size-5")}
                         <span className="font-semibold text-xs text-slate-800">
-                          {order.primaryService}
+                          {order.primaryService || "General Service"}
                         </span>
                       </div>
                     </TableCell>

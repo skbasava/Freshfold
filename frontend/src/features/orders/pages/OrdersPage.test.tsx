@@ -174,4 +174,34 @@ describe("OrdersPage Component", () => {
     expect(screen.getByText("Customer 10")).toBeInTheDocument();
     expect(screen.queryByText("Customer 11")).not.toBeInTheDocument();
   });
+
+  it("renders safely without crashing when primaryService or customerName is null or undefined", async () => {
+    const ordersWithMissingFields: OrderListItem[] = [
+      {
+        id: 99,
+        orderNumber: "ORD-20261119-MISSING",
+        customerId: 999,
+        customerName: undefined as unknown as string,
+        customerPhone: undefined,
+        primaryService: undefined as unknown as string,
+        status: "confirmed",
+        totalAmountPaise: 12000,
+        promisedDeliveryAt: null,
+        specialInstructions: null,
+        createdAt: "2026-11-19T08:00:00.000Z",
+        updatedAt: "2026-11-19T08:00:00.000Z",
+      },
+    ];
+
+    const ordersService = createOrdersServiceStub(ordersWithMissingFields);
+    render(
+      <MemoryRouter>
+        <OrdersPage ordersService={ordersService} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("ORD-20261119-MISSING")).toBeInTheDocument();
+    expect(screen.getByText("Walk-in Customer")).toBeInTheDocument();
+    expect(screen.getByText("General Service")).toBeInTheDocument();
+  });
 });

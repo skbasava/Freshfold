@@ -4,9 +4,9 @@ export interface OrderListItem {
   id: number;
   orderNumber: string;
   customerId: number;
-  customerName: string;
-  customerPhone?: string;
-  primaryService: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  primaryService?: string | null;
   status: OrderStatus;
   totalAmountPaise: number;
   promisedDeliveryAt: string | null;

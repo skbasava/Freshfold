@@ -337,8 +337,8 @@ export function GenericGarmentIcon({ className = "size-10" }: IconProps) {
 }
 
 /** Helper dispatcher for items */
-export function renderFlaticonGarment(code: string, name: string, className = "size-12") {
-  const text = `${code} ${name}`.toUpperCase();
+export function renderFlaticonGarment(code?: string | null, name?: string | null, className = "size-12") {
+  const text = `${code ?? ""} ${name ?? ""}`.toUpperCase();
   if (text.includes("TSHIRT") || text.includes("T-SHIRT") || text.includes("POLO")) {
     return <TShirtGarmentIcon className={className} />;
   }
@@ -367,8 +367,8 @@ export function renderFlaticonGarment(code: string, name: string, className = "s
 }
 
 /** Helper dispatcher for services */
-export function renderFlaticonService(code: string, className = "size-7") {
-  const c = code.toUpperCase();
+export function renderFlaticonService(code?: string | null, className = "size-7") {
+  const c = (code ?? "").toUpperCase();
   if (c.includes("FOLD") || c.includes("KG")) {
     return <WashingMachineIcon className={className} />;
   }
